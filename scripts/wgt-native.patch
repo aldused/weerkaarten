@@ -1,0 +1,258 @@
+--- a/config.py
++++ b/config.py
+@@ -53,8 +53,8 @@
+                      "label": "DMI HARMONIE", "res_km": 2.0, "max_h": 60},
+     "icon_d2": {"slug": "icon_d2", "meta": "dwd_icon_d2", "label": "ICON-D2", "res_km": 2.2, "max_h": 48},
+     "icon_eu": {"slug": "icon_eu", "meta": "dwd_icon_eu", "label": "ICON-EU", "res_km": 7.0, "max_h": 120},
+-    "ecmwf_ifs": {"slug": "ecmwf_ifs025", "meta": "ecmwf_ifs025", "label": "ECMWF IFS", "res_km": 25, "max_h": 144},
+-    "ecmwf_aifs": {"slug": "ecmwf_aifs025_single", "meta": "ecmwf_aifs025_single", "label": "ECMWF AIFS",
++    "ecmwf_ifs": {"slug": "ecmwf_ifs025", "meta": "ecmwf_ifs025", "label": "ECMWF IFS 9 km", "res_km": 9, "max_h": 144},
++    "ecmwf_aifs": {"slug": "ecmwf_aifs025_single", "meta": "ecmwf_aifs025_single", "label": "ECMWF AIFS 25 km",
+                    "res_km": 25, "max_h": 144},
+     "gfs": {"slug": "gfs_seamless", "meta": "ncep_gfs013", "label": "GFS", "res_km": 13, "max_h": 144},
+ }
+--- a/run_forecast.py
++++ b/run_forecast.py
+@@ -3,7 +3,7 @@
+ → onzekerheid → JSON voor de kaart (weerlab/wgt/wgt_latest.json).
+ 
+ Robuustheid
+-  - Per model wordt de run-initialisatietijd uit Open-Meteo meta.json gelezen; een run ouder
++  - Per model wordt de run-initialisatietijd uit eigen bronmetadata gelezen; een run ouder
+     dan config.MAX_RUN_AGE_H telt NIET mee en staat als "verouderd" in de uitvoer.
+   - Een model dat niet reageert of leeg terugkomt valt weg; de gewichten worden dan over de
+     overige modellen hernormaliseerd. Minder dan 2 modellen → run afgebroken (geen kaart).
+@@ -51,148 +51,31 @@
+ 
+ 
+ # ---------------------------------------------------------------------------------------
+-def run_info(model):
+-    meta = config.MODELS[model]["meta"]
++def run_info(model, required_until=None):
++    from wgt_native_data import prepare, SUPPORTED
++    if model not in SUPPORTED:
++        log(f"{model}: tijdelijk buiten de mix; geen actuele eigen aanvoer")
++        return None, None
+     try:
+-        for poging in range(4):
+-            r = requests.get(f"https://api.open-meteo.com/data/{meta}/static/meta.json", timeout=20)
+-            if r.status_code < 500:
+-                break
+-            time.sleep(2 + 3 * poging)
+-        r.raise_for_status()
+-        j = r.json()
++        j = prepare(model, required_until=required_until)
+         _MODEL_SOURCES[model] = j
+         init = datetime.fromtimestamp(j["last_run_initialisation_time"], timezone.utc)
+-        besch = datetime.fromtimestamp(j.get("last_run_availability_time", j["last_run_initialisation_time"]), timezone.utc)
+-        return init, besch
+-    except Exception as e:
+-        log(f"{model}: meta.json niet leesbaar ({e})")
++        available = datetime.fromtimestamp(j["last_run_availability_time"], timezone.utc)
++        return init, available
++    except Exception as exc:
++        log(f"{model}: eigen bron niet bruikbaar ({exc})")
+         return None, None
+ 
+ 
+ def haal_rooster(model, lats, lons, t0, n_uur, extra_vars=(), past_hours=2, hourly_vars=None):
+-    """Gebruik dezelfde modelrun opnieuw; selecteer steeds de actuele absolute uurreeks."""
+-    import gzip
+-    import hashlib
+-    import os
+-
+-    slug = config.MODELS[model]["slug"]
+-    vars_ = list(hourly_vars or config.HOURLY_VARS) + list(extra_vars)
+-    tijden = pd.date_range(t0, periods=n_uur + 1, freq="1h")
+-    uit = {v: np.full((len(lats), len(tijden)), np.nan, np.float32) for v in vars_}
+-    sessie = herstart_sessie() or bulk_sessie()
+-    vinger = None
+-    nu = pd.Timestamp.now(tz="UTC").floor("h")
+-    source = _MODEL_SOURCES.get(model)
+-    # Een vaste kalenderperiode maakt nacht- en TX-aanvragen onderling herbruikbaar.
+-    # Buiten dit venster blijft de bestaande relatieve aanvraag beschikbaar.
+-    reusable = bool(source) and tijden[0] >= nu.normalize() - pd.Timedelta(days=1) and tijden[-1] < nu.normalize() + pd.Timedelta(days=7)
+-    cache_dir = config.CACHE / "modelroosters"
+-    cache_dir.mkdir(parents=True, exist_ok=True)
+-    hits = 0
+-    anchor_source = None
+-    if reusable:
+-        # Een goedkoop anker controleert ook revisies die nog niet in metadata staan.
+-        probe_params = dict(latitude=f"{ANKER[0]:.4f}", longitude=f"{ANKER[1]:.4f}",
+-            hourly=",".join(vars_), models=slug, timezone="UTC", wind_speed_unit="ms",
+-            cell_selection="land", past_days=1, forecast_days=7)
+-        try:
+-            probe = sessie.get(om_url(FORECAST, **probe_params), timeout=90)
+-            probe.raise_for_status()
+-            payload = probe.json()
+-            anchor = payload[0] if isinstance(payload, list) else payload
+-            if not anchor.get("hourly", {}).get("time"):
+-                raise ValueError("Geen bronanker")
+-            anchor_source = hashlib.sha256(json.dumps(anchor["hourly"], sort_keys=True).encode()).hexdigest()
+-            registreer_gebruik(consumer="wgt_broncontrole", model=slug, resultaat="opgehaald",
+-                locaties=1, verzoeken=1, variabelen=len(vars_), dagen=8)
+-        except Exception as exc:
+-            log(f"{model}: broncontrole {type(exc).__name__}; volledige aanvraag zonder cache")
+-            reusable = False
+-    if reusable:
+-        vinger = anchor_source
+-    for b in range(0, len(lats), BATCH):
+-        la = [ANKER[0]] + list(lats[b:b + BATCH])
+-        lo = [ANKER[1]] + list(lons[b:b + BATCH])
+-        params = dict(latitude=",".join(f"{x:.4f}" for x in la),
+-                      longitude=",".join(f"{x:.4f}" for x in lo), hourly=",".join(vars_), models=slug,
+-                      timezone="UTC", wind_speed_unit="ms", cell_selection="land")
+-        if reusable:
+-            params.update(past_days=1, forecast_days=7)
+-        else:
+-            params.update(past_hours=past_hours, forecast_hours=n_uur + past_hours)
+-        identity = dict(params=params, source=source, anchor=anchor_source, day=str(nu.date()), schema=1)
+-        signature = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+-        path = cache_dir / f"{model}-{signature}.json.gz"
+-        cached = None
+-        if reusable:
+-            try:
+-                cached = json.loads(gzip.decompress(path.read_bytes()))
+-                if not isinstance(cached, list) or len(cached) != len(la):
+-                    cached = None
+-            except (OSError, ValueError, EOFError):
+-                pass
+-        for poging in range(4):
+-            from_cache = cached is not None
+-            try:
+-                if from_cache:
+-                    js = cached
+-                    cached = None
+-                else:
+-                    response = sessie.get(om_url(FORECAST, **params), timeout=90)
+-                    if response.status_code == 429:
+-                        time.sleep(5 * (poging + 1))
+-                        continue
+-                    response.raise_for_status()
+-                    js = response.json()
+-                    js = js if isinstance(js, list) else [js]
+-                    registreer_gebruik(consumer="wgt_modelrooster", model=slug, resultaat="opgehaald",
+-                        locaties=len(la), verzoeken=1, variabelen=len(vars_),
+-                        dagen=8 if reusable else max(1, (n_uur + 2 * past_hours + 23) // 24))
+-                if len(js) != len(la):
+-                    raise ValueError("Onvolledig aantal roosterpunten")
+-                for loc in js:
+-                    h = loc["hourly"]
+-                    if not h.get("time") or len(h["time"]) != len(h.get("temperature_2m", [])):
+-                        raise ValueError("Onvolledige tijdas in modelrooster")
+-                vd = hashlib.sha256(json.dumps(js[0]["hourly"], sort_keys=True).encode()).hexdigest()
+-                if vinger is None:
+-                    vinger = vd
+-                elif vd != vinger:
+-                    log(f"{model}: ankerpunt wijkt af in batch {b // BATCH} → nieuwe sessie")
+-                    if from_cache:
+-                        path.unlink(missing_ok=True)
+-                    herstart_sessie()
+-                    sessie = bulk_sessie()
+-                    continue
+-                if reusable and not from_cache:
+-                    temporary = path.with_name(path.name + f".{os.getpid()}.tmp")
+-                    temporary.write_bytes(gzip.compress(json.dumps(js).encode()))
+-                    temporary.replace(path)
+-                if from_cache:
+-                    hits += 1
+-                break
+-            except Exception as exc:
+-                if from_cache:
+-                    path.unlink(missing_ok=True)
+-                log(f"{model}: batch {b // BATCH} {type(exc).__name__} (poging {poging + 1})")
+-                time.sleep(3 * (poging + 1))
+-        else:
+-            raise RuntimeError(f"{model}: batch {b // BATCH} blijvend mislukt")
+-        for k, loc in enumerate(js[1:]):
+-            h = loc["hourly"]
+-            t = pd.to_datetime(h["time"], utc=True)
+-            pos = tijden.get_indexer(t)
+-            sel = pos >= 0
+-            for v in vars_:
+-                vals = np.array([np.nan if x is None else x for x in h.get(v, [None] * len(t))], dtype=np.float32)
+-                uit[v][b + k, pos[sel]] = vals[sel]
+-    if hits:
+-        log(f"{model}: {hits} roosterbatches hergebruikt voor ongewijzigde bronrun")
+-    for old in cache_dir.glob("*.json.gz"):
+-        if old.stat().st_mtime < time.time() - 3 * 86400:
+-            old.unlink(missing_ok=True)
+-    return uit, tijden
++    """Sample one pinned own run; hourly UTC arrays, no paid fallback."""
++    from wgt_native_data import sample
++    variables = list(hourly_vars or config.HOURLY_VARS) + list(extra_vars)
++    data, times = sample(model, lats, lons, t0, n_uur, variables)
++    registreer_gebruik(consumer="wgt_native_rooster", model=model, resultaat="eigen_bestanden",
++                      locaties=len(lats), verzoeken=0, variabelen=len(variables), dagen=int(np.ceil(n_uur/24)))
++    log(f"{model}: eigen modelrooster, {len(lats)} cellen, 0 Open-Meteo-aanvragen")
++    return data, times
+ 
+ 
+ def haal_neerslaghistorie(lats, lons):
+@@ -356,6 +239,9 @@
+         init, besch = run_info(mod)
+         info = {"model": mod, "label": cfg["label"], "init": init.isoformat() if init else None}
+         if init is None:
++            from wgt_native_data import SUPPORTED
++            if mod not in SUPPORTED:
++                info.update(status="niet_actief", reden="geen eigen aanvoer; tijdelijk buiten de mix"); runs.append(info); continue
+             info.update(status="ontbreekt", reden="geen run-informatie"); runs.append(info); continue
+         leeftijd = (nu - init).total_seconds() / 3600
+         info["leeftijd_u"] = round(leeftijd, 1)
+@@ -370,6 +256,7 @@
+         n_ok = int(np.isfinite(v["temperature_2m"]).all(0).sum())
+         if n_ok < 6:
+             info.update(status="ontbreekt", reden="geen bruikbare uurwaarden"); runs.append(info); continue
++        info["bron"] = _MODEL_SOURCES[mod].get("native_source", {})
+         info.update(status="gebruikt", uren=n_ok, lead_start=round((t0 - pd.Timestamp(init)).total_seconds() / 3600, 1))
+         runs.append(info); velden[mod] = v
+         log(f"{mod}: run {init:%d-%m %H}Z ({leeftijd:.1f} u oud), {n_ok} uur volledig")
+@@ -572,6 +459,7 @@
+         "rooster": {"lat0": float(S["lats"][0]), "dlat": config.DLAT, "lon0": float(S["lons"][0]), "dlon": config.DLON,
+                     "ny": int(mask.shape[0]), "nx": int(mask.shape[1]), "iy": iy.tolist(), "ix": ix.tolist(),
+                     "resolutie_km": 5},
++        "modelaanvoer": "eigen_modelbestanden", "bronversie": "20261025-native-ecmwf",
+         "tijden": [t.isoformat() for t in tijden], "runs": runs, "log": LOG[-40:],
+         "bodemvocht_bron": bron_vocht, "regime_code": reg_code, "delta_min": P["delta"],
+         "modellen": {m: config.MODELS[m]["label"] for m in modellen if m in velden},
+--- a/run_forecast_tx.py
++++ b/run_forecast_tx.py
+@@ -74,9 +74,12 @@
+ 
+     runs, velden = [], {}
+     for mod, cfg in config.MODELS.items():
+-        init, besch = rf.run_info(mod)
++        init, besch = rf.run_info(mod, required_until=t0 + pd.Timedelta(hours=NU))
+         info = {"model": mod, "label": cfg["label"], "init": init.isoformat() if init else None}
+         if init is None:
++            from wgt_native_data import SUPPORTED
++            if mod not in SUPPORTED:
++                info.update(status="niet_actief", reden="geen eigen aanvoer; tijdelijk buiten de mix"); runs.append(info); continue
+             info.update(status="ontbreekt", reden="geen run-informatie"); runs.append(info); continue
+         leeftijd = (nu - init).total_seconds() / 3600
+         info["leeftijd_u"] = round(leeftijd, 1)
+@@ -90,6 +93,7 @@
+         n_ok = int(np.isfinite(v["temperature_2m"]).all(0).sum())
+         if n_ok < 6:
+             info.update(status="ontbreekt", reden="geen bruikbare uurwaarden"); runs.append(info); continue
++        info["bron"] = rf._MODEL_SOURCES[mod].get("native_source", {})
+         info.update(status="gebruikt", uren=n_ok, lead_start=round((t0 - pd.Timestamp(init)).total_seconds() / 3600, 1))
+         runs.append(info); velden[mod] = v
+         log(f"{mod}: run {init:%d-%m %H}Z ({leeftijd:.1f} u oud), {n_ok} uur volledig")
+@@ -216,7 +220,7 @@
+         n_mod = int(sum(aanw[mi][:, i0:i1 + 1].mean() >= 0.5 for mi in range(M)))
+         lead_max = float(np.nanmax(np.where(np.isfinite(LEAD[:, i0:i1 + 1]), LEAD[:, i0:i1 + 1], np.nan)))
+         # tijdvak grotendeels in het verleden (rest van vandaag) → onvolledig, apart gemarkeerd
+-        onvolledig = bool(sel.sum() < 20 and dnr == 0)
++        onvolledig = bool(np.any(np.isfinite(tx_fin[:, i0:i1 + 1]).sum(axis=1) < sel.sum()))
+         dagen_uit.append({"label": f"{d0:%Y-%m-%d}", "i0": i0, "i1": i1, "n_modellen": n_mod,
+                           "lead_max_u": round(lead_max), "buiten_training": bool(lead_max > 62),
+                           "onvolledig": onvolledig,
+@@ -232,6 +236,7 @@
+         "rooster": {"lat0": float(S["lats"][0]), "dlat": config.DLAT, "lon0": float(S["lons"][0]), "dlon": config.DLON,
+                     "ny": int(mask.shape[0]), "nx": int(mask.shape[1]), "iy": iy.tolist(), "ix": ix.tolist(),
+                     "resolutie_km": 5},
++        "modelaanvoer": "eigen_modelbestanden", "bronversie": "20261025-native-ecmwf",
+         "tijden": [t.isoformat() for t in tijden], "runs": runs, "log": LOG[-40:],
+         "bodemvocht_bron": bron_vocht,
+         "modellen": {m: config.MODELS[m]["label"] for m in modellen if m in velden},

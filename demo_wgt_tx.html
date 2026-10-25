@@ -310,7 +310,7 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
     <div class="st-tabel"><table id="stTabel"></table></div>
   </section>
 
-  <p class="foot" id="foot">Bronnen: KNMI (waarnemingen, HARMONIE-AROME), DWD (ICON), ECMWF (IFS, AIFS), NOAA (GFS), UK Met Office, DMI via Open-Meteo · plaatsnamen GeoNames (CC BY 4.0). Experimenteel product — niet gebruiken voor beslissingen met grote gevolgen.</p>
+  <p class="foot" id="foot">Bronnen: KNMI (waarnemingen, HARMONIE V43), DWD (ICON-D2), ECMWF (IFS 9 km, AIFS 25 km) · eigen modelaanvoer · plaatsnamen GeoNames (CC BY 4.0). Experimenteel product — niet gebruiken voor beslissingen met grote gevolgen.</p>
 </div>
 
 <dialog id="uitleg" aria-labelledby="uitlegTitel">
@@ -318,7 +318,7 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
   <div class="dlg-body">
     <p>Dit is <b>TX-MOS</b>, gebouwd met dezelfde methode als het <a href="demo_wgt_grondtemp.html">Weerlab Grondtemperatuur Model</a>, maar dan voor het <b>dagmaximum van de temperatuur op 2 m</b> (TX) — de officiële KNMI-definitie: het hoogste uur tussen 00.00 en 24.00 uur UTC.</p>
     <h3>In één alinea</h3>
-    <p>Negen weermodellen leveren elk uur een temperatuurverwachting. Voor elk model wordt eerst de fout afgehaald die het de afgelopen weken systematisch maakte — de meeste modellen zitten structureel te koud op warme dagen. Daarna worden de modellen gemengd: een model telt zwaarder als het recent in hetzelfde soort weer (zonnig, wisselend of bewolkt) en op dezelfde termijn vooruit het beste presteerde. Een statistische correctie (MOS), getraind op twee jaar verwachtingen tegenover officiële KNMI-dagwaarden, corrigeert de overgebleven fouten. Bodemsoort, bodemvocht, bebouwing en afstand tot zee spelen mee: droge grond en verharding warmen sterker op, een zeewind houdt kustplaatsen koeler. Voor de eerste uren sturen we bij met de actuele KNMI-meting; die bijsturing dooft binnen enkele uren uit. De onzekerheid volgt uit de spreiding tussen de modellen en hoe ver vooruit de verwachting reikt.</p>
+    <p>De beschikbare modellen leveren elk uur een temperatuurverwachting. Voor elk model wordt eerst de fout afgehaald die het de afgelopen weken systematisch maakte — de meeste modellen zitten structureel te koud op warme dagen. Daarna worden de modellen gemengd: een model telt zwaarder als het recent in hetzelfde soort weer (zonnig, wisselend of bewolkt) en op dezelfde termijn vooruit het beste presteerde. Een statistische correctie (MOS), getraind op twee jaar verwachtingen tegenover officiële KNMI-dagwaarden, corrigeert de overgebleven fouten. Bodemsoort, bodemvocht, bebouwing en afstand tot zee spelen mee: droge grond en verharding warmen sterker op, een zeewind houdt kustplaatsen koeler. Voor de eerste uren sturen we bij met de actuele KNMI-meting; die bijsturing dooft binnen enkele uren uit. De onzekerheid volgt uit de spreiding tussen de modellen en hoe ver vooruit de verwachting reikt.</p>
     <h3>Waarom is dit geen simpel gemiddelde?</h3>
     <p>Sommige modellen zijn structureel te koud of te warm, en dat verschilt per situatie. Door eerst de bekende fout eraf te halen en dan te wegen naar recente prestaties, presteert de mix beter dan elk model apart — zie de <a href="demo_wgt_tx_verificatie.html">verificatiepagina</a>.</p>
     <h3>Betrouwbaarheid</h3>
@@ -457,7 +457,7 @@ function bouwDagen() {
     const b = document.createElement("button"); b.type = "button"; b.setAttribute("aria-pressed", String(i === staat.di));
     if (dg.buiten_training) b.classList.add("let");
     const tm = dg.txmax; let mx = -1e9; for (const c of gebiedCellen()) { const v = v16(tm[c]); if (isFinite(v) && v > mx) mx = v; }
-    b.innerHTML = `<b>${fmt(mx)}°</b><small>${i === 0 ? "vandaag" : dagKort.format(d)}${dg.onvolledig ? " (tot nu)" : ""}</small>`;
+    b.innerHTML = `<b>${fmt(mx)}°</b><small>${i === 0 ? "vandaag" : dagKort.format(d)}${dg.onvolledig ? " (onvolledig)" : ""}</small>`;
     b.onclick = () => { staat.di = i; bouwDagen(); teken(); };
     wrap.appendChild(b);
   });
@@ -572,7 +572,7 @@ function titels() {
   const L = staat.laag, dg = D.dagen[staat.di];
   $("kaartTitel").textContent = {tx: "Maximumtemperatuur (TX)", kans: "Kans op een zomerse dag (≥ 25 °C)", sigma: "Onzekerheid van de TX-verwachting"}[L];
   const naam = staat.di === 0 ? "vandaag" : dagFmt.format(new Date(dg.label + "T12:00:00Z"));
-  $("kaartSub").textContent = `${naam}${dg.onvolledig ? " (deel van de dag al voorbij)" : ""}${dg.buiten_training ? " · voorbij het geverifieerde bereik" : ""}`;
+  $("kaartSub").textContent = `${naam}${dg.onvolledig ? " (onvolledige dagdekking)" : ""}${dg.buiten_training ? " · voorbij het geverifieerde bereik" : ""}`;
 }
 
 const bhKlasse = s => s < 0.7 ? ["hoog", "hoog"] : s < 1.3 ? ["middel", "middel"] : ["laag", "laag"];
@@ -659,7 +659,9 @@ function statusEnMeldingen() {
   if (D.dagen.some(d => d.buiten_training)) txt.push("De verste dag(en) liggen voorbij het geverifieerde bereik (48–60 u) — gemarkeerd op de kaart.");
   if (txt.length) toonMelding(txt.join(" "), leeftijd >= 5);
   $("infoRij").innerHTML = `<span>Vandaag <b>${dagFmt.format(a)}</b> (etmaal 00–24 UTC)</span><span>Bijgestuurd met <b>${(j.waarnemingen || []).length}</b> KNMI-stations</span>`;
+  toonBodemvochtBron();
 }
+function toonBodemvochtBron(){const bron=D.j.bodemvocht_bron;if(!bron)return;const span=document.createElement('span');span.textContent='Bodemvocht: '+bron;$("infoRij").append(span);}
 function kpis() {
   const dg = D.dagen[staat.di]; const k = $("kpis"); if (!dg) return;
   let mi = gebiedCellen()[0], mx = -1e9, p90 = 0; for (const c of gebiedCellen()) { const v = v16(dg.txmax[c]); if (v > mx) { mx = v; mi = c; } if (dg.p25[c] >= 50) p90++; }
@@ -674,9 +676,10 @@ function runsLijst() {
   const ul = $("runs"); ul.innerHTML = "";
   D.j.runs.forEach(r => {
     const li = document.createElement("li"); ul.appendChild(li);
-    const st = r.status === "gebruikt" ? ["G", "gebruikt"] : r.status === "verouderd" ? ["V", "verouderd"] : ["X", "ontbreekt"];
+    const st = r.status === "gebruikt" ? ["G", "gebruikt"] : r.status === "verouderd" ? ["V", "verouderd"] : r.status === "niet_actief" ? ["X", "niet actief"] : ["X", "ontbreekt"];
     const init = r.init ? new Date(r.init) : null;
     li.innerHTML = `<span>${r.label}</span><span class="t">${init ? dagKort.format(init) + " " + uurFmt.format(init) : "–"}${r.leeftijd_u != null ? " · " + fmt(r.leeftijd_u, 0) + " u" : ""}</span><span class="chip ${st[0]}" title="${r.reden || ""}">${st[1]}</span>`;
+    if (r.bron?.access === "eigen modelbestanden") li.querySelector(".t").textContent += " · eigen bron";
   });
 }
 // -1 = kolom "KNMI-station" (op naam), 0.. = dagkolom (op temperatuur). dir: 1 = oplopend (A-Z / koud→warm).
