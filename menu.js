@@ -555,7 +555,16 @@
         for(const key of ['run','station','lat','lon'])if(params.has(key))url.searchParams.set(key,params.get(key));
         frame.src=url.href;
       }
-      if(state.product?.id==='beta'){const betaURL=new URL(frame.src,location.href),tab=new URLSearchParams(route.split('?')[1]||'').get('tab');if(tab&&/^[a-z0-9_-]+$/i.test(tab))betaURL.hash=tab;frame.src=betaURL.href;}
+      if(state.product?.id==='beta'){
+        const betaURL=new URL(frame.src,location.href),params=new URLSearchParams(route.split('?')[1]||''),tab=params.get('tab');
+        if(tab&&/^[a-z0-9_-]+$/i.test(tab))betaURL.hash=tab;
+        // Select a shared temperature view before the nested iframe loads.
+        if(tab==='temperaturen'&&params.get('view'))try{
+          const wanted=new URL(params.get('view'),location.href);
+          if(wanted.origin===location.origin&&wanted.pathname.replace(/\.html$/,'')==='/beta_temperaturen'&&['#grondtemp','#tn','#tx'].includes(wanted.hash))betaURL.hash=wanted.hash;
+        }catch{}
+        frame.src=betaURL.href;
+      }
       frame.addEventListener('load',()=>{if(state.product?.src)wireDirectProduct(frame);wirePageActions(frame);restoreBetaView(frame);refreshPageActions();});
       previousFrame.replaceWith(frame);
     }

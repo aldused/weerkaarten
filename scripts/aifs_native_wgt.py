@@ -76,7 +76,7 @@ def build(run,folder):
  out=folder/'processed';out.mkdir(exist_ok=True);parameters={}
  for key,arrays in specs.items():
   name=f'aifs_wgt_{key}.bin';write_bin(out/name,arrays);parameters[key]={'file':name,'components':len(arrays),'source':'ECMWF AIFS Single Open Data, CC-BY-4.0'}
- meta={'schema_version':1,'model':'ECMWF AIFS 25 km','run_utc':run.isoformat(),'native_resolution_km':25,'tijden':[(run+timedelta(hours=int(h))).isoformat() for h in hours],'grid':dict(n_lat=len(LAT),n_lon=len(LON),lat_min=float(LAT[0]),lat_max=float(LAT[-1]),lon_min=float(LON[0]),lon_max=float(LON[-1])),'parameters':parameters,'source':'ECMWF Open Data direct via AWS','attribution':'© ECMWF 2026, CC-BY-4.0','interpolation':'native 6h -> hourly; wind vectors; precipitation and solar totals conserved','missing_fields':['snow_depth','wind_gusts_10m','soil_temperature_0cm','temperature_850hPa','temperature_925hPa']}
+ meta={'schema_version':1,'model':'ECMWF AIFS 0,25°','run_utc':run.isoformat(),'native_resolution_km':31,'export_grid_step_degrees':.25,'tijden':[(run+timedelta(hours=int(h))).isoformat() for h in hours],'grid':dict(n_lat=len(LAT),n_lon=len(LON),lat_min=float(LAT[0]),lat_max=float(LAT[-1]),lon_min=float(LON[0]),lon_max=float(LON[-1])),'parameters':parameters,'source':'ECMWF Open Data direct via AWS','attribution':'© ECMWF 2026, CC-BY-4.0','interpolation':'native 6h -> hourly; wind vectors; precipitation and solar totals conserved','missing_fields':['snow_depth','wind_gusts_10m','soil_temperature_0cm','temperature_850hPa','temperature_925hPa']}
  path=out/'meta.json';temp=path.with_suffix('.tmp');temp.write_text(json.dumps(meta));temp.replace(path);return path
 
 def ensure():
@@ -86,7 +86,11 @@ def ensure():
   now=datetime.now(timezone.utc)-timedelta(hours=7);run=now.replace(hour=now.hour//6*6,minute=0,second=0,microsecond=0)
   for _ in range(4):
    folder=ROOT/run.strftime('%Y%m%d%H');meta=folder/'processed/meta.json'
-   if meta.exists():return meta
+   if meta.exists():
+    m=json.loads(meta.read_text())
+    if m.get('native_resolution_km')!=31 or m.get('model')!='ECMWF AIFS 0,25°':
+     m.update(model='ECMWF AIFS 0,25°',native_resolution_km=31,export_grid_step_degrees=.25);tmp=meta.with_suffix('.tmp');tmp.write_text(json.dumps(m));tmp.replace(meta)
+    return meta
    import requests
    r=requests.head(stem(run,168)+'.index',timeout=20)
    if r.status_code==200:
