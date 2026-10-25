@@ -670,7 +670,7 @@ def retrieve_batch(
     request_params: list[str] = []
     for param in raw_params:
         if param in ("t850","t500"):continue
-        request_params.extend(tuple(dict.fromkeys("10fg" if h<=90 or (perturbed and h>144) else "10fg3" if h<=144 else "10fg6" for h in batch_steps)) if param == "10fg" else (param,))
+        request_params.extend(tuple(dict.fromkeys("10fg3" if 90<h<=144 else "10fg" for h in batch_steps)) if param == "10fg" else (param,))
     request: dict[str, object] = {
         "date": run.strftime("%Y%m%d"),
         "time": cycle,

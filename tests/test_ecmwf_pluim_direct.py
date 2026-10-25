@@ -556,14 +556,14 @@ if __name__ == "__main__":
     unittest.main()
 
 class GustRequestTests(unittest.TestCase):
-    def test_late_ensemble_gust_name_differs_from_control(self):
+    def test_late_quarter_degree_gust_uses_official_name(self):
         class Capture:
             def __init__(self): self.calls=[]
             def retrieve(self, **request):
                 self.calls.append(request)
                 Path(request['target']).write_bytes(b'GRIB-test')
         with tempfile.TemporaryDirectory() as folder:
-            for perturbed, expected in [(True, '10fg'), (False, '10fg6')]:
+            for perturbed, expected in [(True, '10fg'), (False, '10fg')]:
                 client=Capture()
                 DIRECT.retrieve_batch(client, utc(10,12), 12, (150,), ('10fg',), Path(folder)/'test.grib2', perturbed)
                 self.assertEqual(client.calls[0]['param'], [expected])
