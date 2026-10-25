@@ -125,7 +125,7 @@ def build(sources, now):
                         p = blend(inputs, "member" if view == "pooled" else "model")
                     series.append(p)
                 values[a][c["id"]] = series
-    source_meta = [{"id": k, "label": {"grib":"ECMWF native", "om":"Open-Meteo IFS / ICON", "harm":"HarmonEPS", "dwd":"ICON-D2 native zicht"}[k],
+    source_meta = [{"id": k, "label": {"grib":"ECMWF native", "om":("ECMWF via Open-Meteo / ICON-D2 rechtstreeks DWD" if d.get("models",{}).get("icon_d2",{}).get("source")=="DWD Open Data direct" else "Open-Meteo IFS / ICON"), "harm":"HarmonEPS", "dwd":"ICON-D2 native zicht"}[k],
                     "run": d.get("run"), "fetched_at": d["fetched_at"]} for k,d in sources.items()]
     generated = now.isoformat().replace("+00:00", "Z")
     meta = {"availability": availability(all_sources, sources, days), "generated_at": generated, "data_time": min(s["fetched_at"] for s in source_meta),

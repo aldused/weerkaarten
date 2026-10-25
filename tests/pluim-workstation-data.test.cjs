@@ -9,3 +9,9 @@ test('a missing precipitation source interval cannot become a complete sum',()=>
 test('wind directions are not averaged arithmetically',()=>{const r=D.adapt({hourly:{time:[times[0]],wind_direction_10m:[359],wind_direction_10m_member01:[1]}},'winddir');assert.equal(D.stats(r),null);});
 test('unknown parameters, empty sources and unordered times fail explicitly',()=>{assert.throws(()=>D.adapt({},'invented'));assert.throws(()=>D.adapt({hourly:{time:[times[0]],temperature_2m:[null]}},'temp'));assert.throws(()=>D.adapt({hourly:{time:[times[1],times[0]],temperature_2m:[0,1]}},'temp'));});
 test('nearest HARMONIE station uses geographic distance',()=>{const r=D.nearest([{id:'a',lat:52,lon:5},{id:'b',lat:53,lon:6}],52.01,5.01);assert.equal(r.station.id,'a');assert(r.km>0&&r.km<2);});
+test('native ICON-D2 keeps all twenty real IDs and has no invented control',()=>{
+ const time=Array.from({length:7},(_,i)=>new Date(Date.UTC(2026,9,25,i)).toISOString());
+ const hourly={time};for(let i=1;i<=20;i++)hourly['temperature_2m_member'+String(i).padStart(2,'0')]=time.map((_,h)=>i+h/10);
+ const row=D.adapt({hourly,member_ids:Array.from({length:20},(_,i)=>i+1),control_member:null},'temp');
+ assert.equal(row.members.length,20);assert.equal(row.control,-1);assert.equal(row.members[19][6],20.6);assert.equal(row.keys[0],'temperature_2m_member01');
+});

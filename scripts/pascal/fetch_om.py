@@ -86,7 +86,31 @@ VARS = ["wind_gusts_10m","wind_speed_10m","temperature_2m","dew_point_2m","relat
 
 UA = "pascal-demo/1.0 (weerlab.nl)"
 
+import threading
+_ICON_NATIVE_LOCK = threading.Lock()
+_ICON_NATIVE_MANIFEST = None
+
 def fetch_point(lat, lon, model, forecast_days, vars_list=None, retry=2):
+    if model == "icon_d2":
+        # The native run is shared with the website; never fall back to paid ICON-D2.
+        root = Path("/Volumes/WEERLAB/Modeldata/ICON-D2-EPS")
+        global _ICON_NATIVE_MANIFEST
+        with _ICON_NATIVE_LOCK:
+            if _ICON_NATIVE_MANIFEST is None:
+                _ICON_NATIVE_MANIFEST = json.loads((root / "published.json").read_text())
+        manifest = _ICON_NATIVE_MANIFEST
+        from datetime import datetime, timezone
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(manifest["run_utc"].replace("Z", "+00:00"))).total_seconds()
+        if not manifest.get("complete") or age > 18 * 3600:
+            raise RuntimeError("Eigen ICON-D2-EPS-run ontbreekt of is te oud")
+        point = next((p for p in manifest["stations"] if abs(p["lat"]-lat)<0.00001 and abs(p["lon"]-lon)<0.00001), None)
+        if point is None:
+            raise RuntimeError("PASCAL-punt ontbreekt in eigen ICON-D2-EPS-run")
+        d = json.loads((root / "runs" / manifest["run_key"] / "published" / (point["id"]+".json")).read_text())
+        if d["run_utc"] != manifest["run_utc"] or d["member_ids"] != list(range(1,21)):
+            raise RuntimeError("Inconsistente eigen ICON-D2-leden of run")
+        d["hourly_units"] = d["units"]
+        return d
     q = urllib.parse.urlencode({
         "latitude": lat, "longitude": lon,
         "models": model,
@@ -131,9 +155,10 @@ def work(prov, lat, lon):
             trimmed = {"time": hourly["time"]}
             for v in vars_list:
                 # Preserve member identity even when an optional parameter/member is absent.
-                members=[hourly.get(v if mm==0 else f'{v}_member{mm:02d}',[None]*len(hourly['time'])) for mm in range(n_pert+1)]
+                member_ids = d.get('member_ids', list(range(n_pert+1)))
+                members=[hourly.get(f'{v}_member{mm:02d}' if model=='icon_d2' else v if mm==0 else f'{v}_member{mm:02d}',[None]*len(hourly['time'])) for mm in member_ids]
                 trimmed[v]=[series if len(series)==len(hourly['time']) else [None]*len(hourly['time']) for series in members]
-            point_models[model] = {"n_members": 1+n_pert, "hourly": trimmed, "units": d.get("hourly_units",{})}
+            point_models[model] = {"member_ids": member_ids, "source": "DWD Open Data direct" if model=="icon_d2" else "Open-Meteo", "run_utc": d.get("run_utc"), "unavailable_fields": [v for v in vars_list if not any(k==v or k.startswith(v+"_member") for k in hourly)], "n_members": len(member_ids), "hourly": trimmed, "units": d.get("hourly_units",{})}
         except Exception as e:
             print(f"    FAIL {model} @ {prov}({lat},{lon}): {e}", flush=True)
     return prov, lat, lon, point_models
@@ -168,8 +193,8 @@ if not any(pt["models"] for pts in results.values() for pt in pts):
 temporary=OUT.with_suffix(".json.tmp")
 temporary.write_text(json.dumps({
     "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    "source": "Open-Meteo ensemble API",
-    "models": {m: {"n_members": 1+n, "forecast_days": fd, "vars": vl} for m,fd,n,vl in MODELS},
+    "source": "ECMWF via Open-Meteo; ICON-D2-EPS rechtstreeks DWD",
+    "models": {m: {"n_members": 1+n, "forecast_days": fd, "vars": vl, "source": "DWD Open Data direct" if m=="icon_d2" else "Open-Meteo", "member_ids": list(range(1,21)) if m=="icon_d2" else list(range(1+n))} for m,fd,n,vl in MODELS},
     "sampling": {"method": "representative_points", "target_points_per_area": 8,
                  "actual_points_per_area": {p: len(v) for p, v in RASTER.items()}},
     "vars": VARS,

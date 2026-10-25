@@ -1,3 +1,4 @@
+import {nativeEnsemble} from './icond2-eps-native.mjs';
 /**
  * Cloudflare Worker — Open-Meteo proxy voor weerlab.nl
  *
@@ -93,6 +94,11 @@ export default {
     const target = ENDPOINTS[endpoint];
     if (!target) {
       return json({ error: `Unknown endpoint: ${endpoint}` }, 404);
+    }
+
+    if (endpoint === 'ensemble' && (url.searchParams.get('models')||'').split(',').some(m=>m.trim()==='icon_d2')) {
+      try { return json(await nativeEnsemble(url), 200); }
+      catch (error) { return json({error: true, reason: error.message, source: 'DWD Open Data direct', paid_fallback: false}, 503); }
     }
 
     if (!env.OPEN_METEO_KEY) {
