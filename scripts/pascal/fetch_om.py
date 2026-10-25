@@ -134,7 +134,7 @@ def fetch_point(lat, lon, model, forecast_days, vars_list=None, retry=2):
 MODELS = [
     # (model, forecast_days, n_perturbed, vars_list)
     ("ecmwf_ifs025", 15, 50, VARS),    # IFS-ENS: 50 perturbed + 1 control, maximaal 15 dagen
-    ("icon_d2",       3, 19, VARS),    # 3 kalenderdagen nodig om de officiële ~48u te omvatten
+    ("icon_d2",       2, 19, VARS),    # Eigen DWD-bron: 20 echte leden, exact 48 uur vooruit
 ]
 
 # Fetch — beide modellen per punt, parallel via threadpool
