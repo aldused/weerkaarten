@@ -92,7 +92,7 @@ function renderClouds(results,place,start,days){
    s+=panel(data,field,[start,end],[0,100],38+col*760,130+row*296,row*2+col);
   }
  }
- return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF · NOAA / DWD via Open-Meteo · alle assen 0–100% bedekkingsgraad</text><text x="38" y="1061" font-size="11" fill="#617789">Hoge bewolking omvat sluierbewolking. De wolkenlagen rechts horen uitsluitend bij ECMWF.</text></svg>';
+ return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF · NOAA rechtstreeks · DWD via Open-Meteo · alle assen 0–100% bedekkingsgraad</text><text x="38" y="1061" font-size="11" fill="#617789">Hoge bewolking omvat sluierbewolking. De wolkenlagen rechts horen uitsluitend bij ECMWF.</text></svg>';
 }
 function renderAifs(results,place,start,days){
  const end=start+days*DAY,fields=['temperature_2m','precipitation','wind_speed_10m'];
@@ -113,7 +113,7 @@ function render(results,view,place,start,days,cloudMode='layers'){
  const scales=columns.map((r,i)=>limits(r,fields[i]));
  let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} 1080" role="img" aria-labelledby="chart-title chart-description" font-family="Arial,sans-serif"><title id="chart-title">${esc(place)} — ${view==='wolken'?'Bewolking':view==='wind'?'Wind en windstoten':'Temperatuur en neerslag'}: ECMWF, GFS en ICON</title><desc id="chart-description">Drie modelrijen met ${fields.length} grafieken per rij. Groene lijnen zijn verstoorde leden, blauw is controle, zwart gestippeld het gemiddelde en magenta gestreept de mediaan. Ontbrekende waarden blijven leeg.</desc><rect width="${width}" height="1080" fill="white"/><text x="38" y="46" font-size="27" font-weight="700" fill="#20394d">${esc(place)} <tspan font-weight="400" fill="#617789">· ${view==='wolken'?(cloudMode==='total'?'Totale bewolking':'Hoge, middelbare &amp; lage bewolking'):view==='wind'?'Wind &amp; windstoten':'Temperatuur &amp; neerslag'}</tspan></text><text x="38" y="73" font-size="13" fill="#617789">ECMWF · GFS · ICON  |  ${date(start)} – ${date(end)}  |  ${days} dagen · tijdas Nederlandse tijd</text><text x="38" y="101" font-size="12" fill="#555">${view==='wolken'?'Staafjes: mediaan · dunne lijnen: P10–P90 (middelste 80% van de leden)':'Controle · verstoorde leden · gemiddelde · mediaan (P50)'}</text>`;
  for(let row=0;row<3;row++)for(let col=0;col<fields.length;col++)s+=panel(columns[col][row],fields[col],[start,end],scales[col],38+col*760,130+row*296,row*fields.length+col);
- s+='<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · Bron: ECMWF · NOAA / DWD via Open-Meteo · laatst beschikbare gegevens per model</text><text x="38" y="1061" font-size="11" fill="#617789">Gelijke assen · oorspronkelijke modelstappen · ontbrekende gegevens blijven leeg.</text></svg>';
+ s+='<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · Bron: ECMWF · NOAA rechtstreeks · DWD via Open-Meteo · laatst beschikbare gegevens per model</text><text x="38" y="1061" font-size="11" fill="#617789">Gelijke assen · oorspronkelijke modelstappen · ontbrekende gegevens blijven leeg.</text></svg>';
  return s;
 }
 const api={beaufort,bftSpeed,runLabel,metaSignature,median,series,limits,path,render,utc};
@@ -129,6 +129,7 @@ const sharedParams=new URLSearchParams(location.search);if(sharedParams.has('lat
 function syncPlace(){let o=[...$('station').options].find(o=>o.textContent===place.name&&o.value===`${place.lat},${place.lon}`);if(!o){o=new Option(place.name,`${place.lat},${place.lon}`);$('station').add(o);}$('station').value=o.value;}
 async function json(url,signal){const r=await fetch(url,{signal,cache:'no-store'});if(!r.ok)throw new Error('Bron tijdelijk niet bereikbaar');const d=await r.json();if(d.error)throw new Error('Bron levert deze gegevens niet');return d;}
 async function modelMetadata(m,signal){
+ if(m.id==='gfs_seamless'){const d=await json('https://data.weerlab.nl/gefs_manifest.json',signal);if(!d.complete||d.member_count!==31)throw Error('Eigen GEFS-run onvolledig');return [{label:'NOAA GEFS',domain:'noaa_gefs',meta:{last_run_initialisation_time:Date.parse(d.run_utc)/1000,data_end_time:Date.parse(d.run_utc)/1000+384*3600}}];}
  return Promise.all(m.sources.map(async ([label,domain])=>{
   const meta=await json('https://ensemble-api.open-meteo.com/data/'+domain+'/static/meta.json?_weerlab_meta='+Date.now(),signal);
   if(!Number.isFinite(meta.last_run_initialisation_time)||meta.last_run_initialisation_time<=0||!Number.isFinite(meta.data_end_time)||meta.data_end_time<=meta.last_run_initialisation_time)throw new Error('Runmetadata ontbreekt');

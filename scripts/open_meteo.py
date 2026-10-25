@@ -24,6 +24,7 @@ Gebruik:
 from __future__ import annotations
 
 import os
+from urllib.parse import urlsplit, parse_qsl, urlencode
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -124,6 +125,9 @@ def _format_param(value: Any) -> str:
 
 def om_url(endpoint: str, **params: Any) -> str:
     """Bouw een volledige Open-Meteo URL inclusief apikey indien beschikbaar."""
+    if any(m.strip().startswith("gfs") for m in _format_param(params.get("models", "")).split(",")):
+        route = "ensemble" if endpoint == ENSEMBLE else "forecast" if endpoint == FORECAST else endpoint.replace("_", "-")
+        return "https://om.weerlab.nl/om/" + route + "?" + urlencode({k: _format_param(v) for k, v in params.items() if v is not None and k != "apikey"})
     host, path = _resolve_endpoint(endpoint)
     key = _load_key()
 
@@ -184,6 +188,11 @@ def upgrade_url(url: str) -> str:
     Zo kunnen bestaande scripts minimaal worden aangepast: wikkel de URL en
     klaar. Als er geen key is, blijft de URL ongewijzigd.
     """
+    parsed = urlsplit(url)
+    pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    if any(m.strip().startswith("gfs") for k, v in pairs if k == "models" for m in v.split(",")):
+        route = "ensemble" if "ensemble" in parsed.netloc else "forecast" if parsed.path.endswith("/forecast") and "previous" not in parsed.netloc else "previous"
+        return "https://om.weerlab.nl/om/" + route + "?" + urlencode([(k, v) for k, v in pairs if k != "apikey"])
     key = _load_key()
     if not key:
         return url
@@ -266,10 +275,7 @@ def install_requests_patch() -> None:
     global _PATCH_INSTALLED
     if _PATCH_INSTALLED:
         return
-    if not has_key():
-        # Geen key — niets te upgraden, geen patch nodig
-        _PATCH_INSTALLED = True
-        return
+    # Native GFS routing also works on installations without an API key.
 
     original_get = requests.get
 

@@ -1,3 +1,5 @@
+import {gefsEnsemble} from './gefs-native.mjs';
+import {gfsForecast} from './gfs-native-forecast.mjs';
 import {nativeEnsemble} from './icond2-eps-native.mjs';
 /**
  * Cloudflare Worker — Open-Meteo proxy voor weerlab.nl
@@ -99,6 +101,15 @@ export default {
     if (endpoint === 'ensemble' && (url.searchParams.get('models')||'').split(',').some(m=>m.trim()==='icon_d2')) {
       try { return json(await nativeEnsemble(url), 200); }
       catch (error) { return json({error: true, reason: error.message, source: 'DWD Open Data direct', paid_fallback: false}, 503); }
+    }
+
+    const gfsModels=(url.searchParams.get('models')||'').split(',').map(m=>m.trim());
+    if (gfsModels.some(m=>m.startsWith('gfs'))) {
+      try {
+        if(endpoint==='ensemble')return json(await gefsEnsemble(url),200);
+        if(endpoint==='forecast')return json(await gfsForecast(url,env.HARMONIE_DATA),200);
+        return json({error:true,reason:'Deze GFS-route heeft nog geen eigen bron',paid_fallback:false},503);
+      } catch(error) {return json({error:true,reason:error.message,source:'NOAA Open Data direct',paid_fallback:false},503);}
     }
 
     if (!env.OPEN_METEO_KEY) {
