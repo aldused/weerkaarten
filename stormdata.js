@@ -4,7 +4,19 @@
  const date=value=>new Date(value.length===10?value+'T12:00:00Z':value).toLocaleString('nl-NL',{timeZone:'UTC',day:'numeric',month:'short',year:'numeric',...(value.length===10?{}:{hour:'2-digit',minute:'2-digit'})});
  let rollingData=null;
  const number=v=>v.toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:2});
+ function topFive(data){
+  const body=document.getElementById('rolling-top-rows'),note=document.getElementById('rolling-top-note');if(!body)return;
+  const rows=StormWindCore.top(data.rolling_wind);body.replaceChildren();
+  note.textContent=rows.length?`${rows.length} hoogste complete lopende uurgemiddelden · metingen maximaal 40 minuten oud · tijden UTC.`:'Geen complete, recente metingen beschikbaar voor de top 5. Verouderde metingen tellen niet mee.';
+  rows.forEach((r,i)=>{
+   const tr=document.createElement('tr'),name=data.stations.find(s=>s.station===r.station)?.name||String(r.station),trend=Number.isFinite(r.previous_mean_ms)?r.mean_ms-r.previous_mean_ms:null;
+   const cells=[String(i+1),name,number(r.mean_ms)+' m/s',number(r.mean_ms*3.6)+' km/u',r.storm_reached?'Stormgrens bereikt':number(Math.max(0,20.5-r.mean_ms))+' m/s onder grens',trend===null?'—':Math.abs(trend)<.05?'→ Gelijk':(trend>0?'↑ +':'↓ −')+number(Math.abs(trend))+' m/s',date(r.end_utc)];
+   cells.forEach((text,index)=>{const td=document.createElement('td');if(index===1){const button=document.createElement('button');button.type='button';button.textContent=text;button.onclick=()=>{document.getElementById('rolling-station').value=String(r.station);rolling(data);};td.append(button);}else td.textContent=text;tr.append(td);});
+   body.append(tr);
+  });
+ }
  function rolling(data){
+  topFive(data);
   rollingData=data;
   const menu=document.getElementById('rolling-station'),value=document.getElementById('rolling-value'),windowLabel=document.getElementById('rolling-window');
   if(!menu||!value)return;
