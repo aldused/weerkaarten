@@ -56,20 +56,20 @@ def complete_hours(ten):
  return hours
 
 def rolling_wind(ten,allowed,now):
- """Six contiguous trailing ten-minute means; never bridge gaps or use gusts."""
+ """Fixed clock hour: ten-minute endpoints :10 through next :00, never sliding."""
  result=[]
  for st in sorted(allowed):
-  times=[t for station,t in ten if station==st and t<=now]
+  times=[t for station,t in ten if station==st and t<=now and t.minute==0]
   if not times:continue
   end=max(times)
   def window(t):
    samples=[ten.get((st,t-timedelta(minutes=10*i)),{}).get('value') for i in range(6)]
    return sum(Decimal(str(v)) for v in samples)/6 if all(valid(v) for v in samples) else None
-  value=window(end);previous=window(end-timedelta(minutes=10))
+  value=window(end);previous=window(end-timedelta(hours=1))
   result.append({'station':st,'start_utc':(end-timedelta(hours=1)).isoformat(),'end_utc':end.isoformat(),
    'mean_ms':round(float(value),3) if value is not None else None,'samples':sum(valid(ten.get((st,end-timedelta(minutes=10*i)),{}).get('value')) for i in range(6)),
    'previous_mean_ms':round(float(previous),3) if previous is not None else None,
-   'storm_threshold_ms':20.5,'storm_reached':value>=Decimal('20.5') if value is not None else None,'source':'KNMI ff: six consecutive ten-minute means'})
+   'storm_threshold_ms':20.5,'storm_reached':value>=Decimal('20.5') if value is not None else None,'source':'KNMI ff: fixed clock hour, endpoints :10 :20 :30 :40 :50 :00'})
  return result
 
 def daily_hours(ten,native):

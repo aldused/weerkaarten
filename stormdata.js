@@ -7,7 +7,7 @@
  function topFive(data){
   const body=document.getElementById('rolling-top-rows'),note=document.getElementById('rolling-top-note');if(!body)return;
   const rows=StormWindCore.top(data.rolling_wind);body.replaceChildren();
-  note.textContent=rows.length?`${rows.length} hoogste complete lopende uurgemiddelden · metingen maximaal 40 minuten oud · tijden UTC.`:'Geen complete, recente metingen beschikbaar voor de top 5. Verouderde metingen tellen niet mee.';
+  note.textContent=rows.length?`${rows.length} hoogste complete complete klokuurgemiddelden · metingen maximaal 100 minuten oud · tijden UTC.`:'Geen complete, recente metingen beschikbaar voor de top 5. Verouderde metingen tellen niet mee.';
   rows.forEach((r,i)=>{
    const tr=document.createElement('tr'),name=data.stations.find(s=>s.station===r.station)?.name||String(r.station),trend=Number.isFinite(r.previous_mean_ms)?r.mean_ms-r.previous_mean_ms:null;
    const cells=[String(i+1),name,number(r.mean_ms)+' m/s',number(r.mean_ms*3.6)+' km/u',r.storm_reached?'Stormgrens bereikt':number(Math.max(0,20.5-r.mean_ms))+' m/s onder grens',trend===null?'—':Math.abs(trend)<.05?'→ Gelijk':(trend>0?'↑ +':'↓ −')+number(Math.abs(trend))+' m/s',date(r.end_utc)];
@@ -25,12 +25,12 @@
   menu.value=chosen;if(!menu.value)menu.selectedIndex=0;
   menu.onchange=()=>rolling(rollingData);
   const row=data.rolling_wind?.find(r=>String(r.station)===menu.value);
-  if(!row){value.textContent='Geen lopend uurgemiddelde beschikbaar voor dit station.';windowLabel.textContent='Er worden geen ontbrekende metingen ingevuld.';return;}
-  const stale=Date.now()-Date.parse(row.end_utc)>40*60000;
+  if(!row){value.textContent='Geen klokuurgemiddelde beschikbaar voor dit station.';windowLabel.textContent='Er worden geen ontbrekende metingen ingevuld.';return;}
+  const stale=Date.now()-Date.parse(row.end_utc)>100*60000;
   windowLabel.textContent=`Uurvak ${date(row.start_utc)} – ${date(row.end_utc)} UTC · ${row.samples}/6 metingen${stale?' · verouderd':''}.`;
-  if(row.samples!==6||!Number.isFinite(row.mean_ms)){value.textContent='Onvolledig uurvak: geen lopend uurgemiddelde berekend.';return;}
+  if(row.samples!==6||!Number.isFinite(row.mean_ms)){value.textContent='Onvolledig uurvak: geen klokuurgemiddelde berekend.';return;}
   const delta=20.5-row.mean_ms,trend=Number.isFinite(row.previous_mean_ms)?row.mean_ms-row.previous_mean_ms:null;
-  value.textContent=`${stale?'Laatste beschikbare meting: ':''}${number(row.mean_ms)} m/s · ${number(row.mean_ms*3.6)} km/u. ${!row.storm_reached?number(Math.max(0,delta))+' m/s onder de stormgrens.':'Stormgrens bereikt in dit lopende uurvak.'}${trend===null?'':' Ten opzichte van tien minuten eerder: '+(Math.abs(trend)<.05?'vrijwel gelijk':(trend>0?'stijgend met ':'dalend met ')+number(Math.abs(trend))+' m/s')+'.'}`;
+  value.textContent=`${stale?'Laatste beschikbare meting: ':''}${number(row.mean_ms)} m/s · ${number(row.mean_ms*3.6)} km/u. ${!row.storm_reached?number(Math.max(0,delta))+' m/s onder de stormgrens.':'Stormgrens bereikt in dit vaste uurvak.'}${trend===null?'':' Ten opzichte van het vorige klokuur: '+(Math.abs(trend)<.05?'vrijwel gelijk':(trend>0?'stijgend met ':'dalend met ')+number(Math.abs(trend))+' m/s')+'.'}`;
  }
  function status(data){
   rolling(data);
