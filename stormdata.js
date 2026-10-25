@@ -38,7 +38,7 @@
   const words=[`Automatische controle iedere ${data.auto_refresh_minutes||15} minuten.`,`Dagarchief t/m ${date(data.archive_latest_date||data.latest_date)} (UTC).`];
   if(latest)words.push(`Recente complete uren t/m ${date(latest)} UTC; de recente aanvulling is voorlopig.`);
   words.push(`Laatste geslaagde controle: ${date(checked)} UTC.`);
-  if(data._snapshot)words.unshift('De actuele bron is tijdelijk niet bereikbaar; dit is de opgeslagen kopie.');
+  if(data._snapshot)words.unshift('Opgeslagen bronkopie; nieuwste metingen worden op de achtergrond gecontroleerd.');
   else if(Date.now()-Date.parse(checked)>90*60000)words.unshift('De automatische update loopt achter.');
   if(latest&&Date.now()-Date.parse(latest)>3*3600000)words.push('De nieuwste complete winduren in dit overzicht zijn ouder dan drie uur.');
   for(const id of ['live-status','updated']){const el=document.getElementById(id);if(el)el.textContent=words.join(' ')}
@@ -49,7 +49,14 @@
  async function json(url){const r=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('HTTP '+r.status);const data=await r.json();if(!data.stations?.length||!data.years?.length||!data.latest_date)throw Error('Onvolledig stormbestand');return data}
  window.loadStormData=async(force=false)=>{
   if(pending)return pending;if(cached&&!force&&Date.now()-lastFetch<60000)return cached;
-  pending=(async()=>{let data;try{data=await json(primary+'?t='+Date.now())}catch{data=await json('stormdagen_data.json');data._snapshot=true}cached=data;lastFetch=Date.now();status(data);window.dispatchEvent(new CustomEvent('stormdata',{detail:data}));return data})();
+  const publish=data=>{cached=data;lastFetch=Date.now();status(data);window.dispatchEvent(new CustomEvent('stormdata',{detail:data}));return data;};
+  const live=json(primary+'?t='+Date.now());
+  // Render the first available valid source immediately; the live request continues independently.
+  const snapshot=json('stormdagen_data.json').then(data=>{data._snapshot=true;return data;});
+  pending=Promise.any([live,snapshot]).then(publish);
+  live.then(data=>{
+   if(cached&&data!==cached&&Date.parse(data.last_checked_utc||data.generated_utc)>=Date.parse(cached.last_checked_utc||cached.generated_utc))publish(data);
+  }).catch(()=>{});
   try{return await pending}finally{pending=null}
  };
  const refresh=()=>{if(!document.hidden)window.loadStormData(true).catch(()=>{const e=document.getElementById('live-status');if(e)e.textContent='Nieuwe gegevens konden niet worden geladen. De vorige metingen blijven zichtbaar.'})};
