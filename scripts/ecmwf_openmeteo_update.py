@@ -179,6 +179,9 @@ def local_forecast_times(times: list[str]) -> list[str]:
 
 def main() -> int:
     args = parse_args()
+    if args.model.startswith("gfs"):
+        print("GFS gebruikt de eigen NOAA-aanvoer; Open-Meteo staat uit.")
+        return 0
     if args.model in {"ecmwf_ifs", "ecmwf_ifs025", "ecmwf_ifs04", "ecmwf_seamless", "ecmwf_ifs_europe"}:
         print("ECMWF IFS gebruikt de eigen native kaartaanvoer; Open-Meteo staat uit.")
         return 0
