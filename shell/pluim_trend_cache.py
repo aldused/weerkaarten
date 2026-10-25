@@ -114,7 +114,7 @@ CLOUD_LAYER_BASES = ("cloud_cover_low", "cloud_cover_mid")
 ARCHIVE_BASES = CORE_BASES + (
     "wind_gusts_10m", "cape", "wind_direction_10m", "temperature_850hPa",
     "temperature_500hPa", "geopotential_height_500hPa", "dew_point_2m",
-    "relative_humidity_2m", "snowfall", "lifted_index", "weather_code",
+    "relative_humidity_2m", "snowfall", "lifted_index", "weather_code", "cloud_cover_high",
 ) + CLOUD_LAYER_BASES
 # Open-Meteo exposeert momenteel wel 51 lifted-index-reeksen, maar vult ze voor
 # IFS ENS volledig met null. Zo'n sleutel is geen capability en mag ook niet

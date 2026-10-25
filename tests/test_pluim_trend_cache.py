@@ -412,6 +412,7 @@ class PluimTrendHresTest(unittest.TestCase):
         def station_doc(name, slug, digest, bad_specialist=False):
             members = {base: matrix(1) for base in trend.CORE_BASES}
             members["temperature_850hPa"] = matrix(5)
+            members["cloud_cover_high"] = matrix(80)
             if bad_specialist:
                 members["temperature_850hPa"][3][1] = None
             members["lifted_index"] = [[None, None] for _ in range(51)]
@@ -445,6 +446,7 @@ class PluimTrendHresTest(unittest.TestCase):
             self.assertEqual(manifest["member_count"], 51)
             self.assertTrue(manifest["runs"][0]["complete"])
             self.assertNotIn("temperature_850hPa", manifest["runs"][0]["fields"])
+            self.assertIn("cloud_cover_high", manifest["runs"][0]["fields"])
             self.assertNotIn("lifted_index", manifest["runs"][0]["fields"])
             first_revision = manifest["revision"]
             first_text = first.read_text()

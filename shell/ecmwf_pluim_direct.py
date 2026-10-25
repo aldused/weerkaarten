@@ -433,6 +433,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--hourly", action="store_true", help="Interpolate each member to hours, preserving precipitation totals")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--archive-only", action="store_true", help="Fill an older archive run without replacing latest-run metadata")
     parser.add_argument(
         "--probe-only",
         action="store_true",
@@ -669,7 +670,7 @@ def retrieve_batch(
     request_params: list[str] = []
     for param in raw_params:
         if param in ("t850","t500"):continue
-        request_params.extend(tuple(dict.fromkeys("10fg" if h<=90 else "10fg3" if h<=144 else "10fg6" for h in batch_steps)) if param == "10fg" else (param,))
+        request_params.extend(tuple(dict.fromkeys("10fg" if h<=90 or (perturbed and h>144) else "10fg3" if h<=144 else "10fg6" for h in batch_steps)) if param == "10fg" else (param,))
     request: dict[str, object] = {
         "date": run.strftime("%Y%m%d"),
         "time": cycle,
@@ -1315,12 +1316,15 @@ def enrich_existing_source_ready(
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    args.archive_only = getattr(args, "archive_only", False)
     install_signal_handlers()
     use_safe_multipart_chunk_size()
     stations = load_stations(args.repo_dir, set(args.slug))
     raw_params = FIELD_SETS[args.fields]
     meta_path = args.out_dir / "pluim_direct_meta.json"
     existing_meta = load_meta_document(meta_path)
+    if args.archive_only and existing_meta.get("complete") is not True:
+        raise RuntimeError("Archive backfill requires complete latest-run metadata")
     minimum_run, minimum_ready_at = newest_complete_floor(
         (meta_path, args.published_state),
         args.fields,
@@ -1388,7 +1392,7 @@ def main(argv: list[str]) -> int:
         minimum_ready_at=minimum_ready_at,
     )
     run, cycle = selection.run, selection.cycle
-    assert_not_rollback(run, minimum_run, args.no_write)
+    assert_not_rollback(run, minimum_run, args.no_write or args.archive_only)
     if args.probe_only:
         print(
             "PROBE:" + json.dumps(
@@ -1677,7 +1681,7 @@ def main(argv: list[str]) -> int:
                 args.fields,
                 len(stations),
             )
-            assert_not_rollback(run, current_floor, args.no_write)
+            assert_not_rollback(run, current_floor, args.no_write or args.archive_only)
             documents = prepare_documents(
                 args.out_dir,
                 stations,
@@ -1705,7 +1709,7 @@ def main(argv: list[str]) -> int:
                 write_documents_atomically(
                     documents,
                     meta_path,
-                    meta,
+                    existing_meta if args.archive_only else meta,
                 ),
                 args.repo_dir,
                 args.out_dir,

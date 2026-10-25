@@ -158,6 +158,9 @@ if ((${#CYCLE_ARGS[@]})); then
   producer_command+=("${CYCLE_ARGS[@]}")
 fi
 producer_command+=(--batch-steps 1 --max-temp-gib 1 --hourly)
+if [[ "${PLUIM_DIRECT_ARCHIVE_ONLY:-0}" == "1" ]]; then
+  producer_command+=(--archive-only)
+fi
 
 set +e
 "${producer_command[@]}" > "$RUN_LOG" &
