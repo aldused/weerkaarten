@@ -802,7 +802,7 @@ def main():
             "ff": "max", "rr": "max", "gevoels": "min",
         }.items():
             nieuwe_dag[sleutel] = voeg_daguitersten_samen(
-                oud.get(sleutel, []), nieuwe_dag.get(sleutel, []), richting
+                ([r for r in oud.get(sleutel, []) if len(r)>2 and r[2]] if sleutel=="ff" else oud.get(sleutel, [])), nieuwe_dag.get(sleutel, []), richting
             )
         # rr24 is rollend en mag dus wel dalen. Nieuwe stationswaarden krijgen
         # voorrang; alleen ontbrekende stations komen uit de vorige momentopname.
