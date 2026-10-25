@@ -48,7 +48,7 @@ function render(result,place,start,days){
   const counts=c.points.map(p=>p.count).filter(n=>n>0);const coverage=counts.length?`${Math.min(...counts)}–${Math.max(...counts)} geldige leden per etmaal`:'Geen volledige ensemblegegevens';
   s+=`<rect x="${left}" y="${top}" width="${pw}" height="${ph}" fill="none" stroke="#444" stroke-width=".8"/><text x="15" y="263" font-size="10" fill="#667">${esc(result.error||coverage)} · ontbrekende dagen blijven leeg</text></g>`;
  });
- return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF ensemble via Open-Meteo · dagelijkse minimum- en maximumtemperatuur uit de bron</text><text x="38" y="1061" font-size="11" fill="#617789">Sneeuw: etmaalsom. Sneeuwdek: hoogste uurwaarde. Alleen leden met een compleet etmaal tellen mee. Ruwe modelkansen, niet gekalibreerd.</text></svg>';
+ return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF ensemble · dagelijkse minimum- en maximumtemperatuur uit de bron</text><text x="38" y="1061" font-size="11" fill="#617789">Sneeuw: etmaalsom. Sneeuwdek: hoogste uurwaarde. Alleen leden met een compleet etmaal tellen mee. Ruwe modelkansen, niet gekalibreerd.</text></svg>';
 }
 const api={probabilities,render};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.WinterPlume=api;
 })(typeof window==='undefined'?globalThis:window);

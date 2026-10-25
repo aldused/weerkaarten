@@ -1599,7 +1599,7 @@
     ctx.fillStyle = 'rgba(255,255,255,0.56)';
     ctx.font = '800 20px Inter, Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('Ed Aldus WM · Data: Open-Meteo / ECMWF IFS ENS', PAGE_MARGIN, pageH - 36);
+    ctx.fillText('Ed Aldus WM · Data: ECMWF IFS ENS', PAGE_MARGIN, pageH - 36);
     return pageH;
   }
 
@@ -1658,7 +1658,7 @@
     ctx.fillStyle = 'rgba(255,255,255,0.56)';
     ctx.font = '800 20px Inter, Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('Ed Aldus WM · Data: Open-Meteo / ECMWF IFS ENS', PAGE_MARGIN, pageH - 36);
+    ctx.fillText('Ed Aldus WM · Data: ECMWF IFS ENS', PAGE_MARGIN, pageH - 36);
     return pageH;
   }
 

@@ -216,7 +216,7 @@ ax2.set_ylabel("Neerslag (mm/u)", fontsize=9, color="#444444")
 ax2.tick_params(axis="y", labelsize=8.5, colors="#444444")
 ax2.set_title("Neerslag + kans", fontsize=11, color="#333", loc="left", pad=4, fontweight="bold")
 
-fig.text(0.98, 0.005, f"© Ed Aldus | Data: ECMWF ENS via Open-Meteo | {now_str}",
+fig.text(0.98, 0.005, f"© Ed Aldus | Data: ECMWF ENS | {now_str}",
          fontsize=7, style="italic", ha="right", va="bottom", color="#555555")
 
 fname = "pluim_rotterdam_temp_regen.png"

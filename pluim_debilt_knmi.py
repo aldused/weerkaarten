@@ -303,7 +303,7 @@ ax6.set_ylim(bottom=0)
 ax6.grid(axis="y", color="#eeeeee", lw=0.5)
 
 # Copyright
-fig.text(0.98, 0.005, f"© Ed Aldus | Data: ECMWF ENS via Open-Meteo | {now_str}",
+fig.text(0.98, 0.005, f"© Ed Aldus | Data: ECMWF ENS | {now_str}",
          fontsize=7, style="italic", ha="right", va="bottom", color="#555555")
 
 fname = "pluim_debilt_knmi.png"

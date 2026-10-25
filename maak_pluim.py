@@ -154,7 +154,7 @@ for station, (s_lon, s_lat) in STATIONS.items():
     ax.legend(loc="upper right", fontsize=7.5, framealpha=0.9,
               edgecolor="#cccccc", ncol=4)
     ax.text(1.0,-0.08,
-            f"© Ed Aldus | Data: ECMWF ENS via Open-Meteo | {now_str}",
+            f"© Ed Aldus | Data: ECMWF ENS | {now_str}",
             transform=ax.transAxes,fontsize=6.5,style="italic",
             ha="right",va="top",color="#555555")
 

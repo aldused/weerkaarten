@@ -221,7 +221,7 @@ ax3.tick_params(axis="y", labelsize=8.5, colors="#444444")
 ax3.set_title("Wind + windstoten", fontsize=11, color="#333", loc="left", pad=4, fontweight="bold")
 ax3.legend(loc="upper right", fontsize=8, framealpha=0.9, edgecolor="#cccccc", ncol=3)
 
-fig.text(0.98, 0.005, f"© Ed Aldus | Data: ECMWF ENS via Open-Meteo | {now_str}",
+fig.text(0.98, 0.005, f"© Ed Aldus | Data: ECMWF ENS | {now_str}",
          fontsize=7, style="italic", ha="right", va="bottom", color="#555555")
 
 fname = "pluim_barendrecht_compact.png"

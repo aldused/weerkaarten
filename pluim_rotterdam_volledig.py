@@ -262,7 +262,7 @@ ax4.legend(handles=legenda, loc="lower center", ncol=5,
            fontsize=8, framealpha=0.95, edgecolor="#cccccc",
            bbox_to_anchor=(0.5, -0.22))
 
-fig.text(0.98, 0.005, f"© Ed Aldus | Data: ECMWF ENS via Open-Meteo | {now_str}",
+fig.text(0.98, 0.005, f"© Ed Aldus | Data: ECMWF ENS | {now_str}",
          fontsize=7, style="italic", ha="right", va="bottom", color="#555555")
 
 fname = "pluim_rotterdam_volledig.png"

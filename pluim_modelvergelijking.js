@@ -92,7 +92,7 @@ function renderClouds(results,place,start,days){
    s+=panel(data,field,[start,end],[0,100],38+col*760,130+row*296,row*2+col);
   }
  }
- return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF / NOAA / DWD via Open-Meteo · alle assen 0–100% bedekkingsgraad</text><text x="38" y="1061" font-size="11" fill="#617789">Hoge bewolking omvat sluierbewolking. De wolkenlagen rechts horen uitsluitend bij ECMWF.</text></svg>';
+ return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF · NOAA / DWD via Open-Meteo · alle assen 0–100% bedekkingsgraad</text><text x="38" y="1061" font-size="11" fill="#617789">Hoge bewolking omvat sluierbewolking. De wolkenlagen rechts horen uitsluitend bij ECMWF.</text></svg>';
 }
 function renderAifs(results,place,start,days){
  const end=start+days*DAY,fields=['temperature_2m','precipitation','wind_speed_10m'];
@@ -102,7 +102,7 @@ function renderAifs(results,place,start,days){
   const scale=limits(panels,field);
   panels.forEach((r,col)=>{s+=panel(r,field,[start,end],scale,38+col*760,130+row*296,row*2+col);});
  });
- return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · Bron: ECMWF via Open-Meteo · laatst beschikbare ensemblegegevens per model</text><text x="38" y="1061" font-size="11" fill="#617789">Gelijke assen per rij · neerslag per volledige 6 uur · wind in Bft · ontbrekende gegevens blijven leeg.</text></svg>';
+ return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · Bron: ECMWF · laatst beschikbare ensemblegegevens per model</text><text x="38" y="1061" font-size="11" fill="#617789">Gelijke assen per rij · neerslag per volledige 6 uur · wind in Bft · ontbrekende gegevens blijven leeg.</text></svg>';
 }
 function render(results,view,place,start,days,cloudMode='layers'){
  if(view==='aifs')return renderAifs(results,place,start,days);
@@ -113,7 +113,7 @@ function render(results,view,place,start,days,cloudMode='layers'){
  const scales=columns.map((r,i)=>limits(r,fields[i]));
  let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} 1080" role="img" aria-labelledby="chart-title chart-description" font-family="Arial,sans-serif"><title id="chart-title">${esc(place)} — ${view==='wolken'?'Bewolking':view==='wind'?'Wind en windstoten':'Temperatuur en neerslag'}: ECMWF, GFS en ICON</title><desc id="chart-description">Drie modelrijen met ${fields.length} grafieken per rij. Groene lijnen zijn verstoorde leden, blauw is controle, zwart gestippeld het gemiddelde en magenta gestreept de mediaan. Ontbrekende waarden blijven leeg.</desc><rect width="${width}" height="1080" fill="white"/><text x="38" y="46" font-size="27" font-weight="700" fill="#20394d">${esc(place)} <tspan font-weight="400" fill="#617789">· ${view==='wolken'?(cloudMode==='total'?'Totale bewolking':'Hoge, middelbare &amp; lage bewolking'):view==='wind'?'Wind &amp; windstoten':'Temperatuur &amp; neerslag'}</tspan></text><text x="38" y="73" font-size="13" fill="#617789">ECMWF · GFS · ICON  |  ${date(start)} – ${date(end)}  |  ${days} dagen · tijdas Nederlandse tijd</text><text x="38" y="101" font-size="12" fill="#555">${view==='wolken'?'Staafjes: mediaan · dunne lijnen: P10–P90 (middelste 80% van de leden)':'Controle · verstoorde leden · gemiddelde · mediaan (P50)'}</text>`;
  for(let row=0;row<3;row++)for(let col=0;col<fields.length;col++)s+=panel(columns[col][row],fields[col],[start,end],scales[col],38+col*760,130+row*296,row*fields.length+col);
- s+='<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · Bron: ECMWF / NOAA / DWD via Open-Meteo · laatst beschikbare gegevens per model</text><text x="38" y="1061" font-size="11" fill="#617789">Gelijke assen · oorspronkelijke modelstappen · ontbrekende gegevens blijven leeg.</text></svg>';
+ s+='<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · Bron: ECMWF · NOAA / DWD via Open-Meteo · laatst beschikbare gegevens per model</text><text x="38" y="1061" font-size="11" fill="#617789">Gelijke assen · oorspronkelijke modelstappen · ontbrekende gegevens blijven leeg.</text></svg>';
  return s;
 }
 const api={beaufort,bftSpeed,runLabel,metaSignature,median,series,limits,path,render,utc};

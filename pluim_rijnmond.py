@@ -190,7 +190,7 @@ for pi, d in enumerate(station_data):
         ax.legend(handles=leg, loc="upper right", fontsize=8,
                   framealpha=0.9, edgecolor="#cccccc", ncol=4)
 
-fig.text(0.98, 0.005, f"© Ed Aldus | Data: ECMWF ENS via Open-Meteo | {now_str}",
+fig.text(0.98, 0.005, f"© Ed Aldus | Data: ECMWF ENS | {now_str}",
          fontsize=7, style="italic", ha="right", va="bottom", color="#555555")
 
 fname = "pluim_rijnmond.png"
