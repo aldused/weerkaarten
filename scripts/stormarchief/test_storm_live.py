@@ -1,11 +1,24 @@
 import unittest
 from datetime import datetime,timedelta,timezone
-from update_stormdagen import complete_hours,daily_hours,merge,coverage_rows
+from update_stormdagen import complete_hours,daily_hours,merge,coverage_rows,rolling_wind
 U=timezone.utc
 class LiveStormTests(unittest.TestCase):
  def six(self,station=260,end=None,values=None):
   end=end or datetime(2026,10,24,0,tzinfo=U);values=values or [20.5]*6
   return {(station,end-timedelta(minutes=10*i)):{'value':v,'gust':None} for i,v in enumerate(values)}
+ def test_rolling_hour_ends_between_clock_hours(self):
+  end=datetime(2026,10,25,0,20,tzinfo=U)
+  rows=self.six(225,end,[21,21,20,20,20,18]);r=rolling_wind(rows,{225},end)[0]
+  self.assertEqual(r['samples'],6);self.assertEqual(r['mean_ms'],20)
+  self.assertFalse(r['storm_reached']);self.assertEqual(r['end_utc'],end.isoformat())
+ def test_rolling_gap_is_not_filled(self):
+  end=datetime(2026,10,25,0,20,tzinfo=U);rows=self.six(225,end)
+  del rows[(225,end-timedelta(minutes=20))]
+  r=rolling_wind(rows,{225},end)[0];self.assertIsNone(r['mean_ms']);self.assertEqual(r['samples'],5)
+ def test_rolling_threshold_uses_unrounded_mean(self):
+  end=datetime(2026,10,25,0,20,tzinfo=U)
+  r=rolling_wind(self.six(225,end,[20.4999]*6),{225},end)[0]
+  self.assertFalse(r['storm_reached'])
  def base(self):
   return {'generated_utc':'2026-10-22T09:00:00Z','latest_date':'2026-10-22','stations':[{'station':260,'name':'De Bilt','last_fhx':'2026-10-22'},{'station':330,'name':'Hoek van Holland','last_fhx':'2026-10-22'}],'years':[{'year':2026,'events':[],'storm':0,'severe':0,'observed_days':295,'expected_days':365,'stations':{'260':295,'330':295},'partial_year':True}]}
  def test_requires_exact_six_samples(self):

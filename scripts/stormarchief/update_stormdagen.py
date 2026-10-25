@@ -55,6 +55,23 @@ def complete_hours(ten):
   hours[key]={'value':tenth(mean),'gust':None,'source':'ten-minute-complete','samples':6}
  return hours
 
+def rolling_wind(ten,allowed,now):
+ """Six contiguous trailing ten-minute means; never bridge gaps or use gusts."""
+ result=[]
+ for st in sorted(allowed):
+  times=[t for station,t in ten if station==st and t<=now]
+  if not times:continue
+  end=max(times)
+  def window(t):
+   samples=[ten.get((st,t-timedelta(minutes=10*i)),{}).get('value') for i in range(6)]
+   return sum(Decimal(str(v)) for v in samples)/6 if all(valid(v) for v in samples) else None
+  value=window(end);previous=window(end-timedelta(minutes=10))
+  result.append({'station':st,'start_utc':(end-timedelta(hours=1)).isoformat(),'end_utc':end.isoformat(),
+   'mean_ms':round(float(value),3) if value is not None else None,'samples':sum(valid(ten.get((st,end-timedelta(minutes=10*i)),{}).get('value')) for i in range(6)),
+   'previous_mean_ms':round(float(previous),3) if previous is not None else None,
+   'storm_threshold_ms':20.5,'storm_reached':value>=Decimal('20.5') if value is not None else None,'source':'KNMI ff: six consecutive ten-minute means'})
+ return result
+
 def daily_hours(ten,native):
  hours=complete_hours(ten)
  for key,r in native.items():
@@ -165,6 +182,7 @@ def main():
  recent,hours=daily_hours(ten_rows,native_rows)
  if not hours:raise ValueError('No complete KNMI wind hours available')
  data=merge(base,archive_recent(a.out/'source',since),recent,hours,now,since)
+ data['rolling_wind']=rolling_wind(ten_rows,allowed,now)
  if data['latest_date']<base['latest_date']:raise ValueError('Date regression')
  atomic(a.out/'current.json',data)
  if a.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(a.out/'current.json'),'r2:weerlab-data/stormdagen/current.json','--header-upload','Cache-Control: no-cache'],check=True)

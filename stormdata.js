@@ -2,7 +2,26 @@
 (()=>{
  const primary='https://data.weerlab.nl/stormdagen/current.json';let pending=null,cached=null,lastFetch=0;
  const date=value=>new Date(value.length===10?value+'T12:00:00Z':value).toLocaleString('nl-NL',{timeZone:'UTC',day:'numeric',month:'short',year:'numeric',...(value.length===10?{}:{hour:'2-digit',minute:'2-digit'})});
+ let rollingData=null;
+ const number=v=>v.toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:2});
+ function rolling(data){
+  rollingData=data;
+  const menu=document.getElementById('rolling-station'),value=document.getElementById('rolling-value'),windowLabel=document.getElementById('rolling-window');
+  if(!menu||!value)return;
+  const chosen=menu.value||'225';
+  menu.replaceChildren(...data.stations.filter(s=>s.last_fhx).sort((a,b)=>a.name.localeCompare(b.name,'nl')).map(s=>new Option(s.name,String(s.station))));
+  menu.value=chosen;if(!menu.value)menu.selectedIndex=0;
+  menu.onchange=()=>rolling(rollingData);
+  const row=data.rolling_wind?.find(r=>String(r.station)===menu.value);
+  if(!row){value.textContent='Geen lopend uurgemiddelde beschikbaar voor dit station.';windowLabel.textContent='Er worden geen ontbrekende metingen ingevuld.';return;}
+  const stale=Date.now()-Date.parse(row.end_utc)>40*60000;
+  windowLabel.textContent=`Uurvak ${date(row.start_utc)} – ${date(row.end_utc)} UTC · ${row.samples}/6 metingen${stale?' · verouderd':''}.`;
+  if(row.samples!==6||!Number.isFinite(row.mean_ms)){value.textContent='Onvolledig uurvak: geen lopend uurgemiddelde berekend.';return;}
+  const delta=20.5-row.mean_ms,trend=Number.isFinite(row.previous_mean_ms)?row.mean_ms-row.previous_mean_ms:null;
+  value.textContent=`${stale?'Laatste beschikbare meting: ':''}${number(row.mean_ms)} m/s · ${number(row.mean_ms*3.6)} km/u. ${!row.storm_reached?number(Math.max(0,delta))+' m/s onder de stormgrens.':'Stormgrens bereikt in dit lopende uurvak.'}${trend===null?'':' Ten opzichte van tien minuten eerder: '+(Math.abs(trend)<.05?'vrijwel gelijk':(trend>0?'stijgend met ':'dalend met ')+number(Math.abs(trend))+' m/s')+'.'}`;
+ }
  function status(data){
+  rolling(data);
   const checked=data.last_checked_utc||data.generated_utc,latest=data.latest_hour_utc;
   const words=[`Automatische controle iedere ${data.auto_refresh_minutes||15} minuten.`,`Dagarchief t/m ${date(data.archive_latest_date||data.latest_date)} (UTC).`];
   if(latest)words.push(`Recente complete uren t/m ${date(latest)} UTC; de recente aanvulling is voorlopig.`);
