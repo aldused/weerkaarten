@@ -150,6 +150,8 @@
       if(wanted.origin!==location.origin||(!sameGraphs&&clean(wanted)!==clean(configured)))return;
       if(sameGraphs)configured.pathname=clean(wanted)+'.html';
       for(const [key,value]of wanted.searchParams)if(key!=='v')configured.searchParams.set(key,value);configured.hash=wanted.hash;
+      const current=new URL(child.src,frame.src);
+      if(clean(current)===clean(configured)&&current.search===configured.search&&current.hash===configured.hash)return;
       restoringPageView=true;
       child.addEventListener('load',()=>{restoringPageView=false;wirePageActions(child);refreshPageActions();},{once:true});
       child.src=configured.href;
