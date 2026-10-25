@@ -6,3 +6,10 @@ test('missing stale and future hours never rank',()=>{assert.deepEqual(top([row(
 test('duplicate station uses its newest measurement',()=>{assert.equal(top([row(1,25,60),row(1,15,0)],now)[0].mean_ms,15);});
 
 test('a sliding hour ending at :10 never enters the clock-hour ranking',()=>{assert.deepEqual(top([row(1,25,10)],now),[]);});
+
+test('daily top keeps an earlier storm maximum after wind decreases',()=>{
+ const rows=[{station:242,mean_ms:22.1,end_utc:'2026-10-25T13:00:00Z'},{station:229,mean_ms:21.4,end_utc:'2026-10-25T14:00:00Z'},{station:1,mean_ms:30,end_utc:'2026-10-25T00:00:00Z'}];
+ assert.deepEqual(require('../stormwind-core.js').dayTop(rows,'2026-10-25').map(r=>r.station),[242,229]);
+});
+
+test('Beaufort uses whole m/s with storm starting at 20.5',()=>{const {beaufort}=require('../stormwind-core.js');assert.equal(beaufort(20.49),8);assert.equal(beaufort(20.5),9);assert.equal(beaufort(21.4),9);assert.equal(beaufort(22.1),9);assert.equal(beaufort(24.5),10);});

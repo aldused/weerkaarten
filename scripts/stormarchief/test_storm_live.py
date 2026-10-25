@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime,timedelta,timezone
-from update_stormdagen import complete_hours,daily_hours,merge,coverage_rows,rolling_wind
+from update_stormdagen import complete_hours,daily_hours,merge,coverage_rows,rolling_wind,day_wind
 U=timezone.utc
 class LiveStormTests(unittest.TestCase):
  def six(self,station=260,end=None,values=None):
@@ -19,6 +19,12 @@ class LiveStormTests(unittest.TestCase):
   end=datetime(2026,10,25,1,tzinfo=U)
   r=rolling_wind(self.six(225,end,[20.4999]*6),{225},end)[0]
   self.assertFalse(r['storm_reached'])
+ def test_day_max_keeps_earlier_storm_and_includes_threshold(self):
+  now=datetime(2026,10,25,16,tzinfo=U)
+  hours={(242,now-timedelta(hours=3)):{'value':221,'source':'ten-minute-complete'},(242,now):{'value':180,'source':'ten-minute-complete'},(229,now-timedelta(hours=2)):{'value':214,'source':'ten-minute-complete'},(225,now):{'value':205,'source':'ten-minute-complete'},(260,now):{'value':204,'source':'ten-minute-complete'},(1,now.replace(hour=0)):{'value':300,'source':'ten-minute-complete'}}
+  r=day_wind(hours,now)
+  self.assertEqual([v['mean_ms'] for v in r],[22.1,21.4,20.5,20.4])
+  self.assertEqual([v['station'] for v in r if v['storm_reached']],[242,229,225])
  def base(self):
   return {'generated_utc':'2026-10-22T09:00:00Z','latest_date':'2026-10-22','stations':[{'station':260,'name':'De Bilt','last_fhx':'2026-10-22'},{'station':330,'name':'Hoek van Holland','last_fhx':'2026-10-22'}],'years':[{'year':2026,'events':[],'storm':0,'severe':0,'observed_days':295,'expected_days':365,'stations':{'260':295,'330':295},'partial_year':True}]}
  def test_requires_exact_six_samples(self):

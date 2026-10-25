@@ -6,11 +6,13 @@
  const number=v=>v.toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:2});
  function topFive(data){
   const body=document.getElementById('rolling-top-rows'),note=document.getElementById('rolling-top-note');if(!body)return;
-  const rows=StormWindCore.top(data.rolling_wind);body.replaceChildren();
-  note.textContent=rows.length?`${rows.length} hoogste complete klokuurgemiddelden · metingen maximaal 100 minuten oud · tijden UTC.`:'Geen complete, recente metingen beschikbaar voor de top 5. Verouderde metingen tellen niet mee.';
+  const rows=StormWindCore.dayTop(data.day_wind,data.day_wind_date);body.replaceChildren();
+  const stormStations=(data.day_wind||[]).filter(r=>r.mean_ms>=20.5);
+  const summary=document.getElementById('day-storm-summary');if(summary)summary.textContent=data.day_wind_date?`${date(data.day_wind_date)} (UTC): `+(stormStations.length?`${stormStations.length} stations met storm: `+stormStations.map(r=>(data.stations.find(s=>s.station===r.station)?.name||r.station)+' '+number(r.mean_ms)+' m/s').join(' · ')+'.':'Nog geen uurgemiddelde vanaf 20,5 m/s in de beschikbare metingen.'):'Dagmaxima nog niet beschikbaar.';
+  note.textContent=rows.length?`${rows.length} hoogste complete klokuren van ${date(data.day_wind_date)} (UTC). Per station het maximum van vandaag; eerdere stormuren blijven zichtbaar. Laatste controle: ${date(data.last_checked_utc||data.generated_utc)} UTC.`:'Geen complete winduren voor deze dag beschikbaar.';
   rows.forEach((r,i)=>{
    const tr=document.createElement('tr'),name=data.stations.find(s=>s.station===r.station)?.name||String(r.station),trend=Number.isFinite(r.previous_mean_ms)?r.mean_ms-r.previous_mean_ms:null;
-   const cells=[String(i+1),name,number(r.mean_ms)+' m/s',number(r.mean_ms*3.6)+' km/u',r.storm_reached?'Stormgrens bereikt':number(Math.max(0,20.5-r.mean_ms))+' m/s onder grens',trend===null?'—':Math.abs(trend)<.05?'→ Gelijk':(trend>0?'↑ +':'↓ −')+number(Math.abs(trend))+' m/s',date(r.end_utc)];
+   const cells=[String(i+1),name,number(r.mean_ms)+' m/s',StormWindCore.beaufort(r.mean_ms)+' Bft',number(r.mean_ms*3.6)+' km/u',r.storm_reached?'Stormgrens bereikt':number(Math.max(0,20.5-r.mean_ms))+' m/s onder grens',date(new Date(Date.parse(r.start_utc)+10*60000).toISOString())+' – '+date(r.end_utc)];
    cells.forEach((text,index)=>{const td=document.createElement('td');if(index===1){const button=document.createElement('button');button.type='button';button.textContent=text;button.onclick=()=>{document.getElementById('rolling-station').value=String(r.station);rolling(data);};td.append(button);}else td.textContent=text;tr.append(td);});
    body.append(tr);
   });

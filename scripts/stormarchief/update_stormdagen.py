@@ -72,6 +72,15 @@ def rolling_wind(ten,allowed,now):
    'storm_threshold_ms':20.5,'storm_reached':value>=Decimal('20.5') if value is not None else None,'source':'KNMI ff: fixed clock hour, endpoints :10 :20 :30 :40 :50 :00'})
  return result
 
+def day_wind(hours,now):
+ """Highest completed fixed clock hour per station in today's UTC day."""
+ best={}
+ for (station,end),r in hours.items():
+  if (end-timedelta(seconds=1)).date()!=now.date() or end>now:continue
+  if station not in best or r['value']>best[station]['mean_ms']*10:
+   best[station]={'station':station,'mean_ms':r['value']/10,'samples':6,'start_utc':(end-timedelta(hours=1)).isoformat(),'end_utc':end.isoformat(),'storm_reached':r['value']>=205,'source':r['source']}
+ return sorted(best.values(),key=lambda r:(-r['mean_ms'],r['station']))
+
 def daily_hours(ten,native):
  hours=complete_hours(ten)
  for key,r in native.items():
@@ -183,6 +192,8 @@ def main():
  if not hours:raise ValueError('No complete KNMI wind hours available')
  data=merge(base,archive_recent(a.out/'source',since),recent,hours,now,since)
  data['rolling_wind']=rolling_wind(ten_rows,allowed,now)
+ data['day_wind']=day_wind(hours,now)
+ data['day_wind_date']=now.date().isoformat()
  if data['latest_date']<base['latest_date']:raise ValueError('Date regression')
  atomic(a.out/'current.json',data)
  if a.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(a.out/'current.json'),'r2:weerlab-data/stormdagen/current.json','--header-upload','Cache-Control: no-cache'],check=True)
