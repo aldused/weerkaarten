@@ -82,7 +82,7 @@
   function renderAll() { renderLeft(); renderGrid(); renderList(); fitAll(); }
 
   function starts() {
-    const c = city(), n = prefs.days, s0 = WP.addDays(WP.todayStart(c.tz), dayOffset, c.tz), out = [s0];
+    const c = city(), n = innerWidth < 600 ? Math.min(prefs.days, 4) : prefs.days, s0 = WP.addDays(WP.todayStart(c.tz), dayOffset, c.tz), out = [s0];
     for (let i = 1; i <= n; i++) out.push(WP.addDays(s0, i, c.tz));
     return out;
   }

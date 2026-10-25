@@ -344,8 +344,10 @@
     h.time.forEach((t, i) => {
       if (v('temperature_2m', i) == null) return;
       const date = new Date(t + ':00Z'), cl = v('cloud_cover', i), dr = v('direct_radiation', i), su = v('sunshine_duration', i), curve = WP.Sunshine && WP.Sunshine.curves[src];
-      hours.push({ date, interval: 3600e3, start: new Date(+date - 3600e3), temp: v('temperature_2m', i), dew: v('dew_point_2m', i), ww: v('weather_code', i), cloud: cl == null ? null : Math.round(cl / 12.5),
-        dir: v('wind_direction_10m', i), kn: v('wind_speed_10m', i), gust: v('wind_gusts_10m', i), p: v('pressure_msl', i), sun: dr != null ? WP.Sunshine.minuten(dr, date, city.lat, city.lon, curve) : (su == null ? null : Math.min(su / 60, WP.Sunshine.daylightMinutes(date, city.lat, city.lon))), rain: v('precipitation', i), prob: v('precipitation_probability', i), symbol: null });
+      const zonMin = dr != null ? WP.Sunshine.minuten(dr, date, city.lat, city.lon, curve) : (su == null ? null : Math.min(su / 60, WP.Sunshine.daylightMinutes(date, city.lat, city.lon)));
+      const L = WP.SymbolLogic, neff = L.nEff((cl || 0) / 12.5, zonMin, WP.Sunshine.daylightMinutes(date, city.lat, city.lon)), nn = L.halfUp(neff), wx = L.wmo(v('weather_code', i), v('precipitation', i) || 0);
+      hours.push({ date, interval: 3600e3, start: new Date(+date - 3600e3), temp: v('temperature_2m', i), dew: v('dew_point_2m', i), ww: v('weather_code', i), cloud: nn, nEff: neff, symbol: L.symbool(nn, wx),
+        dir: v('wind_direction_10m', i), kn: v('wind_speed_10m', i), gust: v('wind_gusts_10m', i), p: v('pressure_msl', i), sun: zonMin, rain: v('precipitation', i), prob: v('precipitation_probability', i) });
     });
     if (!hours.length) throw new Error(NOAUDATA);
     const groups = new Map(), byDate = new Map();
@@ -357,10 +359,11 @@
       const rain = hs.reduce((s, x) => s + (x.rain || 0), 0), wet = hs.reduce((a, b) => (b.rain || 0) > (a.rain || 0) ? b : a, hs[0]);
       const noon = hs.reduce((a, b) => Math.abs(hrOf(b) - 12) < Math.abs(hrOf(a) - 12) ? b : a, hs[0]), pick = rain >= 0.3 ? wet : noon;
       const kn = hs.map(x => x.kn).filter(x => x != null); let sx = 0, sy = 0; for (const x of hs) if (x.dir != null && x.kn != null) { sx += x.kn * Math.sin(x.dir * Math.PI / 180); sy += x.kn * Math.cos(x.dir * Math.PI / 180); }
+      const L = WP.SymbolLogic, ur = hs.map(x => ({ hour: hrOf(x), nEff: x.nEff != null ? x.nEff : (x.cloud || 0), code: x.ww, w: L.wmo(x.ww, x.rain || 0) })), ds = L.dag(ur), dww = ds ? L.dagWW(ur, ds.n) : null;
       const [Y, M, D] = k.split('-').map(Number), date = new Date(Date.UTC(Y, M - 1, D)), wpDay = wp && wp.days.find(z => z.date.toISOString().slice(0, 10) === k), probs = hs.map(x => x.prob).filter(x => x != null);
-      days.push({ date, tx: full ? Math.max(...temps) : null, tn: full ? Math.min(...temps) : null, ww: pick.ww, cloud: cl.length ? Math.round(cl.reduce((a, b) => a + b, 0) / cl.length) : null,
+      days.push({ date, tx: full ? Math.max(...temps) : null, tn: full ? Math.min(...temps) : null, ww: dww != null ? dww : pick.ww, cloud: ds ? ds.n : (cl.length ? Math.round(cl.reduce((a, b) => a + b, 0) / cl.length) : null),
         dir: (sx || sy) ? (Math.atan2(sx, sy) * 180 / Math.PI + 360) % 360 : null, kn: kn.length ? kn.reduce((a, b) => a + b, 0) / kn.length : null, gust: Math.max(0, ...hs.map(x => x.gust || 0)) || null,
-        sun: full ? hs.reduce((s, x) => s + (x.sun || 0), 0) / 60 : null, uvi: wpDay ? wpDay.uvi : null, uvLow: wpDay ? wpDay.uvLow : null, rain, rainN: 0, prob: probs.length ? Math.max(...probs) : null, symbol: null, symbolN: null });
+        sun: full ? hs.reduce((s, x) => s + (x.sun || 0), 0) / 60 : null, uvi: wpDay ? wpDay.uvi : null, uvLow: wpDay ? wpDay.uvLow : null, rain, rainN: 0, prob: probs.length ? Math.max(...probs) : null, symbol: ds ? ds.symbol : null, symbolN: null });
     }
     return { obs: wp ? wp.obs : null, days, hours, expires: Date.now() + 3600e3, fetched: Date.now() };
   }
@@ -402,4 +405,50 @@
   }
   function daylightMinutes(eind, lat, lon) { let n = 0; const s = eind.getTime() - 3600e3; for (let m = 0; m < 60; m++) if (!WP.isNight(new Date(s + m * 60e3 + 30e3), lat, lon)) n++; return n; }
   Object.assign(WP, { Sunshine: { minuten, curves: CAL, calibratedOn: CAL_DATE, daylightMinutes } });
+})(window);
+
+// ====================================================================================
+// Centrale symbool-beslislogica (port van scripts/symbolen_referentie.py; zie ook SymbolLogic.swift)
+// Afgeleid uit de WeatherPro-feed: symbool = f(bewolking n, weercode); modellen: n_eff = 0,5·bewolking + 0,5·g(zonfractie).
+// ====================================================================================
+(function (g) {
+  'use strict';
+  const WP = g.WP;
+  const G_UUR = [[0.02, 6.8], [0.19, 6.2], [0.32, 5.3], [0.44, 4.6], [0.56, 3.7], [0.68, 3.1], [0.82, 2.2], [0.97, 0.4]];
+  const W = 0.5, MIN_DL = 45, GEEN_ZON = 0.03;
+  function interp(x, p) { if (x <= p[0][0]) return p[0][1]; if (x >= p[p.length - 1][0]) return p[p.length - 1][1]; for (let i = 0; i < p.length - 1; i++) if (p[i][0] <= x && x <= p[i + 1][0]) return p[i][1] + (x - p[i][0]) * (p[i + 1][1] - p[i][1]) / (p[i + 1][0] - p[i][0]); return p[p.length - 1][1]; }
+  function nEff(cloudOcta, zonMin, dlMin) { if (zonMin == null || dlMin == null || dlMin < MIN_DL) return cloudOcta; const f = Math.min(Math.max(zonMin / dlMin, 0), 1); if (f < GEEN_ZON) return cloudOcta; return W * cloudOcta + (1 - W) * interp(f, G_UUR); }
+  const halfUp = (x) => Math.floor(x + 0.5);
+  function wmo(code, mm = 0) {
+    const c = code == null ? -1 : +code;
+    if ([95, 96, 99].includes(c)) return { rain: 0, snow: 0, thunder: true, fog: false, mist: false, steady: false };
+    let rain = ({ 51: 1, 53: 1, 55: 1, 56: 1, 57: 1, 61: 1, 63: 3, 65: 5, 66: 3, 67: 5, 80: 1, 81: 3, 82: 5 })[c] || 0;
+    const snow = ({ 71: 1, 73: 3, 75: 5, 77: 1, 85: 1, 86: 3 })[c] || 0;
+    if (!rain && !snow && mm >= 0.2 && [-1, 0, 1, 2, 3].includes(c)) rain = mm < 1.5 ? 1 : mm < 4 ? 3 : 5;
+    return { rain, snow, thunder: false, fog: [45, 48].includes(c), mist: false, steady: [61, 63, 65].includes(c) };
+  }
+  function symbool(nIn, w) {
+    const n = Math.max(0, Math.min(8, nIn)), zon = n <= 6 ? '1' : '9';
+    let lvl = n <= 1 ? '9' : n <= 4 ? '1' : '2';
+    if (w.thunder) lvl = n >= 6 ? '3' : (lvl === '9' || lvl === '1' ? '2' : lvl);
+    if (n === 8 && w.steady) lvl = '3';
+    const d5 = w.thunder ? '2' : w.fog ? '7' : w.mist ? '6' : '9';
+    return zon + lvl + (w.rain ? String(w.rain) : '9') + (w.snow ? String(w.snow) : '9') + '9' + d5 + '9';
+  }
+  /** uren: [{hour (lokaal begin), nEff, w}] → {symbol, n} of null */
+  function dag(uren) {
+    const d = uren.filter(u => u.hour >= 7 && u.hour < 19); if (d.length < 4) return null;   // ook een onvolledige laatste modeldag
+    const nDag = halfUp(d.reduce((s, u) => s + u.nEff, 0) / d.length), thunder = uren.some(u => u.w.thunder);
+    const nat = d.filter(u => (u.w.rain || u.w.snow) && !u.w.thunder).length, anyRain = d.some(u => u.w.rain), anySnow = d.some(u => u.w.snow);
+    const w = { rain: (nat >= 3 && !thunder && anyRain) ? 1 : 0, snow: (nat >= 3 && !thunder && anySnow && !anyRain) ? 1 : 0, thunder, fog: false, mist: false, steady: d.filter(u => u.w.steady).length >= 3 };
+    return { symbol: symbool(nDag, w), n: nDag };
+  }
+  function dagWW(uren, nDag) {
+    const d = uren.filter(u => u.hour >= 7 && u.hour < 19);
+    if (uren.some(u => u.w.thunder)) return 95;
+    const nat = d.filter(u => u.w.rain || u.w.snow);
+    if (nat.length >= 3) { const cnt = {}; for (const u of nat) if (u.code != null && u.code >= 50) cnt[u.code] = (cnt[u.code] || 0) + 1; const m = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0]; return m == null ? 61 : ([53, 55, 56, 57].includes(+m) ? 51 : +m); }
+    return Math.min(nDag, 8);
+  }
+  Object.assign(WP, { SymbolLogic: { nEff, halfUp, wmo, symbool, dag, dagWW, G_UUR } });
 })(window);

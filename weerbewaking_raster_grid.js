@@ -31,7 +31,7 @@
         for (let i = 0; i < n; i++) { const x = LABEL_W + i / n * plotW; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
         if (!show) return;
         ctx.fillStyle = '#fff'; ctx.font = '700 10px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        const step = n <= 2 ? 1 : 6;
+        const perDag = plotW / n, step = n <= 2 ? 1 : perDag >= 110 ? 6 : perDag >= 55 ? 12 : 24;   // labels mogen niet overlappen
         for (let i = 0; i < n; i++) for (let hr = 0; hr < 24; hr += step) { const t = new Date(+starts[i] + hr * 3600e3), x = P.x(t); if (x != null) ctx.fillText(String(hr).padStart(2, '0'), x + 8, base + 13); }
       },
       line(pts, lo, hi, color, width = 1.6, dash = []) {
@@ -54,7 +54,7 @@
     const hours = fc.hours.filter(h => h.start >= starts[0] && h.start < starts[n]);
     const dayOf = (i) => fc.days.find(d => d.date.toISOString().slice(0, 10) === WP.ymd(starts[i], tz));
     const days = [...Array(n)].map((_, i) => dayOf(i));
-    const colsStyle = `grid-template-columns:${LABEL_W}px repeat(${n},1fr)`;
+    const colsStyle = `grid-template-columns:${LABEL_W}px repeat(${n},minmax(0,1fr))`;   // minmax(0,…): kolommen blijven gelijk, ook bij lange tekst
     const rules = prefs, offCity = WP.alertOff(city.id), hot = rules.alertsOn && !offCity;
     const W = root.clientWidth || 1000, colW = (W - LABEL_W) / n;
     const availH = root.clientHeight || 800, hSym = Math.max(132, Math.min(230, availH * 0.18)), hChart = Math.max(70, Math.min(230, (availH - HEAD - hSym - 225) / 5 - 24)), hC = hChart + STRIP;
@@ -127,7 +127,7 @@
     }
     // neerslag
     {
-      const top = Math.max(5, Math.ceil(WP.rconv(Math.max(0, ...hours.map(h => h.rain || 0))))), ticks = [...Array(top + 1).keys()];
+      const top = Math.max(1, Math.ceil(WP.rconv(Math.max(0, ...hours.map(h => h.rain || 0))))), ticks = [...Array(top + 1).keys()];   // as schaalt mee met de bui, zoals WeatherPro
       drawChart(getCv('cRain'), full, hC, starts, city, (P) => {
         P.grid(ticks, 0, top); P.hours();
         if (ens) ens.times.forEach((t, i) => { const v = ens.r90[i]; if (v != null && v >= 0.2 && t >= starts[0] && t < starts[n] + 3600e3) P.hollow(new Date(t - 3600e3), Math.min(WP.rconv(v), top) / top, 'rgba(0,230,242,.6)'); });
