@@ -42,7 +42,7 @@ const MENU_PRODUCTS = [
     "section": "Beeld",
     "icon": "radar",
     "href": "index.html#neerslagaccumulatie",
-    "src": "neerslagaccumulatie.html?v=20261026-3",
+    "src": "neerslagaccumulatie.html?v=20261026-4",
     "thumbnail": null,
     "facets": {},
     "keywords": "Neerslagaccumulatie neerslagsom regensom hoeveel regen gevallen radar KNMI RTCOR RFCOR regenmeters bijgesteld etmaal week maand provincie Rijnmond kaartarchief",

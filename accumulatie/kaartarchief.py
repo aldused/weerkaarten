@@ -149,7 +149,8 @@ def _ringen(geo):
             yield "lijn", c
 
 
-def teken_geo(draw, geo, view, vul=None, lijn=None, breedte=1):
+def teken_geo(draw, geo, view, vul=None, lijn=None, breedte=1, gat=None):
+    """gat: vulkleur voor binnenringen (bv. transparant op een aparte laag: eilanden in rivieren)."""
     for soort, ringen in _ringen(geo):
         for i, ring in enumerate(ringen):
             a = np.asarray(ring, dtype=float)
@@ -158,7 +159,7 @@ def teken_geo(draw, geo, view, vul=None, lijn=None, breedte=1):
             x, y = view.px(a[:, 0], a[:, 1])
             pts = list(zip(x.tolist(), y.tolist()))
             if soort == "poly" and vul is not None:
-                draw.polygon(pts, fill=vul if i == 0 else None)
+                draw.polygon(pts, fill=vul if i == 0 else gat)
             if lijn is not None:
                 draw.line(pts + ([pts[0]] if soort == "poly" else []), fill=lijn, width=breedte, joint="curve")
 
@@ -234,9 +235,15 @@ def render(v, titel, sub, gebieden, verwerkt: datetime, laag: str = "ruw") -> by
     mx = auto_schaal(v.som, v.telling, nl)
     veld = Image.fromarray(veld_rgba(view, W, Hh, mm, status, mx))
     img = Image.alpha_composite(img, veld)
+    # rivieren (TOP10NL) als water over het veld, daarna lijnen — elk uit één bron, zodat er
+    # nergens dubbele grenzen ontstaan (zie de toelichting in neerslagaccumulatie.js)
+    if (REPO / "nl_rivieren_top10nl.geojson").exists():
+        water = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        teken_geo(ImageDraw.Draw(water), geo("nl_rivieren_top10nl.geojson"), view, vul=(200, 221, 229, 158), gat=(0, 0, 0, 0))
+        img = Image.alpha_composite(img, water)
     d = ImageDraw.Draw(img)
-    teken_geo(d, geo("basemap/nl_provinciegrenzen.json"), view, lijn=(40, 55, 62, 115), breedte=2)
-    teken_geo(d, geo("basemap/europa_grenzen.json"), view, lijn=(40, 55, 62, 190), breedte=3)
+    teken_geo(d, geo("accumulatie_provinciegrenzen.json"), view, lijn=(40, 55, 62, 115), breedte=2)
+    teken_geo(d, geo("accumulatie_grenzen.json"), view, lijn=(40, 55, 62, 190), breedte=3)
     teken_geo(d, geo("nl_land_detail.geojson"), view, lijn=(30, 45, 52, 215), breedte=2)
     img = img.resize((B, H), Image.LANCZOS)
     # miniatuur uit de kale kaart (zonder tekstvakken): vierkant rond Nederland

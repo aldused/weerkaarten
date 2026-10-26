@@ -25,7 +25,8 @@
     veld: null, periode: null, mm: new Float32Array(N), status: new Uint8Array(N),
     max: 10, lut: C.maakLut(1024), token: 0, pin: null, pinMarker: null, maxLagen: null,
     keuze: null, metingen: {}, laag: "ruw", indexRuw: null, veldRuw: null,
-    gebied: "", gebiedGeo: {}, gebiedLaag: null
+    gebied: "", gebiedGeo: {}, gebiedLaag: null,
+    verborgenMax: new Set(), verborgenPlaats: new Set()
   };
 
   // ── hulp ────────────────────────────────────────────────────────────────
@@ -87,11 +88,54 @@
   kaart.attributionControl.setPrefix(false);
   kaart.attributionControl.addAttribution("Radar: KNMI (CC BY 4.0)");
   var ondergrond = WeerlabOndergrond.voegToe(kaart, { pad: "" });
+  // De lijnen van de gedeelde ondergrond tekenen de NL-grens tot drie keer (Natural Earth 50m én
+  // 10m, CBS-kust, BE-provincies) en de rivieren grof. Op deze pagina: één bron per lijn (hieronder).
+  var VERBORGEN_ROL = { grens: 1, "grens-fijn": 1, kust: 1, rivier: 1 };
+  var stijlOrig = ondergrond.stijl;
+  ondergrond.stijl = function (rol) { return VERBORGEN_ROL[rol] ? { opacity: 0, fill: false, weight: 0 } : stijlOrig.call(this, rol); };
   try { ondergrond.volgThema(); } catch (e) { /* buiten weerlab-shell */ }
   kaart.createPane("accu").style.zIndex = 155;          // tussen vlakken (150) en lijnen (160)
   kaart.getPane("accu").style.pointerEvents = "none";
   kaart.createPane("accuMax").style.zIndex = 620;
   kaart.createPane("accuMasker").style.zIndex = 165;      // boven veld en lijnen, onder plaatsnamen
+  kaart.createPane("accuWater").style.zIndex = 157;       // rivieren boven het veld, onder de lijnen
+  kaart.getPane("accuWater").style.pointerEvents = "none";
+  kaart.createPane("accuLijn").style.zIndex = 161;
+  kaart.getPane("accuLijn").style.pointerEvents = "none";
+  /**
+   * Eigen lijnen, elk uit één bron:
+   *   kust + landsgrens NL  CBS-landvlak (nl_land_detail)
+   *   buurlanden            Natural Earth 10m zonder het deel langs NL (accumulatie_grenzen.json)
+   *   provinciegrenzen      alleen grenzen tússen provincies (accumulatie_provinciegrenzen.json)
+   *   rivieren              watervlakken uit Kadaster TOP10NL (nl_rivieren_top10nl.geojson)
+   */
+  var eigenLagen = {};
+  function lijnKleuren() {
+    var donker = document.documentElement.getAttribute("data-theme") === "dark";
+    var k = WeerlabOndergrond.KLEUREN[donker ? "donker" : "licht"];
+    return { water: k.zee, kust: donker ? "rgba(225,235,240,.85)" : "rgba(30,45,52,.85)",
+             grens: donker ? "rgba(225,235,240,.7)" : "rgba(40,55,62,.75)", prov: donker ? "rgba(225,235,240,.45)" : "rgba(40,55,62,.45)" };
+  }
+  function eigenStijl(rol) {
+    var k = lijnKleuren();
+    if (rol === "water") return { pane: "accuWater", stroke: true, color: k.water, weight: 0.6, fill: true, fillColor: k.water, fillOpacity: 0.62, interactive: false };
+    if (rol === "kust") return { pane: "accuLijn", color: k.kust, weight: 1.1, fill: false, interactive: false };
+    if (rol === "grens") return { pane: "accuLijn", color: k.grens, weight: 1.0, fill: false, interactive: false };
+    return { pane: "accuLijn", color: k.prov, weight: 0.8, fill: false, interactive: false };
+  }
+  [["water", "nl_rivieren_top10nl.geojson"], ["grens", "accumulatie_grenzen.json"],
+   ["prov", "accumulatie_provinciegrenzen.json"], ["kust", "nl_land_detail.geojson"]].forEach(function (d) {
+    fetch(d[1]).then(function (r) { return r.json(); }).then(function (geo) {
+      var st = eigenStijl(d[0]);
+      if (d[0] === "kust") { st.fill = false; }
+      var laag = L.geoJSON(geo, { style: function () { return st; }, pane: st.pane, interactive: false });
+      eigenLagen[d[0]] = laag;
+      if (d[0] !== "prov" || $("provincies").checked) laag.addTo(kaart);
+    }).catch(function () {});
+  });
+  new MutationObserver(function () {
+    Object.keys(eigenLagen).forEach(function (r) { eigenLagen[r].setStyle(eigenStijl(r)); });
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   kaart.getPane("accuMasker").style.pointerEvents = "none";
   kaart.getPane("wl-plaats").style.display = $("plaatsnamen").checked ? "" : "none";   // standaard uit: rustiger beeld
 
@@ -528,18 +572,67 @@
   }
 
   // ── maxima op de kaart ──────────────────────────────────────────────────
+  // ── de 5 natste plekken: op kaart, in exports en op de Rijnmondkaart ──
+  // Labels zijn per stuk weg te laten (vinkje in de lijst of klik op het label):
+  // handig als ze elkaar overlappen. Weggelaten maxima worden per rastercel
+  // onthouden (dit tabblad), plaatsnamen van de Rijnmondkaart in de browser.
+  var N_NATST = 5;
+  try { JSON.parse(localStorage.getItem("accu_verborgen_plaatsen") || "[]").forEach(function (n) { S.verborgenPlaats.add(n); }); } catch (e) { /* geen opslag */ }
+  function bewaarVerborgenPlaatsen() {
+    try { localStorage.setItem("accu_verborgen_plaatsen", JSON.stringify(Array.from(S.verborgenPlaats))); } catch (e) { /* privévenster */ }
+  }
+  function natste(filter, minKm, km) {
+    return C.toplijst(S.veld, filter, N_NATST, minKm).map(function (m, i) {
+      m.rang = i + 1; m.naam = plaatsNaam(m.lon, m.lat, km || 8) || provincieVan(m.cel) || (m.lat.toFixed(2) + "°N " + m.lon.toFixed(2) + "°O");
+      return m;
+    });
+  }
+  function natsteLandelijk() { return natste(inGebied, S.gebied === "Rijnmond" ? 5 : S.gebied ? 10 : 20); }
+  function zichtbaar(m) { return !S.verborgenMax.has(m.cel); }
+  function wisselMax(cel) {
+    if (S.verborgenMax.has(cel)) S.verborgenMax.delete(cel); else S.verborgenMax.add(cel);
+    tekenMaxima();
+    if (!$("rmVenster").hidden) rmOpen();
+  }
+
   function tekenMaxima() {
     if (S.maxLagen) kaart.removeLayer(S.maxLagen);
     S.maxLagen = L.layerGroup();
-    if ($("maxima").checked && S.veld) {
-      C.toplijst(S.veld, inGebied, 3, S.gebied ? 12 : 25).forEach(function (m) {
-        var naam = plaatsNaam(m.lon, m.lat, 8) || provincieVan(m.cel) || "";
-        L.marker([m.lat, m.lon], { pane: "accuMax", interactive: false, keyboard: false,
+    var lijst = S.veld ? natsteLandelijk() : [];
+    if ($("maxima").checked) {
+      lijst.filter(zichtbaar).forEach(function (m) {
+        L.marker([m.lat, m.lon], { pane: "accuMax", interactive: true, keyboard: false, title: "Klik om dit label weg te laten",
           icon: L.divIcon({ className: "maxlabel", iconSize: [0, 0], iconAnchor: [4, 6],
-            html: "<i></i>" + esc(naam) + " " + C.mm(m.som, 0) + " mm" }) }).addTo(S.maxLagen);
+            html: "<i></i>" + esc(m.naam) + " " + C.mm(m.som, 0) + " mm" }) })
+          .on("click", function (e) { L.DomEvent.stop(e); wisselMax(m.cel); }).addTo(S.maxLagen);
       });
     }
     S.maxLagen.addTo(kaart);
+    tekenNatsteLijst(lijst);
+  }
+  function tekenNatsteLijst(lijst) {
+    var el = $("natste");
+    if (!lijst.length || !$("maxima").checked) { el.hidden = true; return; }
+    el.hidden = false;
+    var h = "<div class='natste-kop'><b>5 natste plekken</b> · " + esc(gebiedNaam()) +
+      (S.verborgenMax.size ? " <button type='button' class='linkknop' data-alles>alles tonen</button>" : "") + "</div>";
+    lijst.forEach(function (m) {
+      h += "<label class='natste-rij" + (zichtbaar(m) ? "" : " uit") + "'><input type='checkbox' data-cel='" + m.cel + "'" + (zichtbaar(m) ? " checked" : "") + ">" +
+        "<span class='nr'>" + m.rang + "</span><span class='nm' data-ga='" + m.cel + "' title='Ga naar deze plek'>" + esc(m.naam) + "</span>" +
+        "<span class='mm'>" + C.mm(m.som, 0) + " mm</span></label>";
+    });
+    h += "<div class='natste-noot'>Vinkje uit (of klik op het label op de kaart) om een label weg te laten; geldt ook voor de export.</div>";
+    el.innerHTML = h;
+    el.querySelectorAll("input[data-cel]").forEach(function (cb) { cb.onchange = function () { wisselMax(+cb.dataset.cel); }; });
+    el.querySelectorAll("[data-ga]").forEach(function (sp) {
+      sp.onclick = function (ev) {
+        ev.preventDefault();
+        var m = lijst.filter(function (x) { return x.cel === +sp.dataset.ga; })[0];
+        if (m) pinOp(m.lat, m.lon, m.naam, 10);
+      };
+    });
+    var alles = el.querySelector("[data-alles]");
+    if (alles) alles.onclick = function (ev) { ev.preventDefault(); S.verborgenMax.clear(); tekenMaxima(); if (!$("rmVenster").hidden) rmOpen(); };
   }
 
   var meterLaag = null;
@@ -1016,8 +1109,8 @@
   $("straal").addEventListener("change", function () { if (S.pin) laadLocatie(S.pin.lat, S.pin.lon, S.pin.naam); if (zichtbareTab() === "toplijst") tekenToplijst(); });
   $("plaatsnamen").addEventListener("change", function () { kaart.getPane("wl-plaats").style.display = this.checked ? "" : "none"; });
   $("provincies").addEventListener("change", function () {
-    var aan = this.checked;
-    (ondergrond.lagen || []).forEach(function (l) { if (l.rol === "grens-fijn") l.laag.setStyle({ opacity: aan ? 1 : 0 }); });
+    var l = eigenLagen.prov; if (!l) return;
+    if (this.checked) l.addTo(kaart); else kaart.removeLayer(l);
   });
   $("volscherm").onclick = function () {
     var app = $("app");
@@ -1131,30 +1224,35 @@
     // labels: maxima eerst, dan plaatsnamen; niets overlapt en niets valt buiten beeld
     ctx.textBaseline = "middle";
     var bezet = [[20, 18, 680, 250], [20, H - 140, 690, H - 20], [W - 900, H - 44, W, H]];   // titel, legenda, bron
+    var labels = [];      // [vak, soort, sleutel] — voor klikken-om-weg-te-laten
     function plaats(t, q, h, afstand) {
       var tw = ctx.measureText(t).width, opties = [[q[0] + afstand, "left"], [q[0] - afstand, "right"]];
       for (var i = 0; i < opties.length; i++) {
         var x0 = opties[i][1] === "left" ? opties[i][0] : opties[i][0] - tw, vak = [x0 - 3, q[1] - h / 2, x0 + tw + 3, q[1] + h / 2];
         if (vak[0] < 4 || vak[2] > W - 4) continue;
         if (bezet.some(function (b) { return vak[0] < b[2] && vak[2] > b[0] && vak[1] < b[3] && vak[3] > b[1]; })) continue;
-        bezet.push(vak); return opties[i];
+        bezet.push(vak); return opties[i].concat([vak]);
       }
       return null;
     }
-    var top = C.toplijst(v, rmFilter, 3, 6);
+    var alleTop = natste(rmFilter, 5, 5), top = alleTop.filter(zichtbaar);
     ctx.font = "800 26px DM Sans, sans-serif";
     top.forEach(function (m) {
-      var q = rmPx(m.lon, m.lat), t = (plaatsNaam(m.lon, m.lat, 5) || "") + "  " + C.mm(m.som, 0) + " mm";
+      var q = rmPx(m.lon, m.lat), t = m.naam + "  " + C.mm(m.som, 0) + " mm";
       ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(q[0], q[1], 7, 0, 7); ctx.fill();
       bezet.push([q[0] - 9, q[1] - 9, q[0] + 9, q[1] + 9]);
-      var o = plaats(t, q, 30, 12); if (!o) return;
+      var o = plaats(t, q, 30, 12);
+      labels.push([o ? [Math.min(o[2][0], q[0] - 9), o[2][1], Math.max(o[2][2], q[0] + 9), o[2][3]] : [q[0] - 12, q[1] - 12, q[0] + 12, q[1] + 12], "max", m.cel]);
+      if (!o) return;
       ctx.textAlign = o[1]; ctx.lineWidth = 5; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.strokeText(t, o[0], q[1]); ctx.fillText(t, o[0], q[1]);
     });
     if ($("rmPlaatsen").checked) {
       ctx.font = "600 22px DM Sans, sans-serif";
       RM_PLAATSEN.forEach(function (pl) {
+        if (S.verborgenPlaats.has(pl[0])) return;
         var q = rmPx(pl[1], pl[2]); if (q[0] < 0 || q[0] > W || q[1] < 0 || q[1] > H) return;
         var o = plaats(pl[0], q, 26, 9); if (!o) return;
+        labels.push([[Math.min(o[2][0], q[0] - 6), o[2][1], Math.max(o[2][2], q[0] + 6), o[2][3]], "plaats", pl[0]]);
         ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(q[0], q[1], 4, 0, 7); ctx.fill();
         ctx.textAlign = o[1]; ctx.lineWidth = 4; ctx.strokeStyle = "rgba(15,23,42,.75)"; ctx.strokeText(pl[0], o[0], q[1]); ctx.fillText(pl[0], o[0], q[1]);
       });
@@ -1173,9 +1271,9 @@
     }
     ctx.fillStyle = "#334155"; ctx.font = "500 20px DM Sans, sans-serif";
     ctx.fillText(C.nlTijd(p.begin, { kort: true }) + " – " + C.nlTijd(p.eind, { kort: true }) + " · " + duurTekst(p.eind - p.begin), bx, y); y += 30;
-    if (top[0]) {
+    if (alleTop[0]) {
       ctx.fillStyle = "#0f172a"; ctx.font = "700 22px DM Sans, sans-serif";
-      ctx.fillText("Hoogste som: " + C.mm(top[0].som, 1) + " mm" + (plaatsNaam(top[0].lon, top[0].lat, 5) ? " bij " + plaatsNaam(top[0].lon, top[0].lat, 5) : ""), bx, y);
+      ctx.fillText("Hoogste som: " + C.mm(alleTop[0].som, 1) + " mm bij " + alleTop[0].naam, bx, y);
     }
     // legenda
     var lx = 36, ly = H - 98, lb = 620;
@@ -1193,7 +1291,7 @@
     ctx.fillStyle = "#334155"; ctx.fillText(bron, W - tw - 8, H - 21, tw - 16);
     var vol = volledigheid(v);
     if (vol.frames < vol.verwacht) { ctx.fillStyle = "#b45309"; ctx.font = "700 17px DM Sans, sans-serif"; ctx.fillText("Let op: onvolledig (" + vol.frames + "/" + vol.verwacht + " tijdstappen) — minimumwaarden", lx, ly - 52); }
-    return { max: max, top: top };
+    return { max: max, top: alleTop, labels: labels };
   }
   function rmOpen() {
     if (!S.veld) return;
@@ -1202,10 +1300,30 @@
     rmLaad().then(function (r) {
       var t0 = performance.now(), info = rmTeken($("rmCanvas").getContext("2d"), r[0], r[1]);
       S.rmMs = performance.now() - t0;
+      S.rmLabels = info.labels;
+      rmLabelLijst(info.top);
       $("rmTitel").textContent = "Rijnmondkaart" + (S.laag === "bijgesteld" ? " · bijgesteld met regenmeters" : "");
       $("rmInfo").textContent = S.periode.label + " · schaal 0–" + info.max + " mm";
       laden("");
     }).catch(function (e) { laden(""); fout("Rijnmondkaart mislukt: " + e.message); });
+  }
+  function rmLabelLijst(top) {
+    var h = "<div class='rm-lijstkop'>5 natste plekken in Rijnmond</div>";
+    top.forEach(function (m) {
+      h += "<label><input type='checkbox' data-cel='" + m.cel + "'" + (zichtbaar(m) ? " checked" : "") + "> " + m.rang + ". " + esc(m.naam) + " <b>" + C.mm(m.som, 0) + " mm</b></label>";
+    });
+    h += "<div class='rm-lijstkop'>Plaatsnamen</div><div class='rm-plaatsen'>";
+    RM_PLAATSEN.forEach(function (pl) {
+      h += "<label><input type='checkbox' data-plaats='" + esc(pl[0]) + "'" + (S.verborgenPlaats.has(pl[0]) ? "" : " checked") + "> " + esc(pl[0]) + "</label>";
+    });
+    h += "</div><div class='rm-lijstnoot'>Tip: klik op een label in de kaart om het weg te laten. Weggelaten plaatsnamen worden in deze browser onthouden.</div>" +
+      "<button type='button' class='knop' data-rm-alles>Alles weer tonen</button>";
+    var el = $("rmLabels"); el.innerHTML = h;
+    el.querySelectorAll("[data-cel]").forEach(function (cb) { cb.onchange = function () { wisselMax(+cb.dataset.cel); }; });
+    el.querySelectorAll("[data-plaats]").forEach(function (cb) {
+      cb.onchange = function () { if (cb.checked) S.verborgenPlaats.delete(cb.dataset.plaats); else S.verborgenPlaats.add(cb.dataset.plaats); bewaarVerborgenPlaatsen(); rmOpen(); };
+    });
+    el.querySelector("[data-rm-alles]").onclick = function () { S.verborgenMax.clear(); S.verborgenPlaats.clear(); bewaarVerborgenPlaatsen(); tekenMaxima(); rmOpen(); };
   }
   function rmDownload() {
     var p = S.periode;
@@ -1232,8 +1350,15 @@
     tipEl.style.top = Math.max(4, e.clientY - rc.top - tipEl.offsetHeight / 2) + "px";
   });
   $("rmCanvas").addEventListener("mouseleave", function () { $("rmTip").style.display = "none"; });
+  $("rmLabelKnop").onclick = function () { var el = $("rmLabels"); el.hidden = !el.hidden; this.setAttribute("aria-expanded", !el.hidden); };
   $("rmCanvas").addEventListener("click", function (e) {
     var rc = this.getBoundingClientRect(), px = (e.clientX - rc.left) / rc.width * RM.b, py = (e.clientY - rc.top) / rc.height * RM.h;
+    var raak = (S.rmLabels || []).filter(function (l) { return px >= l[0][0] && px <= l[0][2] && py >= l[0][1] && py <= l[0][3]; })[0];
+    if (raak) {                       // klik op een label: weglaten
+      if (raak[1] === "max") wisselMax(raak[2]);
+      else { S.verborgenPlaats.add(raak[2]); bewaarVerborgenPlaatsen(); rmOpen(); }
+      return;
+    }
     var w = C.rdNaarWgs(RM.x0 + px * RM.m, RM.y1 - py * RM.m);
     $("rmVenster").hidden = true; pinOp(w[1], w[0], null);
   });
@@ -1280,7 +1405,13 @@
 
   // ── export ──────────────────────────────────────────────────────────────
   var geoCache = {};
-  function laadGeo(pad) { if (!geoCache[pad]) geoCache[pad] = fetch(pad).then(function (r) { return r.json(); }); return geoCache[pad]; }
+  var EXPORT_GEO = ["basemap/europa_land.json", "nl_land_detail.geojson", "nl_meren.geojson", "accumulatie_grenzen.json",
+                    "accumulatie_provinciegrenzen.json", "nl_rivieren_top10nl.geojson"];
+  function laadGeo(pad) {
+    if (!geoCache[pad]) geoCache[pad] = fetch(pad).then(function (r) { if (!r.ok) throw new Error(pad); return r.json(); })
+      .catch(function () { return { type: "FeatureCollection", features: [] }; });    // ontbrekende laag: export gaat door
+    return geoCache[pad];
+  }
 
   function exporteer(soort) {
     if (!S.veld) return;
@@ -1297,7 +1428,7 @@
     }
     var maat = soort === "png" ? [2400, 2700] : soort === "169" ? [1920, 1080] : [1080, 1080];
     laden("Afbeelding maken…");
-    Promise.all(["basemap/europa_land.json", "nl_land_detail.geojson", "nl_meren.geojson", "basemap/europa_grenzen.json", "basemap/nl_provinciegrenzen.json"].map(laadGeo))
+    Promise.all(EXPORT_GEO.map(laadGeo))
       .then(function (geo) { return maakExportBeeld(maat[0], maat[1], geo); })
       .then(function (blob) {
         laden("");
@@ -1354,8 +1485,9 @@
     var tmp = document.createElement("canvas"); tmp.width = W; tmp.height = H;
     tekenVeld(tmp.getContext("2d"), W, H, function (i) { return view.lon(i + 0.5); }, function (j) { return view.lat(j + 0.5); }, u);
     ctx.globalAlpha = 0.92; ctx.drawImage(tmp, 0, 0); ctx.globalAlpha = 1;
+    ctx.fillStyle = "rgba(200,221,229,.62)"; tekenGeo(ctx, geo[5], view, true);       // rivieren (TOP10NL)
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(40,55,62,.45)"; ctx.lineWidth = 0.9 * u; tekenGeo(ctx, geo[4], view, false);
+    if ($("provincies").checked) { ctx.strokeStyle = "rgba(40,55,62,.45)"; ctx.lineWidth = 0.9 * u; tekenGeo(ctx, geo[4], view, false); }
     ctx.strokeStyle = "rgba(40,55,62,.75)"; ctx.lineWidth = 1.4 * u; tekenGeo(ctx, geo[3], view, false);
     ctx.strokeStyle = "rgba(30,45,52,.85)"; ctx.lineWidth = 1.2 * u; tekenGeo(ctx, geo[1], view, false);
     if (S.gebied) {      // buiten het gebied dimmen, gebied omlijnen
@@ -1367,11 +1499,11 @@
       ctx.strokeStyle = "#035e7a"; ctx.lineWidth = 3 * u; tekenGeo(ctx, gf, view, false);
     }
     // maxima
-    var top = C.toplijst(v, inGebied, 3, S.gebied ? 12 : 25);
+    var alleTop = natsteLandelijk(), top = alleTop.filter(zichtbaar);
     ctx.font = "700 " + Math.round(22 * u) + "px DM Sans, sans-serif"; ctx.textBaseline = "middle";
     var bezet = [];     // labelvakken: bij overlap rechts → links → boven → onder proberen
     top.forEach(function (m) {
-      var pt = view.px(m.lon, m.lat), naam = plaatsNaam(m.lon, m.lat, 8) || "", t = naam + "  " + C.mm(m.som, 0) + " mm";
+      var pt = view.px(m.lon, m.lat), t = m.naam + "  " + C.mm(m.som, 0) + " mm";
       var tw = ctx.measureText(t).width, th = 24 * u, opties = [
         [pt[0] + 10 * u, pt[1], "left"], [pt[0] - 10 * u, pt[1], "right"],
         [pt[0] + 6 * u, pt[1] - th, "left"], [pt[0] + 6 * u, pt[1] + th, "left"]];
@@ -1404,9 +1536,9 @@
     ctx.fillStyle = tk2; ctx.font = "500 " + Math.round(21 * u) + "px DM Sans, sans-serif";
     y = tekstRegels(ctx, C.nlTijd(p.begin) + " – " + C.nlTijd(p.eind) + " (Nederlandse tijd)", bx, y + 10 * u, bw, 28 * u);
     y = tekstRegels(ctx, p.label + " · " + duurTekst(p.eind - p.begin), bx, y + 2 * u, bw, 28 * u);
-    if (top[0]) {
+    if (alleTop[0]) {
       ctx.fillStyle = tk; ctx.font = "700 " + Math.round(24 * u) + "px DM Sans, sans-serif";
-      y = tekstRegels(ctx, "Hoogste som: " + C.mm(top[0].som, 1) + " mm" + (plaatsNaam(top[0].lon, top[0].lat, 8) ? " bij " + plaatsNaam(top[0].lon, top[0].lat, 8) : ""), bx, y + 14 * u, bw, 30 * u);
+      y = tekstRegels(ctx, "Hoogste som: " + C.mm(alleTop[0].som, 1) + " mm bij " + alleTop[0].naam, bx, y + 14 * u, bw, 30 * u);
     }
     // legenda
     var lw = liggend ? bw : Math.min(W - 80 * u, 760 * u), lx = bx, ly = liggend ? H - 230 * u : H - 150 * u;
@@ -1552,7 +1684,7 @@
 
   window.__accu = S;    // inspectie / tests
   window.__accuExportBeeld = function (W, H) {      // tests: exportbeeld als Blob, zonder download
-    return Promise.all(["basemap/europa_land.json", "nl_land_detail.geojson", "nl_meren.geojson", "basemap/europa_grenzen.json", "basemap/nl_provinciegrenzen.json"].map(laadGeo))
+    return Promise.all(EXPORT_GEO.map(laadGeo))
       .then(function (geo) { return maakExportBeeld(W, H, geo); });
   };
 })();
