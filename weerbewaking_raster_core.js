@@ -450,5 +450,24 @@
     if (nat.length >= 3) { const cnt = {}; for (const u of nat) if (u.code != null && u.code >= 50) cnt[u.code] = (cnt[u.code] || 0) + 1; const m = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0]; return m == null ? 61 : ([53, 55, 56, 57].includes(+m) ? 51 : +m); }
     return Math.min(nDag, 8);
   }
-  Object.assign(WP, { SymbolLogic: { nEff, halfUp, wmo, symbool, dag, dagWW, G_UUR } });
+  /** WeatherPro-weercode (feed-ww) -> zelfde vorm als wmo() */
+  function wpWeer(ww) {
+    const c = ww == null ? -1 : +ww;
+    if (c >= 95) return { rain: 0, snow: 0, thunder: true, fog: false, mist: false, steady: false };
+    const rain = ({ 20: 1, 21: 1, 25: 1, 50: 1, 51: 1, 52: 1, 53: 1, 60: 1, 61: 1, 62: 3, 63: 3, 64: 5, 65: 5, 80: 1, 81: 3, 82: 5 })[c] || 0;
+    const snow = ({ 70: 1, 71: 1, 72: 3, 73: 3, 74: 5, 75: 5, 77: 1, 85: 1, 86: 3 })[c] || 0;
+    return { rain, snow, thunder: false, fog: c === 44 || c === 45, mist: c === 10, steady: c >= 60 && c <= 65 };
+  }
+  /** Optie 'WeatherPro-symbolen met zonfractie': uur- en dagsymbolen van de feed herberekend met dezelfde mix als de modellen. */
+  function recomputeWP(fc, city) {
+    const perDag = {};
+    const hours = fc.hours.map(h => {
+      const ne = nEff(h.cloud || 0, h.sun, WP.Sunshine.daylightMinutes(h.date, city.lat, city.lon)), w = wpWeer(h.ww), k = WP.ymd(h.start, city.tz);
+      (perDag[k] = perDag[k] || []).push({ hour: +WP.hh(h.start, city.tz), nEff: ne, w });
+      return Object.assign({}, h, { symbol: symbool(halfUp(ne), w), nEff: ne });
+    });
+    const days = fc.days.map(d => { const u = perDag[d.date.toISOString().slice(0, 10)]; const r = u && u.length >= 24 ? dag(u) : null; return r ? Object.assign({}, d, { symbol: r.symbol, cloud: r.n }) : d; });
+    return Object.assign({}, fc, { hours, days });
+  }
+  Object.assign(WP, { SymbolLogic: { nEff, halfUp, wmo, wpWeer, symbool, dag, dagWW, recomputeWP, G_UUR } });
 })(window);

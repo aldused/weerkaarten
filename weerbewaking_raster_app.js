@@ -13,7 +13,13 @@
   let knmiList = [], knmiFetched = 0, editing = false;
   const models = {}, modelErr = {}, modelLoading = new Set();
   const src = () => prefs.source || 'weatherpro';
-  const active = (c, s = src()) => s === 'weatherpro' ? forecasts[c.id] : models[c.id + '|' + s];
+  const wpMix = {};   // cache: herberekende WeatherPro-symbolen per plaats (sleutel: ophaalmoment van de feed)
+  const active = (c, s = src()) => {
+    if (s !== 'weatherpro') return models[c.id + '|' + s];
+    const f = forecasts[c.id]; if (!f || !prefs.wpSunMix) return f;
+    if (!wpMix[c.id] || wpMix[c.id].at !== f.fetched) wpMix[c.id] = { at: f.fetched, fc: WP.SymbolLogic.recomputeWP(f, c) };
+    return wpMix[c.id].fc;
+  };
   async function ensureModel(c, force) {
     const s = src(); if (!c || s === 'weatherpro') return; const key = c.id + '|' + s;
     if (!force && models[key] && Date.now() - models[key].fetched < 1800e3) return; if (modelLoading.has(key)) return; modelLoading.add(key);
@@ -202,6 +208,9 @@
       <label>Zonsopkomst en -ondergang <input type="checkbox" id="pSunT" ${prefs.showSunTimes === false ? '' : 'checked'}></label>
       <label>Ensemble-maximum ('ens. max') <input type="checkbox" id="pEnsMax" ${prefs.showEnsMax === false ? '' : 'checked'}></label>
       <label>Onzekerheidsband (P10–P90) <input type="checkbox" id="pEnsBand" ${prefs.showEnsBand === false ? '' : 'checked'}></label>
+      <h4>Weersymbolen</h4>
+      <label>WeatherPro-symbolen herberekenen met zonfractie <input type="checkbox" id="pWpMix" ${prefs.wpSunMix ? 'checked' : ''}></label>
+      <p class="hint" style="margin:0 0 6px;font-size:12px;opacity:.75">Uit = exact zoals WeatherPro/Weather24. Aan = bewolking gemengd met het percentage van de maximaal mogelijke zonneschijn (zoals bij de modellen); verandert ongeveer 1% van de uren en 5% van de dagen.</p>
       <h4>Gegevens</h4>
       <label>Onzekerheid tonen (ECMWF-ensemble, P10–P90) <input type="checkbox" id="pSpread" ${prefs.showSpread === false ? '' : 'checked'}></label>
       <label>KNMI-waarschuwingen tonen (Nederland) <input type="checkbox" id="pKnmi" ${prefs.showKnmi === false ? '' : 'checked'}></label>
@@ -214,7 +223,7 @@
       <div class="btns"><button id="pTest">Testmelding</button><button id="pOk">Sluiten</button></div>`;
     $('#prefs').classList.remove('wide'); $('#modal').hidden = false;
     const apply = () => { prefs.temp = $('#pTemp').value; prefs.wind = $('#pWind').value; prefs.pressure = $('#pPres').value; prefs.rain = $('#pRain').value; prefs.days = +$('#pDays').value;
-      prefs.showFeels = $('#pFeels').checked; prefs.showSunTimes = $('#pSunT').checked; prefs.showEnsMax = $('#pEnsMax').checked; prefs.showEnsBand = $('#pEnsBand').checked; prefs.showSpread = $('#pSpread').checked; prefs.showKnmi = $('#pKnmi').checked; prefs.alertsOn = $('#pAon').checked; prefs.alertGust = +$('#pAg').value; prefs.alertRain = +$('#pAr').value; prefs.alertHeat = +$('#pAh').value; prefs.alertFrost = +$('#pAf').value; savePrefs(); syncBar(); renderAll(); };
+      prefs.wpSunMix = $('#pWpMix').checked; prefs.showFeels = $('#pFeels').checked; prefs.showSunTimes = $('#pSunT').checked; prefs.showEnsMax = $('#pEnsMax').checked; prefs.showEnsBand = $('#pEnsBand').checked; prefs.showSpread = $('#pSpread').checked; prefs.showKnmi = $('#pKnmi').checked; prefs.alertsOn = $('#pAon').checked; prefs.alertGust = +$('#pAg').value; prefs.alertRain = +$('#pAr').value; prefs.alertHeat = +$('#pAh').value; prefs.alertFrost = +$('#pAf').value; savePrefs(); syncBar(); renderAll(); };
     $('#prefs').querySelectorAll('select,input').forEach(e => e.addEventListener('change', apply));
     $('#pOk').onclick = () => { $('#modal').hidden = true; };
     $('#pTest').onclick = () => { Notification.requestPermission().then(p => { if (p === 'granted') new Notification('Meteobewaking', { body: 'Testmelding: waarschuwingen staan aan.' }); }); };
@@ -233,9 +242,9 @@
     $('#rOk').onclick = () => { $('#modal').hidden = true; $('#prefs').classList.remove('wide'); };
   }
 
-  const VIEW_OPTS = [['showFeels', 'Gevoelstemperatuur'], ['showSunTimes', 'Zonsopkomst/-ondergang'], ['showEnsMax', 'Ens. max'], ['showEnsBand', 'Onzekerheidsband']];
+  const VIEW_OPTS = [['showFeels', 'Gevoelstemperatuur'], ['showSunTimes', 'Zonsopkomst/-ondergang'], ['showEnsMax', 'Ens. max'], ['showEnsBand', 'Onzekerheidsband'], ['wpSunMix', 'WeatherPro-symbolen met zonfractie', false]];
   function drawViewMenu() {
-    $('#viewMenu').innerHTML = VIEW_OPTS.map(([k, t]) => `<label><input type="checkbox" data-k="${k}" ${prefs[k] === false ? '' : 'checked'}> ${t}</label>`).join('');
+    $('#viewMenu').innerHTML = VIEW_OPTS.map(([k, t, def = true]) => `<label><input type="checkbox" data-k="${k}" ${(prefs[k] ?? def) ? 'checked' : ''}> ${t}</label>`).join('');
     $('#viewMenu').querySelectorAll('input').forEach(i => i.addEventListener('change', () => { prefs[i.dataset.k] = i.checked; savePrefs(); renderAll(); }));
   }
 
