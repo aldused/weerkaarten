@@ -187,6 +187,12 @@ table.lijst tr.klik:hover{background:var(--primary-soft)}
 .rm-plaatsen{columns:2;column-gap:10px}
 .rm-lijstnoot{font-size:11px;color:var(--muted);margin:8px 0}
 @media (max-width:820px){.natste{top:auto;bottom:96px;right:8px;width:220px}}
+.anim-kaart{width:min(820px,100%)}
+.anim-opties{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end;padding:12px 14px}
+.anim-voortgang{height:6px;background:var(--bg-soft);margin:0 14px;border-radius:3px;overflow:hidden}
+#animBalk{height:100%;width:0;background:var(--accent-strong);transition:width .2s}
+.anim-resultaat{display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 14px 10px}
+.anim-resultaat video{max-width:100%;max-height:58vh;border-radius:8px;background:#000}
 /* volledig scherm */
 #app:fullscreen .paneel{display:none}
 /* mobiel */
@@ -224,8 +230,8 @@ table.lijst tr.klik:hover{background:var(--primary-soft)}
   <div class="bediening" role="toolbar" aria-label="Kaartbediening">
     <label class="veld"><span>Gegevens</span>
       <select id="laag" aria-label="Gegevenslaag">
-        <option value="ruw">KNMI-radar (ruw)</option>
         <option value="bijgesteld">Radar bijgesteld met regenmeters</option>
+        <option value="ruw">KNMI-radar (ruw)</option>
       </select>
     </label>
     <label class="veld"><span>Gebied</span>
@@ -287,6 +293,7 @@ table.lijst tr.klik:hover{background:var(--primary-soft)}
           <button data-export="png" type="button">PNG hoge resolutie<small>2400 × 3200 px, staand</small></button>
           <button data-export="169" type="button">Afbeelding 16:9<small>1920 × 1080 px</small></button>
           <button data-export="11" type="button">Afbeelding 1:1 (sociale media)<small>1080 × 1080 px</small></button>
+          <button data-export="animatie" type="button">Animatie (MP4)<small>neerslagsom die per uur oploopt</small></button>
           <button data-export="rijnmond" type="button">Rijnmondkaart 16:9<small>1920 × 1080 px, regiokaart-kader</small></button>
           <button data-export="csv" type="button">CSV met rasterwaarden<small>alle cellen binnen Nederland</small></button>
           <button data-export="tif" type="button">GeoTIFF (KNMI-raster)<small>float32 mm, polaire stereografie</small></button>
@@ -329,6 +336,26 @@ table.lijst tr.klik:hover{background:var(--primary-soft)}
     </aside>
   </div>
 </div>
+<div class="rm-venster" id="animVenster" hidden role="dialog" aria-modal="true" aria-labelledby="animTitel">
+  <div class="rm-kaart anim-kaart">
+    <div class="rm-kop"><b id="animTitel">Animatie neerslagsom</b><span class="meta" id="animInfo"></span>
+      <span class="rm-knoppen"><button class="knop" id="animSluit" type="button" aria-label="Sluiten">✕</button></span></div>
+    <div class="anim-opties">
+      <label class="veld"><span>Formaat</span><select id="animFormaat">
+        <option value="916">9:16 · Reels/Stories (1080×1920)</option><option value="45">4:5 · staand (1080×1350)</option>
+        <option value="11">1:1 · vierkant (1080×1080)</option><option value="169">16:9 · breed (1920×1080)</option></select></label>
+      <label class="veld"><span>Gebied</span><select id="animKaart"><option value="">Nederland</option><option value="rijnmond">Rijnmond (regiokaart)</option></select></label>
+      <label class="veld"><span>Stap</span><select id="animStap"><option value="auto">Automatisch</option><option value="1">Elk uur</option><option value="3">Elke 3 uur</option><option value="6">Elke 6 uur</option></select></label>
+      <label class="veld"><span>Snelheid</span><select id="animFps"><option value="8">Rustig (8 b/s)</option><option value="12" selected>Normaal (12 b/s)</option><option value="20">Snel (20 b/s)</option></select></label>
+      <button class="knop primair" id="animMaak" type="button">Maak animatie</button>
+      <button class="knop" id="animStop" type="button" hidden>Stop</button>
+    </div>
+    <div class="anim-voortgang"><div id="animBalk"></div></div>
+    <div class="meta" id="animStatus" style="padding:6px 14px"></div>
+    <div class="anim-resultaat" id="animResultaat"></div>
+    <p class="meta" style="padding:0 14px 12px">Periode, laag, schaal en weergave volgen de kaart; het gebied kies je hier (standaard het gebied van de kaart). De kleurenschaal staat vast op de eindsom, zodat je de neerslag ziet aangroeien. Labels: het actuele maximum, met plaatsnaam alleen als die binnen 2 km ligt.</p>
+  </div>
+</div>
 <div class="rm-venster" id="rmVenster" hidden role="dialog" aria-modal="true" aria-labelledby="rmTitel">
   <div class="rm-kaart">
     <div class="rm-kop">
@@ -361,7 +388,7 @@ table.lijst tr.klik:hover{background:var(--primary-soft)}
   var SLOT_HASH = "395e3a5cc18ee0547f3c273999f29d6e106f420e35e4540bfa5883d767b19818";
   var SLEUTEL = "neerslagaccumulatie_ok";
   var SCRIPTS = ["https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js", "weerlab_basemap.js?v=20261026",
-                 "accumulatie_core.js?v=20261026-2", "neerslagaccumulatie.js?v=20261026-6"];
+                 "accumulatie_core.js?v=20261026-2", "neerslagaccumulatie.js?v=20261026-11"];
   function start() {
     document.getElementById("slot").hidden = true;
     document.getElementById("app").style.visibility = "";

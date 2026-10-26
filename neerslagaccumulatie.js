@@ -15,7 +15,7 @@
   var LOKAAL = location.protocol === "file:" || ["localhost", "127.0.0.1", ""].indexOf(location.hostname) >= 0 || PARAMS.has("localData");
   var BASIS_RUW = PARAMS.get("data") || (LOKAAL ? "accumulatie_data/" : "https://data.weerlab.nl/accumulatie/");
   var BASIS_BIJ = PARAMS.get("dataBijgesteld") || (LOKAAL ? "accumulatie_bijgesteld_data/" : "https://data.weerlab.nl/accumulatie-bijgesteld/");
-  var BASIS = BASIS_RUW;      // basis van de actieve laag (index, blokken, archief)
+  var BASIS = BASIS_BIJ;      // basis van de actieve laag (index, blokken, archief); standaard bijgesteld
   var N = C.NRIJ * C.NKOL;
   var VERSIE = "1.0";
   var $ = function (id) { return document.getElementById(id); };
@@ -24,7 +24,7 @@
     index: null, gebieden: null, provincies: [], plaatsen: [], meta: null,
     veld: null, periode: null, mm: new Float32Array(N), status: new Uint8Array(N),
     max: 10, lut: C.maakLut(1024), token: 0, pin: null, pinMarker: null, maxLagen: null,
-    keuze: null, metingen: {}, laag: "ruw", indexRuw: null, veldRuw: null,
+    keuze: null, metingen: {}, laag: "bijgesteld", indexRuw: null, veldRuw: null,
     gebied: "", gebiedGeo: {}, gebiedLaag: null,
     verborgenMax: new Set(), verborgenPlaats: new Set()
   };
@@ -1386,9 +1386,333 @@
     $("rmVenster").hidden = true; pinOp(w[1], w[0], null);
   });
 
+  // ── animatie: de neerslagsom loopt per uur op (MP4 via WebCodecs + mp4-muxer, anders WebM) ──
+  var ANIM_FORMATEN = { "916": [1080, 1920], "45": [1080, 1350], "11": [1080, 1080], "169": [1920, 1080] };
+  var animStop = false;
+  function laadScript(url) {
+    return new Promise(function (res, rej) {
+      if (document.querySelector("script[src='" + url + "']")) return res();
+      var el = document.createElement("script"); el.src = url; el.onload = res; el.onerror = function () { rej(new Error(url)); };
+      document.head.appendChild(el);
+    });
+  }
+  /** Uursommen (huidige laag) voor alle hele uren in (b, e]; geeft [{t, veld}] in volgorde. */
+  function animUren(b, e, voortgang) {
+    var uren = [], be = C.maakBeschikbaar(S.index);
+    for (var t = b; t < e; t += C.UUR) {
+      var bl = { soort: "uur", begin: t, eind: t + C.UUR, label: C.ymd(t) + "/" + C.pad2(new Date(t).getUTCHours()) };
+      if (!be(bl)) return Promise.reject(new Error("Uur " + iso(t) + " is (nog) niet verwerkt."));
+      uren.push(bl);
+    }
+    var klaar = 0;
+    return poolMap(uren, 8, function (bl) {
+      return haal(C.blokPad(bl), C.blokRevisie(S.index, bl)).then(function (v) { klaar++; voortgang(klaar, uren.length); return { t: bl.eind, veld: v }; });
+    });
+  }
+  /** Koppel elk pixel van het kaartvlak één keer aan zijn rastercel (+ bilineaire gewichten). */
+  function animKoppeling(w, h, lonlat) {
+    var n = w * h, idx = new Int32Array(n).fill(-1), a = new Int32Array(n).fill(-1), fr = new Float32Array(n), fk = new Float32Array(n), rand = new Float32Array(n);
+    var NK = C.NKOL, NR = C.NRIJ, vloeiend = $("weergave").value === "vloeiend";
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      var ll = lonlat(x + 0.5, y + 0.5); if (!ll) continue;
+      var f = C.fracIndex(ll[0], ll[1]), ri = Math.floor(f[0]), ki = Math.floor(f[1]), p = y * w + x;
+      if (ri < 0 || ri >= NR || ki < 0 || ki >= NK) continue;
+      idx[p] = ri * NK + ki;
+      rand[p] = Math.min(1, (Math.min(ri, NR - 1 - ri, ki, NK - 1 - ki) + 0.5) / 8);
+      if (vloeiend) {
+        var rr = f[0] - 0.5, kk = f[1] - 0.5, r0 = Math.floor(rr), k0 = Math.floor(kk);
+        if (r0 >= 0 && k0 >= 0 && r0 + 1 < NR && k0 + 1 < NK) { a[p] = r0 * NK + k0; fr[p] = rr - r0; fk[p] = kk - k0; }
+      }
+    }
+    return { w: w, h: h, idx: idx, a: a, fr: fr, fk: fk, rand: rand };
+  }
+  function animVeldBeeld(kop, mm, st, max, alfa) {
+    var img = new ImageData(kop.w, kop.h), d = img.data, lut = S.lut, NK = C.NKOL, sch = 1023 / max;
+    for (var p = 0; p < kop.idx.length; p++) {
+      var i = kop.idx[p]; if (i < 0 || !st[i]) continue;
+      var v = mm[i], a = kop.a[p];
+      if (a >= 0 && st[a] && st[a + 1] && st[a + NK] && st[a + NK + 1]) {
+        var r = kop.fr[p], k = kop.fk[p];
+        v = (mm[a] * (1 - k) + mm[a + 1] * k) * (1 - r) + (mm[a + NK] * (1 - k) + mm[a + NK + 1] * k) * r;
+      }
+      if (v < 0.1) continue;
+      var li = Math.min(1023, (v * sch) | 0) * 4, q = p * 4;
+      d[q] = lut[li]; d[q + 1] = lut[li + 1]; d[q + 2] = lut[li + 2]; d[q + 3] = 235 * kop.rand[p] * (alfa ? alfa[p] : 1);
+    }
+    return img;
+  }
+
+  /** Bouw de vaste delen van een animatie: indeling, ondergrond, lijnen en pixelkoppeling. */
+  /** Filter voor een willekeurig gebied ("" = Nederland), los van de kaartkeuze. */
+  function gebiedFilter(g) {
+    if (!g) return inNL;
+    if (g === "Rijnmond") return inRijnmond;
+    var c = S.provincies.indexOf(g) + 1;
+    return function (idx) { return S.gebieden && (S.gebieden[idx] & 15) === c; };
+  }
+  /** kaart: "" (Nederland), een provincienaam of "rijnmond" (regiokaart). */
+  function animOpzet(fmt, kaart) {
+    var kaartsoort = kaart === "rijnmond" ? "rijnmond" : "nl", gebied = kaart === "rijnmond" ? "Rijnmond" : kaart;
+    var W = ANIM_FORMATEN[fmt][0], H = ANIM_FORMATEN[fmt][1], u = Math.min(W, H) / 1080;
+    var paneel = W / H > 0.95, kader;
+    if (paneel) { var px = Math.round(W * (W / H > 1.3 ? 0.30 : 0.36)); kader = { x: px, y: 0, w: W - px, h: H }; }
+    else { var boven = Math.round(300 * u), onder = Math.round(250 * u); kader = { x: 0, y: boven, w: W, h: H - boven - onder }; }
+    return Promise.all([rmLaad(), Promise.all(EXPORT_GEO.map(laadGeo))]).then(function (r) {
+      var og = r[0][0], rmGeo = r[0][1], geo = r[1];
+      var achter = document.createElement("canvas"); achter.width = W; achter.height = H;
+      var ac = achter.getContext("2d"), boven = document.createElement("canvas"); boven.width = W; boven.height = H;
+      var bc = boven.getContext("2d"), kop, filter, alfa = null, dy = 0;
+      ac.fillStyle = paneel ? "#00205b" : "#f6f8fb"; ac.fillRect(0, 0, W, H);
+      if (kaartsoort === "rijnmond") {
+        // regiokaart (RD) ingezoomd op het Rijnmondgebied: gebied + 5 % marge past precies in het kaartvlak
+        var RMk = C.REGIOKAART, msk = rmMasker(rmGeo), bx0 = RMk.b, bx1 = 0, by0 = RMk.h, by1 = 0;
+        for (var mi = 0; mi < msk.length; mi++) if (msk[mi]) {
+          var mx = mi % RMk.b, my = (mi / RMk.b) | 0;
+          if (mx < bx0) bx0 = mx; if (mx > bx1) bx1 = mx; if (my < by0) by0 = my; if (my > by1) by1 = my;
+        }
+        var mg = 0.05 * Math.max(bx1 - bx0, by1 - by0), s = Math.min(kader.w / (bx1 - bx0 + 2 * mg), kader.h / (by1 - by0 + 2 * mg));
+        var ox = kader.x + kader.w / 2 - (bx0 + bx1) / 2 * s, oy = kader.y + kader.h / 2 - (by0 + by1) / 2 * s;
+        if (RMk.b * s >= kader.w) ox = Math.min(kader.x, Math.max(kader.x + kader.w - RMk.b * s, ox));     // geen lege randen
+        if (RMk.h * s >= kader.h) oy = Math.min(kader.y, Math.max(kader.y + kader.h - RMk.h * s, oy));
+        if (!paneel && RMk.h * s < kader.h) {        // staand: kaart, titel en legenda als één blok verticaal centreren
+          dy = Math.round((kader.h - RMk.h * s) / 2); kader.y += dy; kader.h -= 2 * dy;
+          oy = Math.min(kader.y, Math.max(kader.y + kader.h - RMk.h * s, oy));
+        }
+        kader.rd = s; kader.ox = ox; kader.oy = oy;
+        ac.save(); ac.beginPath(); ac.rect(kader.x, kader.y, kader.w, kader.h); ac.clip();
+        ac.drawImage(og, ox, oy, RMk.b * s, RMk.h * s); ac.restore();
+        kop = animKoppeling(kader.w, kader.h, function (x, y) {
+          var ix = (kader.x + x - ox) / s, iy = (kader.y + y - oy) / s;
+          if (ix < 0 || iy < 0 || ix >= RMk.b || iy >= RMk.h) return null;
+          return C.rdNaarWgs(RMk.x0 + ix * RMk.m, RMk.y1 - iy * RMk.m);
+        });
+        alfa = new Float32Array(kader.w * kader.h);
+        for (var yy = 0; yy < kader.h; yy++) for (var xx = 0; xx < kader.w; xx++) {
+          var ix2 = Math.floor((kader.x + xx - ox) / s), iy2 = Math.floor((kader.y + yy - oy) / s);
+          alfa[yy * kader.w + xx] = ix2 >= 0 && iy2 >= 0 && ix2 < RMk.b && iy2 < RMk.h && msk[iy2 * RMk.b + ix2] ? 0.92 : 0.42;
+        }
+        bc.save(); bc.beginPath(); bc.rect(kader.x, kader.y, kader.w, kader.h); bc.clip();
+        bc.translate(ox, oy); bc.scale(s, s);
+        bc.strokeStyle = "rgba(255,255,255,.95)"; bc.lineWidth = 3 / s * u; rmPadVan(bc, rmGeo); bc.stroke(); bc.restore();
+        bc.font = "600 " + Math.round(21 * u) + "px DM Sans, sans-serif"; bc.textBaseline = "middle";
+        var bezet = [];
+        RM_PLAATSEN.forEach(function (pl) {
+          if (S.verborgenPlaats.has(pl[0])) return;
+          var q = rmPx(pl[1], pl[2]); var x = ox + q[0] * s, y = oy + q[1] * s;
+          if (x < kader.x || x > kader.x + kader.w || y < kader.y || y > kader.y + kader.h) return;
+          var bw = bc.measureText(pl[0]).width, vak = [x - 5 * u, y - 13 * u, x + 9 * u + bw, y + 13 * u];
+          if (x + 9 * u + bw > kader.x + kader.w || bezet.some(function (q) { return vak[0] < q[2] && q[0] < vak[2] && vak[1] < q[3] && q[1] < vak[3]; })) return;
+          bezet.push(vak);      // overlappende namen vallen weg, nooit een losse stip
+          bc.fillStyle = "#fff"; bc.beginPath(); bc.arc(x, y, 3.5 * u, 0, 7); bc.fill();
+          bc.lineWidth = 4 * u; bc.strokeStyle = "rgba(15,23,42,.7)"; bc.strokeText(pl[0], x + 7 * u, y); bc.fillText(pl[0], x + 7 * u, y);
+        });
+        filter = inRijnmond;
+      } else {
+        var view = exportView(W, H, kader, gebied);
+        ac.save(); ac.beginPath(); ac.rect(kader.x, kader.y, kader.w, kader.h); ac.clip();
+        ac.fillStyle = "#c8dde5"; ac.fillRect(kader.x, kader.y, kader.w, kader.h);
+        ac.fillStyle = "#f1f0e8"; tekenGeo(ac, geo[0], view, true); tekenGeo(ac, geo[1], view, true);
+        ac.fillStyle = "#c8dde5"; tekenGeo(ac, geo[2], view, true); ac.restore();
+        kop = animKoppeling(kader.w, kader.h, function (x, y) { return [view.lon(kader.x + x), view.lat(kader.y + y)]; });
+        bc.save(); bc.beginPath(); bc.rect(kader.x, kader.y, kader.w, kader.h); bc.clip();
+        bc.fillStyle = "rgba(200,221,229,.62)"; tekenGeo(bc, geo[5], view, true);
+        bc.lineJoin = "round";
+        if ($("provincies").checked) { bc.strokeStyle = "rgba(40,55,62,.45)"; bc.lineWidth = 0.9 * u; tekenGeo(bc, geo[4], view, false); }
+        bc.strokeStyle = "rgba(40,55,62,.75)"; bc.lineWidth = 1.4 * u; tekenGeo(bc, geo[3], view, false);
+        bc.strokeStyle = "rgba(30,45,52,.85)"; bc.lineWidth = 1.2 * u; tekenGeo(bc, geo[1], view, false);
+        if (gebied) {
+          bc.beginPath(); bc.rect(kader.x, kader.y, kader.w, kader.h);
+          ringenVan(S.gebiedGeo[gebied]).forEach(function (poly) { poly.forEach(function (ring) {
+            ring.forEach(function (c, i) { var q = view.px(c[0], c[1]); if (i) bc.lineTo(q[0], q[1]); else bc.moveTo(q[0], q[1]); }); bc.closePath(); }); });
+          bc.fillStyle = "rgba(246,248,251,.62)"; bc.fill("evenodd");
+          bc.strokeStyle = "#035e7a"; bc.lineWidth = 3 * u; tekenGeo(bc, { type: "Feature", geometry: S.gebiedGeo[gebied] }, view, false);
+        }
+        bc.restore();
+        filter = gebiedFilter(gebied);
+        kader.view = view;
+      }
+      return { W: W, H: H, u: u, paneel: paneel, kader: kader, dy: dy, achter: achter, boven: boven, kop: kop, filter: filter, alfa: alfa,
+               naam: gebied || "Nederland", kaartsoort: kaartsoort };
+    });
+  }
+
+  /** Teken één frame: som tot tijdstip t. */
+  function animFrame(ctx, o, mm, st, max, t0, t, cum) {
+    var W = o.W, H = o.H, u = o.u, k = o.kader;
+    ctx.drawImage(o.achter, 0, 0);
+    var veld = o.veldCv || (o.veldCv = document.createElement("canvas")); veld.width = k.w; veld.height = k.h;
+    veld.getContext("2d").putImageData(animVeldBeeld(o.kop, mm, st, max, o.alfa), 0, 0);
+    ctx.drawImage(veld, k.x, k.y);
+    ctx.drawImage(o.boven, 0, 0);
+    // huidig maximum in het gebied, met naam (secuur: plaatsnaam alleen binnen 2 km)
+    var best = -1, bv = 0;
+    for (var i = 0; i < cum.length; i++) if (st[i] && o.filter(i) && cum[i] > bv) { bv = cum[i]; best = i; }
+    if (best >= 0 && bv >= 100) {
+      var r = Math.floor(best / C.NKOL), kk = best % C.NKOL, ll = C.celcentrum(r, kk), q;
+      if (o.kaartsoort === "rijnmond") { var pr = rmPx(ll[0], ll[1]); q = [k.ox + pr[0] * k.rd, k.oy + pr[1] * k.rd]; }
+      else q = k.view.px(ll[0], ll[1]);
+      var t2 = (animNaamCache[best] || (animNaamCache[best] = locatieNaam(ll[0], ll[1], NAAM_KM))) + "  " + C.mm(bv, 0) + " mm";
+      ctx.font = "800 " + Math.round(30 * u) + "px DM Sans, sans-serif"; ctx.textBaseline = "middle";
+      var tw = ctx.measureText(t2).width, links = q[0] + 14 * u + tw > k.x + k.w - 8 * u;
+      ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(q[0], q[1], 7 * u, 0, 7); ctx.fill();
+      ctx.textAlign = links ? "right" : "left"; ctx.lineWidth = 6 * u; ctx.strokeStyle = "rgba(255,255,255,.95)";
+      var tx = links ? q[0] - 14 * u : q[0] + 14 * u;
+      ctx.strokeText(t2, tx, q[1]); ctx.fillText(t2, tx, q[1]); ctx.textAlign = "left";
+    }
+    // tekst
+    var wk = C.wandklok(t), dagnaam = ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"][wk.wd];
+    var maand = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"][wk.m - 1];
+    var tk = o.paneel ? "#fff" : "#00205b", tk2 = o.paneel ? "rgba(255,255,255,.85)" : "#334155";
+    var bx = 44 * u, by = 70 * u + o.dy, bw = o.paneel ? k.x - 80 * u : W - 88 * u;
+    ctx.textBaseline = "alphabetic"; ctx.fillStyle = tk;
+    var titel = "Neerslagsom " + o.naam, tg = 52 * u; ctx.font = "800 " + Math.round(tg) + "px DM Sans, sans-serif";
+    var lang = titel.split(" ").reduce(function (m, w2) { return Math.max(m, ctx.measureText(w2).width); }, 0);
+    if (lang > bw) { tg *= bw / lang; ctx.font = "800 " + Math.floor(tg) + "px DM Sans, sans-serif"; }
+    var y = tekstRegels(ctx, titel, bx, by, bw, tg * 1.12);
+    if (S.laag === "bijgesteld") { ctx.font = "700 " + Math.round(22 * u) + "px DM Sans, sans-serif"; ctx.fillStyle = o.paneel ? "#7dd3fc" : "#035e7a"; ctx.fillText("Radar bijgesteld met regenmeters", bx, y + 2 * u); y += 34 * u; }
+    ctx.fillStyle = tk2; ctx.font = "600 " + Math.round(28 * u) + "px DM Sans, sans-serif";
+    y = tekstRegels(ctx, dagnaam + " " + wk.d + " " + maand + " " + wk.j, bx, y + 10 * u, bw, 34 * u);
+    ctx.fillStyle = tk; ctx.font = "800 " + Math.round(64 * u) + "px DM Sans, sans-serif";
+    ctx.fillText(C.pad2(wk.h) + ":" + C.pad2(wk.mi), bx, y + 54 * u); y += 70 * u;
+    ctx.fillStyle = tk2; ctx.font = "500 " + Math.round(20 * u) + "px DM Sans, sans-serif";
+    tekstRegels(ctx, "som vanaf " + C.nlTijd(t0, { kort: true }), bx, y + 14 * u, bw, 26 * u);
+    // legenda met markering op het huidige maximum (zoals in de voorbeeldvideo)
+    var lw = o.paneel ? bw : W - 88 * u, lx = bx, ly = o.paneel ? H - 210 * u : H - 165 * u - o.dy;
+    ctx.fillStyle = tk; ctx.font = "700 " + Math.round(20 * u) + "px DM Sans, sans-serif"; ctx.fillText("Neerslagsom (mm)", lx, ly - 16 * u);
+    for (var x = 0; x < lw; x++) { var col = C.paletKleur(x / (lw - 1)); ctx.fillStyle = "rgb(" + col.join(",") + ")"; ctx.fillRect(lx + x, ly, 1, 18 * u); }
+    ctx.fillStyle = tk2; ctx.font = "500 " + Math.round(16 * u) + "px DM Mono, monospace"; ctx.textAlign = "center";
+    C.schaalTicks(max).forEach(function (tt) { ctx.fillText(getal(tt, 0), lx + tt / max * lw, ly + 40 * u); });
+    if (best >= 0) {
+      var mx = lx + Math.min(1, bv / 100 / max) * lw;
+      ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(mx, ly + 9 * u, 16 * u, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5 * u; ctx.stroke();
+      ctx.fillStyle = "#fff"; ctx.font = "800 " + Math.round(14 * u) + "px DM Sans, sans-serif"; ctx.textBaseline = "middle";
+      ctx.fillText(C.mm(bv, 0), mx, ly + 9.5 * u); ctx.textBaseline = "alphabetic";
+    }
+    ctx.textAlign = "left";
+    ctx.fillStyle = tk2; ctx.font = "500 " + Math.round(14 * u) + "px DM Sans, sans-serif";
+    tekstRegels(ctx, "Bron: " + bronTekst(S.veld) + " · radarschatting · weerlab.nl", lx, H - 34 * u - (o.paneel ? 30 * u : 0) - o.dy, lw, 20 * u);
+  }
+  var animNaamCache = {};
+
+  /** Maak de animatie; resultaat {blob, type, frames, seconden}. */
+  function maakAnimatie(opt, status) {
+    var p = S.periode, b = Math.ceil(p.begin / C.UUR) * C.UUR, e = Math.floor(p.eind / C.UUR) * C.UUR;
+    if (e - b < 2 * C.UUR) return Promise.reject(new Error("Kies een periode van minstens twee hele uren."));
+    if (e - b > 31 * C.DAG) return Promise.reject(new Error("Animaties gaan tot 31 dagen; kies een kortere periode."));
+    var uren = (e - b) / C.UUR, stap = opt.stap === "auto" ? (uren <= 96 ? 1 : uren <= 288 ? 3 : 6) : +opt.stap;
+    animStop = false; animNaamCache = {};
+    status("Uursommen laden…", 0);
+    return Promise.all([animUren(b, e, function (k, n) { status("Uursommen laden: " + k + "/" + n, 0.3 * k / n); }), animOpzet(opt.formaat, opt.kaart)])
+      .then(function (r) {
+        var uurlijst = r[0], o = r[1], n = C.NRIJ * C.NKOL;
+        // schaal: eindsom (automatisch binnen het gebied, of de gekozen vaste schaal)
+        var eind = new Uint32Array(n), etel = new Uint16Array(n);
+        uurlijst.forEach(function (x) { for (var i = 0; i < n; i++) { eind[i] += x.veld.som[i]; etel[i] += x.veld.tel[i]; } });
+        var mskr = new Uint8Array(n); for (var i = 0; i < n; i++) mskr[i] = o.filter(i) ? 1 : 0;
+        var max = $("schaal").value === "auto" ? C.autoSchaal({ som: eind, tel: etel }, mskr) : +$("schaal").value;
+        return (window.VideoEncoder ? laadScript("https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.1/build/mp4-muxer.min.js").catch(function () {}) : Promise.resolve())
+          .then(function () { return animCodeer(o, uurlijst, b, stap, max, opt.fps, status); });
+      });
+  }
+  function animCodeer(o, uurlijst, t0, stap, max, fps, status) {
+    var W = o.W, H = o.H, n = C.NRIJ * C.NKOL, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    var ctx = cv.getContext("2d"), cum = new Uint32Array(n), tel = new Uint16Array(n), mm = new Float32Array(n), st = new Uint8Array(n);
+    var frames = [], i;
+    for (i = stap - 1; i < uurlijst.length; i += stap) frames.push(i);
+    if (frames[frames.length - 1] !== uurlijst.length - 1) frames.push(uurlijst.length - 1);
+    var hold = Math.round(fps * 2.5), totaal = frames.length + hold, gedaan = 0, volgende = 0;
+    function bijwerken(tot) {             // uren t/m index tot optellen
+      for (; volgende <= tot; volgende++) {
+        var v = uurlijst[volgende].veld;
+        for (var c = 0; c < n; c++) { cum[c] += v.som[c]; tel[c] += v.tel[c]; }
+      }
+      for (var c2 = 0; c2 < n; c2++) { mm[c2] = cum[c2] / 100; st[c2] = tel[c2] ? 1 : 0; }
+    }
+    function teken(fi) { bijwerken(frames[fi]); animFrame(ctx, o, mm, st, max, t0, uurlijst[frames[fi]].t, cum); }
+    if (window.VideoEncoder && window.Mp4Muxer) {
+      var codec = null, kand = ["avc1.640028", "avc1.4D0028", "avc1.640033", "avc1.42002A"], bitrate = 12000000;
+      return kand.reduce(function (pr, c) {
+        return pr.then(function () { if (codec) return; return VideoEncoder.isConfigSupported({ codec: c, width: W, height: H, bitrate: bitrate, framerate: fps }).then(function (s) { if (s && s.supported) codec = c; }).catch(function () {}); });
+      }, Promise.resolve()).then(function () {
+        if (!codec) return animWebm(cv, ctx, frames, hold, teken, fps, status);
+        var muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: "avc", width: W, height: H, frameRate: fps }, fastStart: "in-memory" });
+        var enc = new VideoEncoder({ output: function (ch, meta) { muxer.addVideoChunk(ch, meta); }, error: function (e) { console.error(e); } });
+        enc.configure({ codec: codec, width: W, height: H, bitrate: bitrate, framerate: fps, bitrateMode: "variable", latencyMode: "quality", avc: { format: "avc" } });
+        var dur = Math.round(1e6 / fps), idx = 0;
+        function stuk(fi) {
+          if (animStop) return Promise.reject(new Error("Afgebroken."));
+          if (fi < frames.length) teken(fi);
+          var vf = new VideoFrame(cv, { timestamp: idx * dur, duration: dur });
+          enc.encode(vf, { keyFrame: idx % fps === 0 }); vf.close(); idx++; gedaan++;
+          status("Frame " + gedaan + " / " + totaal, 0.3 + 0.7 * gedaan / totaal);
+          return (enc.encodeQueueSize > 8 ? new Promise(function (r) { setTimeout(r, 15); }) : new Promise(function (r) { setTimeout(r, 0); }))
+            .then(function () { return gedaan < totaal ? stuk(fi + 1) : null; });
+        }
+        return stuk(0).then(function () { return enc.flush(); }).then(function () {
+          muxer.finalize(); enc.close();
+          return { blob: new Blob([muxer.target.buffer], { type: "video/mp4" }), ext: "mp4", frames: frames.length, seconden: totaal / fps };
+        });
+      });
+    }
+    return animWebm(cv, ctx, frames, hold, teken, fps, status);
+  }
+  function animWebm(cv, ctx, frames, hold, teken, fps, status) {      // terugval zonder WebCodecs: real-time opname
+    var mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].filter(function (m) { return window.MediaRecorder && MediaRecorder.isTypeSupported(m); })[0];
+    if (!mime) return Promise.reject(new Error("Deze browser kan geen video maken."));
+    var stream = cv.captureStream(fps), rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 }), delen = [];
+    rec.ondataavailable = function (e) { if (e.data.size) delen.push(e.data); };
+    return new Promise(function (res, rej) {
+      rec.onstop = function () { res({ blob: new Blob(delen, { type: "video/webm" }), ext: "webm", frames: frames.length, seconden: (frames.length + hold) / fps }); };
+      rec.start(); var fi = 0, totaal = frames.length + hold;
+      (function lus() {
+        if (animStop) { rec.stop(); return rej(new Error("Afgebroken.")); }
+        if (fi < frames.length) teken(fi);
+        fi++; status("Frame " + fi + " / " + totaal, 0.3 + 0.7 * fi / totaal);
+        if (fi < totaal) setTimeout(lus, 1000 / fps); else setTimeout(function () { rec.stop(); }, 300);
+      })();
+    });
+  }
+
+  // dialoog
+  function animOpen() {
+    if (!S.veld) return;
+    var p = S.periode;
+    $("animInfo").textContent = p.label + ": " + C.nlTijd(Math.ceil(p.begin / C.UUR) * C.UUR, { kort: true }) + " – " + C.nlTijd(Math.floor(p.eind / C.UUR) * C.UUR, { kort: true }) +
+      " (hele uren)" + (S.laag === "bijgesteld" ? " · bijgesteld met regenmeters" : "");
+    var sel = $("animKaart");
+    if (sel.options.length < 3) {           // provincies één keer toevoegen, na het laden van de gebieden
+      var og = document.createElement("optgroup"); og.label = "Provincies";
+      Object.keys(S.gebiedGeo).filter(function (n) { return n !== "Rijnmond"; }).sort(function (a, b) { return a.localeCompare(b, "nl"); })
+        .forEach(function (n) { var o = document.createElement("option"); o.value = n; o.textContent = n; og.appendChild(o); });
+      sel.insertBefore(og, sel.options[1]);
+    }
+    sel.value = S.gebied === "Rijnmond" ? "rijnmond" : S.gebied || "";
+    $("animResultaat").innerHTML = ""; $("animBalk").style.width = "0"; $("animStatus").textContent = "";
+    $("animVenster").hidden = false;
+  }
+  $("animMaak").onclick = function () {
+    var knop = this; knop.disabled = true; $("animStop").hidden = false; $("animResultaat").innerHTML = "";
+    var opt = { formaat: $("animFormaat").value, kaart: $("animKaart").value, stap: $("animStap").value, fps: +$("animFps").value };
+    var t0 = performance.now();
+    maakAnimatie(opt, function (tekst, f) { $("animStatus").textContent = tekst; $("animBalk").style.width = Math.round(f * 100) + "%"; })
+      .then(function (res) {
+        var url = URL.createObjectURL(res.blob), p = S.periode;
+        var naam = "neerslagsom_" + bestandsnaamDeel(opt.kaart || "nederland").toLowerCase() + (S.laag === "bijgesteld" ? "_bijgesteld" : "") + "_" +
+          iso(p.begin).slice(0, 13).replace(/[-:T]/g, "") + "-" + iso(p.eind).slice(0, 13).replace(/[-:T]/g, "") + "_" + opt.formaat + "." + res.ext;
+        S.laatsteAnimatie = res;
+        $("animStatus").textContent = res.frames + " frames · " + getal(res.seconden, 1) + " s · " + Math.round(res.blob.size / 1024 / 1024 * 10) / 10 + " MB · gemaakt in " + getal((performance.now() - t0) / 1000, 1) + " s";
+        $("animResultaat").innerHTML = "<video src='" + url + "' controls autoplay loop muted playsinline></video><a class='knop primair' download='" + naam + "' href='" + url + "'>Download " + res.ext.toUpperCase() + "</a>";
+      }).catch(function (e) { $("animStatus").textContent = e.message; })
+      .then(function () { knop.disabled = false; $("animStop").hidden = true; });
+  };
+  $("animStop").onclick = function () { animStop = true; };
+  $("animSluit").onclick = function () { animStop = true; $("animVenster").hidden = true; };
+  window.__accuMaakAnimatie = maakAnimatie;     // tests
+
   // ── URL-staat ───────────────────────────────────────────────────────────
   function zetLaag(laag, herlaad) {
-    S.laag = laag === "bijgesteld" ? "bijgesteld" : "ruw";
+    S.laag = laag === "ruw" ? "ruw" : "bijgesteld";      // standaard de beste schatting: bijgesteld met regenmeters
     BASIS = S.laag === "bijgesteld" ? BASIS_BIJ : BASIS_RUW;
     $("laag").value = S.laag;
     var b = $("laagBadge");
@@ -1409,7 +1733,7 @@
 
   function schrijfHash() {
     var p = new URLSearchParams();
-    if (S.laag === "bijgesteld") p.set("laag", "bijgesteld");
+    if (S.laag === "ruw") p.set("laag", "ruw");
     if (S.gebied) p.set("g", S.gebied);
     if (S.keuze) {
       if (S.keuze.soort === "preset") p.set("p", S.keuze.id);
@@ -1423,7 +1747,7 @@
     if (p.get("p")) k = { soort: "preset", id: p.get("p") };
     else if (p.get("van") && p.get("tot")) k = { soort: "eigen", begin: Date.parse(p.get("van")), eind: Date.parse(p.get("tot")) };
     var ll = (p.get("ll") || "").split(",").map(Number);
-    return { keuze: k, ll: ll.length === 2 && !isNaN(ll[0]) ? ll : null, laag: p.get("laag") || "ruw", gebied: p.get("g") || "" };
+    return { keuze: k, ll: ll.length === 2 && !isNaN(ll[0]) ? ll : null, laag: p.get("laag") || "bijgesteld", gebied: p.get("g") || "" };
   }
 
   // ── export ──────────────────────────────────────────────────────────────
@@ -1440,6 +1764,7 @@
     if (!S.veld) return;
     if (soort === "csv") return exportCsv();
     if (soort === "tif") return exportTiff();
+    if (soort === "animatie") return animOpen();
     if (soort === "rijnmond") {
       laden("Rijnmondkaart maken…");
       return rmLaad().then(function (r) {
@@ -1461,10 +1786,11 @@
   }
 
   /** Mercator-view die de NL-uitsnede vult (met marge) in w×h. */
-  function exportView(w, h, kader) {
+  function exportView(w, h, kader, gebied) {
     var lon0 = 2.9, lon1 = 7.6, lat0 = 50.42, lat1 = 53.72;       // ruim zuid: Zuid-Limburg (50,75°N) niet tegen de rand
-    if (S.gebied) {
-      var gb = gebiedGrenzen(S.gebied), dl = (gb[1][1] - gb[0][1]) * 0.08, db = (gb[1][0] - gb[0][0]) * 0.08;
+    if (gebied === undefined) gebied = S.gebied;
+    if (gebied) {
+      var gb = gebiedGrenzen(gebied), dl = (gb[1][1] - gb[0][1]) * 0.08, db = (gb[1][0] - gb[0][0]) * 0.08;
       lon0 = gb[0][1] - dl; lon1 = gb[1][1] + dl; lat0 = gb[0][0] - db; lat1 = gb[1][0] + db;
     }
     function my(lat) { return Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)); }
