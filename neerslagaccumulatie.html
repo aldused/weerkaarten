@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neerslagaccumulatie Nederland · Weerlab bèta</title>
+<meta name="description" content="Neerslagsommen uit KNMI-radar (gecorrigeerd met regenmeters) per rastercel van 1 km, voor elk tijdvak: uren, dagen, weken of een eigen periode.">
+<link rel="preconnect" href="https://data.weerlab.nl" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --primary:#00205b; --primary-strong:#003366; --primary-soft:#eff6ff;
+  --accent:#2ec4e8; --accent-strong:#035e7a;
+  --bg:#f6f8fb; --bg-soft:#eef2f7; --surface:#fff; --surface-muted:#f8fafc;
+  --border:#e3e8ef; --border-strong:#cbd5e1;
+  --text:#0f172a; --muted:#64748b; --soft:#94a3b8;
+  --warn:#e07000; --warn-soft:rgba(224,112,0,.12); --ok:#047857; --ok-soft:rgba(16,185,129,.12);
+  --bar:#2563eb; --cum:#0f172a;
+  --font:"DM Sans",ui-sans-serif,system-ui,sans-serif; --mono:"DM Mono",ui-monospace,monospace;
+  --shadow:0 2px 4px rgba(15,23,42,.05),0 4px 12px rgba(15,23,42,.06);
+  --shadow-3:0 8px 24px rgba(15,23,42,.16);
+  --paneel:380px;
+}
+:root[data-theme="dark"]{
+  --primary-soft:#12203d; --accent:#38d1f0; --accent-strong:#7dd3fc;
+  --bg:#0b1220; --bg-soft:#0f1728; --surface:#121a2b; --surface-muted:#0e1629;
+  --border:#1f2a40; --border-strong:#334155; --text:#e5ecf6; --muted:#8292ac; --soft:#5b6a84;
+  --warn:#fbbf24; --warn-soft:rgba(251,191,36,.12); --ok:#34d399; --ok-soft:rgba(52,211,153,.14);
+  --bar:#60a5fa; --cum:#e5ecf6;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --primary-soft:#12203d; --accent:#38d1f0; --accent-strong:#7dd3fc;
+    --bg:#0b1220; --bg-soft:#0f1728; --surface:#121a2b; --surface-muted:#0e1629;
+    --border:#1f2a40; --border-strong:#334155; --text:#e5ecf6; --muted:#8292ac; --soft:#5b6a84;
+    --warn:#fbbf24; --warn-soft:rgba(251,191,36,.12); --ok:#34d399; --ok-soft:rgba(52,211,153,.14);
+    --bar:#60a5fa; --cum:#e5ecf6;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:400 14px/1.45 var(--font)}
+button,select,input{font:inherit;color:inherit}
+#app{display:flex;flex-direction:column;height:100%;min-height:0}
+/* kopbalk */
+.kop{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.kop h1{margin:0;font:700 17px/1.2 var(--font);color:var(--primary)}
+:root[data-theme="dark"] .kop h1{color:var(--text)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .kop h1{color:var(--text)}}
+.kop .sub{font-size:12px;color:var(--muted)}
+.badge{font:700 10px/1 var(--font);letter-spacing:.08em;padding:4px 6px;border-radius:4px;background:var(--primary);color:#fff}
+.kop .status{margin-left:auto;font:500 12px/1.3 var(--mono);color:var(--muted);text-align:right}
+/* bediening */
+.bediening{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border)}
+.veld{display:flex;flex-direction:column;gap:3px}
+.veld>span{font:700 10px/1 var(--font);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+select,input[type=date],input[type=search],input[type=number]{height:32px;padding:0 8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface)}
+select:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.knop{height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap}
+.knop:hover{border-color:var(--primary-strong)}
+.knop.primair{background:var(--primary);border-color:var(--primary);color:#fff}
+.knop.primair:hover{background:var(--primary-strong)}
+.knop[aria-pressed="true"]{background:var(--primary-soft);border-color:var(--accent-strong)}
+.groep{display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap}
+.eigen{display:none;gap:6px;align-items:flex-end;flex-wrap:wrap;padding:6px 8px;border:1px dashed var(--border-strong);border-radius:8px}
+.eigen.aan{display:flex}
+.uurkeus{width:76px}
+.vink{display:flex;gap:5px;align-items:center;font-size:13px;height:32px;cursor:pointer;user-select:none}
+.zoek{position:relative}
+.zoek input{width:210px}
+.zoeklijst{position:absolute;top:100%;left:0;right:0;z-index:2000;background:var(--surface);border:1px solid var(--border-strong);border-radius:6px;box-shadow:var(--shadow-3);max-height:320px;overflow:auto;display:none;margin-top:2px}
+.zoeklijst.aan{display:block}
+.zoeklijst button{display:flex;justify-content:space-between;gap:8px;width:100%;text-align:left;padding:7px 10px;border:0;background:none;cursor:pointer;font-size:13px}
+.zoeklijst button:hover,.zoeklijst button.actief{background:var(--primary-soft)}
+.zoeklijst small{color:var(--muted)}
+.menu{position:relative}
+.menu-lijst{position:absolute;right:0;top:100%;margin-top:4px;z-index:2000;min-width:240px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;box-shadow:var(--shadow-3);display:none;padding:4px}
+.menu-lijst.aan{display:block}
+.menu-lijst button{display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:none;border-radius:6px;cursor:pointer;font-size:13px}
+.menu-lijst button:hover{background:var(--primary-soft)}
+.menu-lijst small{display:block;color:var(--muted);font-size:11px}
+/* periodebalk */
+.periodebalk{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;padding:7px 14px;background:var(--primary-soft);border-bottom:1px solid var(--border);font-size:13px}
+.periodebalk b{font-weight:700}
+.periodebalk .mono{font:500 12px var(--mono)}
+.pil{display:inline-flex;gap:5px;align-items:center;padding:2px 8px;border-radius:999px;font:600 12px var(--font);background:var(--surface);border:1px solid var(--border)}
+.pil.laagpil{background:var(--accent-strong);border-color:transparent;color:#fff}
+.laagbadge{font:700 11px/1 var(--font);padding:5px 8px;border-radius:4px;background:var(--bg-soft);color:var(--muted);border:1px solid var(--border)}
+.laagbadge.bij{background:var(--accent-strong);color:#fff;border-color:transparent}
+.pil.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
+.pil.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
+/* hoofdvlak */
+.hoofd{flex:1;display:flex;min-height:0}
+.kaartvak{position:relative;flex:1;min-width:0}
+#kaart{position:absolute;inset:0;background:#c8dde5}
+.leaflet-container{font-family:var(--font)}
+.accu-veld{position:absolute;left:0;top:0;pointer-events:none;image-rendering:auto}
+.legenda{position:absolute;left:12px;bottom:22px;z-index:800;background:color-mix(in srgb,var(--surface) 92%,transparent);border:1px solid var(--border);border-radius:8px;padding:8px 10px 6px;box-shadow:var(--shadow);min-width:280px;max-width:calc(100% - 24px)}
+.legenda .titel{font:700 11px var(--font);color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.legenda canvas{display:block;width:100%;height:12px;border-radius:3px;margin:5px 0 2px}
+.legenda .ticks{position:relative;height:14px;font:500 10px var(--mono);color:var(--muted)}
+.legenda .ticks span{position:absolute;transform:translateX(-50%)}
+.legenda .noot{font-size:10.5px;color:var(--muted);margin-top:2px}
+.laden{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;box-shadow:var(--shadow);display:none}
+.laden.aan{display:block}
+.fout{position:absolute;top:12px;left:58px;right:12px;z-index:950;background:#fff4e5;color:#7a3b00;border:1px solid #f5c58a;border-radius:8px;padding:8px 12px;font-size:13px;display:none}
+.fout.aan{display:block}
+.tip{position:absolute;z-index:1000;pointer-events:none;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;box-shadow:var(--shadow-3);padding:7px 10px;font-size:12px;min-width:170px;display:none;line-height:1.35}
+.tip .waarde{font:700 20px/1.1 var(--font);color:var(--text)}
+.tip .plaats{font-weight:700}
+.tip .klein{color:var(--muted);font:500 11px var(--mono)}
+.tip .warn{color:var(--warn);font-weight:600}
+.pin{width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--primary);box-shadow:0 0 0 2px rgba(255,255,255,.7)}
+.maxlabel{font:700 11px var(--font);color:#111;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff;white-space:nowrap}
+.meterlabel{font:600 10.5px var(--mono);color:#0f172a;background:rgba(255,255,255,.92);border:1px solid #0f172a;border-radius:3px;padding:0 3px;white-space:nowrap;transform:translate(-50%,-50%);display:inline-block}
+.maxlabel i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#111;border:1px solid #fff;margin-right:3px;vertical-align:1px}
+/* paneel */
+.paneel{width:var(--paneel);flex:none;border-left:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;border-bottom:1px solid var(--border);overflow-x:auto;flex:none}
+.tabs button{flex:1;padding:9px 6px;border:0;background:none;cursor:pointer;font:600 12.5px var(--font);color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+.tabinhoud{flex:1;overflow:auto;padding:12px 14px 20px;min-height:0}
+.tabinhoud[hidden]{display:none}
+h2{font:700 15px/1.25 var(--font);margin:0 0 6px}
+h3{font:700 12px var(--font);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 6px}
+.groot{font:700 34px/1 var(--font);margin:6px 0 2px}
+.groot small{font-size:16px;font-weight:600;color:var(--muted)}
+.meta{font-size:12px;color:var(--muted)}
+.meta.mono{font-family:var(--mono)}
+.leeg{color:var(--muted);font-size:13px;padding:12px 0}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin:8px 0}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;font-weight:600;text-align:right}
+.grafiek{width:100%;height:220px;display:block;margin-top:6px}
+table.lijst{width:100%;border-collapse:collapse;font-size:12.5px}
+table.lijst th{text-align:left;font:600 11px var(--font);color:var(--muted);padding:4px 4px;border-bottom:1px solid var(--border)}
+table.lijst td{padding:5px 4px;border-bottom:1px solid var(--border)}
+table.lijst td.num{text-align:right;font:600 12.5px var(--mono);white-space:nowrap}
+table.lijst tr.klik{cursor:pointer}
+table.lijst tr.klik:hover{background:var(--primary-soft)}
+.bronlabel{display:inline-block;font:600 10.5px var(--font);padding:1px 6px;border-radius:4px;background:var(--bg-soft);color:var(--muted)}
+.archief-raster{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.archief-raster a{display:block;border:1px solid var(--border);border-radius:6px;overflow:hidden;text-decoration:none;color:inherit;background:var(--surface-muted)}
+.archief-raster img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;background:var(--bg-soft)}
+.archief-raster span{display:block;padding:4px 6px;font-size:11.5px;font-weight:600}
+.archief-raster small{display:block;padding:0 6px 5px;font-size:10.5px;color:var(--muted)}
+.uitleg p,.uitleg li{font-size:13px}
+.uitleg code{font:500 12px var(--mono);background:var(--bg-soft);padding:0 3px;border-radius:3px}
+.balk-subtabs{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 8px}
+.balk-subtabs button{padding:4px 9px;border:1px solid var(--border-strong);border-radius:999px;background:var(--surface);cursor:pointer;font-size:12px;font-weight:600}
+.balk-subtabs button[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:#fff}
+.opties{display:contents}
+.alleen-mobiel{display:none}
+.rm-venster{position:fixed;inset:0;z-index:3000;background:rgba(2,6,23,.72);display:flex;align-items:center;justify-content:center;padding:16px}
+.rm-venster[hidden]{display:none}
+.rm-kaart{background:var(--surface);border-radius:10px;box-shadow:var(--shadow-3);width:min(1400px,100%);max-height:100%;display:flex;flex-direction:column;overflow:hidden}
+.rm-kop{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
+.rm-knoppen{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rm-doek{position:relative;overflow:auto}
+.rm-doek canvas{display:block;width:100%;height:auto;cursor:crosshair}
+.slot{position:fixed;inset:0;z-index:5000;display:grid;place-items:center;padding:24px;background:var(--bg)}
+.slot[hidden]{display:none}
+.slot-kaart{width:min(380px,100%);background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-3);padding:26px;text-align:center}
+.slot-kaart h1{margin:0 0 6px;font:700 19px var(--font);color:var(--text)}
+.slot-kaart p{margin:0 0 16px;color:var(--muted);font-size:13px}
+.slot-kaart input{width:100%;height:42px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);padding:0 12px;font-size:16px;margin-bottom:10px}
+.slot-kaart .knop{width:100%;height:40px}
+#slotFout{min-height:18px;margin-top:8px;color:#cc0000;font-size:12px}
+/* volledig scherm */
+#app:fullscreen .paneel{display:none}
+/* mobiel */
+@media (max-width:820px){
+  .alleen-mobiel{display:inline-flex;align-items:center}
+  .opties{display:none;width:100%;flex-wrap:wrap;gap:6px 8px;align-items:flex-end}
+  .opties.aan{display:flex}
+  .kop .sub{display:none}
+  .periodebalk .mono{display:none}
+  .bediening .veld:nth-child(3){flex:1 1 60%}
+  .bediening .veld:nth-child(3) select{width:100%}
+  .hoofd{flex-direction:column}
+  .kaartvak{flex:none;height:62vh;min-height:360px}
+  .paneel{width:auto;border-left:0;border-top:1px solid var(--border);flex:1;min-height:320px}
+  .kop .status{margin-left:0;text-align:left;width:100%}
+  .zoek input{width:100%}
+  .zoek{flex:1 1 100%}
+  .legenda{min-width:0;left:8px;right:8px;bottom:18px}
+  .bediening{gap:6px 8px}
+  #app{height:auto;min-height:100%}
+  html,body{height:auto}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="kop">
+    <h1>Neerslagaccumulatie Nederland</h1>
+    <span class="badge">BÈTA</span>
+    <span class="laagbadge" id="laagBadge">Ruwe KNMI-radar</span>
+    <span class="sub">KNMI-radar, gecorrigeerd met regenmeters · per cel van 1 km</span>
+    <div class="status" id="status">laden…</div>
+  </header>
+
+  <div class="bediening" role="toolbar" aria-label="Kaartbediening">
+    <label class="veld"><span>Gegevens</span>
+      <select id="laag" aria-label="Gegevenslaag">
+        <option value="ruw">KNMI-radar (ruw)</option>
+        <option value="bijgesteld">Radar bijgesteld met regenmeters</option>
+      </select>
+    </label>
+    <label class="veld"><span>Gebied</span>
+      <select id="gebied" aria-label="Gebied (inzoomen)"><option value="">Nederland</option></select>
+    </label>
+    <label class="veld"><span>Periode</span>
+      <select id="periode" aria-label="Periode"></select>
+    </label>
+    <div class="eigen" id="eigen" aria-label="Eigen periode (Nederlandse tijd)">
+      <label class="veld"><span>Van (NL-tijd)</span><input type="date" id="vanDatum"></label>
+      <label class="veld"><span>uur</span><select id="vanUur" class="uurkeus"></select></label>
+      <label class="veld"><span>Tot</span><input type="date" id="totDatum"></label>
+      <label class="veld"><span>uur</span><select id="totUur" class="uurkeus"></select></label>
+      <button class="knop primair" id="toonEigen" type="button">Toon</button>
+    </div>
+    <div class="eigen" id="etmaalKeus" aria-label="Neerslagetmaal 08–08 UTC">
+      <label class="veld"><span>Etmaal eindigend op (08 UTC)</span><input type="date" id="etmaalDatum"></label>
+      <button class="knop primair" id="toonEtmaal" type="button">Toon</button>
+    </div>
+    <button class="knop alleen-mobiel" id="optiesKnop" type="button" aria-expanded="false" aria-controls="opties">⚙ Opties</button>
+    <div class="opties" id="opties">
+    <label class="veld"><span>Schaal</span>
+      <select id="schaal">
+        <option value="auto">Automatisch</option>
+        <option value="10">0–10 mm</option><option value="25">0–25 mm</option>
+        <option value="50">0–50 mm</option><option value="100">0–100 mm</option>
+        <option value="200">0–200 mm</option><option value="300">0–300 mm</option>
+      </select>
+    </label>
+    <label class="veld"><span>Waarde op locatie</span>
+      <select id="straal" title="Rastercel = de exacte cel waarin het punt valt">
+        <option value="0">Rastercel (1 km)</option>
+        <option value="2.5">Gemiddelde straal 2,5 km</option>
+        <option value="5">Gemiddelde straal 5 km</option>
+        <option value="10">Gemiddelde straal 10 km</option>
+      </select>
+    </label>
+    <label class="veld"><span>Weergave</span>
+      <select id="weergave"><option value="vloeiend">Vloeiend</option><option value="cellen">Rastercellen</option></select>
+    </label>
+    <div class="groep">
+      <label class="vink"><input type="checkbox" id="plaatsnamen"> Plaatsnamen</label>
+      <label class="vink"><input type="checkbox" id="provincies" checked> Provincies</label>
+      <label class="vink"><input type="checkbox" id="maxima" checked> Maxima</label>
+      <label class="vink" title="KNMI-neerslagstations (meting, 08–08 UTC) — alleen bij perioden van hele etmalen"><input type="checkbox" id="meters"> Regenmeters</label>
+      <label class="vink" title="Arceer cellen waarvoor niet alle tijdstappen beschikbaar zijn"><input type="checkbox" id="onvolledig" checked> Onvolledig arceren</label>
+    </div>
+    </div>
+    <div class="zoek veld"><span>Zoek plaats</span>
+      <input type="search" id="zoek" placeholder="Plaats, adres of postcode" autocomplete="off" aria-label="Zoek plaats">
+      <div class="zoeklijst" id="zoeklijst" role="listbox"></div>
+    </div>
+    <div class="groep" style="margin-left:auto">
+      <button class="knop" id="rijnmondKnop" type="button" title="Aparte kaart van het Rijnmondgebied (zelfde kader als de Weerlab-regiokaart)">Rijnmondkaart</button>
+      <button class="knop" id="volscherm" type="button" title="Volledig scherm">⛶ Volledig scherm</button>
+      <div class="menu">
+        <button class="knop primair" id="exportKnop" type="button" aria-haspopup="true">Exporteren ▾</button>
+        <div class="menu-lijst" id="exportMenu" role="menu">
+          <button data-export="png" type="button">PNG hoge resolutie<small>2400 × 2700 px, staand</small></button>
+          <button data-export="169" type="button">Afbeelding 16:9<small>1920 × 1080 px</small></button>
+          <button data-export="11" type="button">Afbeelding 1:1 (sociale media)<small>1080 × 1080 px</small></button>
+          <button data-export="rijnmond" type="button">Rijnmondkaart 16:9<small>1920 × 1080 px, regiokaart-kader</small></button>
+          <button data-export="csv" type="button">CSV met rasterwaarden<small>alle cellen binnen Nederland</small></button>
+          <button data-export="tif" type="button">GeoTIFF (KNMI-raster)<small>float32 mm, polaire stereografie</small></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="periodebalk" id="periodebalk" aria-live="polite">Periode laden…</div>
+
+  <div class="hoofd">
+    <div class="kaartvak">
+      <div id="kaart" aria-label="Kaart neerslagaccumulatie"></div>
+      <div class="laden" id="laden">Laden…</div>
+      <div class="fout" id="fout" role="alert"></div>
+      <div class="tip" id="tip"></div>
+      <div class="legenda" id="legenda">
+        <div class="titel"><span>Neerslagsom (mm)</span><span id="legendaMax"></span></div>
+        <canvas id="legendaBalk" width="560" height="24"></canvas>
+        <div class="ticks" id="legendaTicks"></div>
+        <div class="noot">&lt; 0,1 mm: droog (niet ingekleurd) · radarschatting, geen meting</div>
+      </div>
+    </div>
+    <aside class="paneel">
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="locatie">Locatie</button>
+        <button role="tab" aria-selected="false" data-tab="toplijst">Toplijst</button>
+        <button role="tab" aria-selected="false" data-tab="archief">Kaartarchief</button>
+        <button role="tab" aria-selected="false" data-tab="validatie">Validatie</button>
+        <button role="tab" aria-selected="false" data-tab="methode">Methode</button>
+      </div>
+      <section class="tabinhoud" id="tab-locatie" role="tabpanel">
+        <div class="leeg">Klik op de kaart of zoek een plaats om de neerslagsom en het verloop per uur te zien.</div>
+      </section>
+      <section class="tabinhoud" id="tab-toplijst" role="tabpanel" hidden></section>
+      <section class="tabinhoud" id="tab-archief" role="tabpanel" hidden></section>
+      <section class="tabinhoud" id="tab-validatie" role="tabpanel" hidden></section>
+      <section class="tabinhoud uitleg" id="tab-methode" role="tabpanel" hidden></section>
+    </aside>
+  </div>
+</div>
+<div class="rm-venster" id="rmVenster" hidden role="dialog" aria-modal="true" aria-labelledby="rmTitel">
+  <div class="rm-kaart">
+    <div class="rm-kop">
+      <b id="rmTitel">Rijnmondkaart</b>
+      <span class="meta" id="rmInfo"></span>
+      <span class="rm-knoppen">
+        <label class="vink"><input type="checkbox" id="rmNacht"> Donkere ondergrond</label>
+        <label class="vink"><input type="checkbox" id="rmPlaatsen" checked> Plaatsnamen</label>
+        <button class="knop primair" id="rmDownload" type="button">Download PNG</button>
+        <button class="knop" id="rmSluit" type="button" aria-label="Sluiten">✕</button>
+      </span>
+    </div>
+    <div class="rm-doek"><canvas id="rmCanvas" width="1920" height="1080"></canvas><div class="tip" id="rmTip"></div></div>
+  </div>
+</div>
+<div id="slot" class="slot" hidden>
+  <form class="slot-kaart" id="slotForm">
+    <h1>Neerslagaccumulatie</h1>
+    <p>Deze pagina is tijdelijk afgeschermd. Voer het wachtwoord in.</p>
+    <input id="slotInvoer" type="password" autocomplete="current-password" aria-label="Wachtwoord" required>
+    <button class="knop primair" type="submit">Openen</button>
+    <div id="slotFout" role="alert"></div>
+  </form>
+</div>
+<script>
+// Tijdelijke afscherming (wachtwoord als SHA-256, geldig per tabblad). Weghalen = SLOT_HASH op "" zetten.
+(function () {
+  var SLOT_HASH = "395e3a5cc18ee0547f3c273999f29d6e106f420e35e4540bfa5883d767b19818";
+  var SLEUTEL = "neerslagaccumulatie_ok";
+  var SCRIPTS = ["https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js", "weerlab_basemap.js?v=20261026",
+                 "accumulatie_core.js?v=20261026-2", "neerslagaccumulatie.js?v=20261026-2"];
+  function start() {
+    document.getElementById("slot").hidden = true;
+    document.getElementById("app").style.visibility = "";
+    (function volgende(i) {
+      if (i >= SCRIPTS.length) return;
+      var el = document.createElement("script"); el.src = SCRIPTS[i];
+      el.onload = function () { volgende(i + 1); };
+      document.body.appendChild(el);
+    })(0);
+  }
+  var ok = !SLOT_HASH;
+  try { ok = ok || sessionStorage.getItem(SLEUTEL) === "1"; } catch (e) {}
+  if (ok) { start(); return; }
+  document.getElementById("app").style.visibility = "hidden";
+  document.getElementById("slot").hidden = false;
+  document.getElementById("slotInvoer").focus();
+  document.getElementById("slotForm").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var v = document.getElementById("slotInvoer").value.trim();
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)).then(function (buf) {
+      var h = Array.from(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+      if (h === SLOT_HASH) { try { sessionStorage.setItem(SLEUTEL, "1"); } catch (e) {} start(); }
+      else { document.getElementById("slotFout").textContent = "Onjuist wachtwoord."; document.getElementById("slotInvoer").value = ""; }
+    });
+  });
+})();
+</script>
+</body>
+</html>
