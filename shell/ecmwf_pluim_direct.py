@@ -12,6 +12,8 @@ control member is no longer part of that stream and is read from ``oper/fc``.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
+import multiprocessing
 import hashlib
 import importlib.util
 import json
@@ -42,7 +44,8 @@ DEFAULT_DIRECT_CYCLES = (12, 18)
 LONG_CYCLES = (0, 12)
 LONG_STEPS = tuple(range(0, 145, 3)) + tuple(range(150, 361, 6))
 SHORT_STEPS = tuple(range(0, 145, 3))
-ECMWF_ROOT = "https://data.ecmwf.int/forecasts"
+SOURCE_ROOTS = {"ecmwf":"https://data.ecmwf.int/forecasts", "aws":"https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"}
+ECMWF_ROOT = SOURCE_ROOTS["ecmwf"]
 RUNTIME_ROOT = Path(os.environ.get("ECMWF_NATIVE_RUNTIME", "/tmp"))
 
 FIELD_SETS = {
@@ -415,6 +418,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--cycle", type=int, choices=ALL_CYCLES)
     parser.add_argument("--date", help="YYYYMMDD; requires --cycle")
     parser.add_argument("--fields", choices=sorted(FIELD_SETS), default="basic")
+    parser.add_argument("--source", choices=tuple(SOURCE_ROOTS), default="ecmwf")
+    parser.add_argument("--workers", type=int, choices=range(1,9), default=1)
     parser.add_argument("--batch-steps", type=int, default=1)
     parser.add_argument("--keep", type=int, default=8)
     parser.add_argument("--slug", action="append", default=[])
@@ -733,6 +738,60 @@ def establish_grid_points(gid: int, stations: list[Station]) -> tuple[GridPoint,
         )
         for item in nearest
     )
+
+
+def bounded_batch_results(pool,jobs,submit,workers):
+    """Keep only worker-count jobs in flight; failures cancel queued work."""
+    queue=iter(jobs);pending={}
+    def next_job():
+        try:job=next(queue)
+        except StopIteration:return
+        pending[submit(pool,job)]=job[0]
+    for _ in range(workers):next_job()
+    try:
+        while pending:
+            done,_=concurrent.futures.wait(pending,return_when=concurrent.futures.FIRST_COMPLETED)
+            for future in done:
+                number=pending.pop(future)
+                yield number,future.result()
+                next_job()
+    finally:
+        for future in pending:future.cancel()
+
+
+def process_native_batch(source,run,cycle,steps,params,stations,grid_points,temp_root,max_bytes):
+    """Isolated decoder process: never shares a GRIB handle or partial arrays."""
+    use_safe_multipart_chunk_size()
+    client=Client(source=source);configure_client_timeouts(client)
+    local={p:np.full((51,len(stations),len(steps)),np.nan) for p in params}
+    for p in ('tp','sf'):
+        if p in params:local[p+'_packing_error']=np.full_like(local[p],np.nan)
+    indexes={h:i for i,h in enumerate(steps)};total=0;download=0;peak=0
+    with tempfile.TemporaryDirectory(prefix='parallel_',dir=temp_root) as name:
+        folder=Path(name)
+        for perturbed in (True,False):
+            target=folder/('pf.grib2' if perturbed else 'fc.grib2')
+            size,elapsed=retrieve_batch(client,run,cycle,steps,params,target,perturbed)
+            total+=size;download+=elapsed;peak=max(peak,directory_size(folder))
+            if peak>max_bytes:raise RuntimeError('Parallel GRIB-batch overschrijdt eigen tijdelijke opslaglimiet')
+        started=time.monotonic()
+        for perturbed in (True,False):
+            target=folder/('pf.grib2' if perturbed else 'fc.grib2')
+            grid_points,_=decode_batch(target,perturbed,steps,params,stations,indexes,local,grid_points)
+            target.unlink()
+        decode=time.monotonic()-started
+    if any(not np.isfinite(v).all() for v in local.values()):raise RuntimeError('Onvolledige parallelle ECMWF-batch')
+    return dict(steps=steps,raw=local,grid_points=grid_points,bytes=total,download=download,decode=decode,peak=peak)
+
+
+def merge_native_batch(raw,step_to_index,grid_points,result):
+    points=result['grid_points']
+    if grid_points is not None and points!=grid_points:raise RuntimeError('Parallelle batch heeft afwijkende bronroosterpunten')
+    indexes=[step_to_index[h] for h in result['steps']]
+    for key,values in result['raw'].items():
+        if key not in raw or values.shape!=raw[key][:,:,indexes].shape or not np.isfinite(values).all():raise RuntimeError('Onvolledige of onverwachte parallelle batch')
+    for key,values in result['raw'].items():raw[key][:,:,indexes]=values
+    return points
 
 
 def decode_batch(
@@ -1382,7 +1441,9 @@ def main(argv: list[str]) -> int:
             ):
                 return 0
 
-    client = Client(source="ecmwf")
+    global ECMWF_ROOT
+    ECMWF_ROOT = SOURCE_ROOTS[args.source]
+    client = Client(source=args.source)
     configure_client_timeouts(client)
     selection = choose_run(
         client,
@@ -1526,105 +1587,124 @@ def main(argv: list[str]) -> int:
     with tempfile.TemporaryDirectory(prefix="weerlab_ecmwf_pluim_", dir=RUNTIME_ROOT) as temp_name:
         temp_dir = Path(temp_name)
         try:
-            for batch_number, batch_steps in enumerate(chunks(steps, args.batch_steps), start=1):
-                batch_indexes = [step_to_index[step] for step in batch_steps]
-                if all(
-                    np.isfinite(values[:, :, batch_indexes]).all()
-                    for values in raw.values()
-                ):
-                    print(
-                        f"  batch {batch_number}: steps {batch_steps[0]}..{batch_steps[-1]} "
-                        "uit compact checkpoint",
-                        flush=True,
-                    )
-                    continue
-                batch_params = tuple(p for p in ("tp", "sf") if p in raw and not np.isfinite(raw[p+"_packing_error"][:,:,batch_indexes]).all()) if all(np.isfinite(raw[p][:,:,batch_indexes]).all() for p in raw_params) else raw_params
-                batch_started = time.monotonic()
-                pf_path = temp_dir / f"pf_{batch_number:03d}.grib2"
-                fc_path = temp_dir / f"fc_{batch_number:03d}.grib2"
-                batch_bytes = 0
-                batch_download = 0.0
-                try:
-                    size, elapsed = retrieve_batch(
-                        client,
-                        run,
-                        cycle,
-                        batch_steps,
-                        batch_params,
-                        pf_path,
-                        perturbed=True,
-                    )
-                    batch_bytes += size
-                    batch_download += elapsed
-                    update_peak_temp(metrics, temp_dir, max_temp_bytes)
-                    size, elapsed = retrieve_batch(
-                        client,
-                        run,
-                        cycle,
-                        batch_steps,
-                        batch_params,
-                        fc_path,
-                        perturbed=False,
-                    )
-                    batch_bytes += size
-                    batch_download += elapsed
-                    update_peak_temp(metrics, temp_dir, max_temp_bytes)
-
-                    decode_started = time.monotonic()
-                    grid_points, pf_messages = decode_batch(
-                        pf_path,
-                        True,
-                        batch_steps,
-                        batch_params,
-                        stations,
-                        step_to_index,
-                        raw,
-                        grid_points,
-                    )
-                    grid_points, fc_messages = decode_batch(
-                        fc_path,
-                        False,
-                        batch_steps,
-                        batch_params,
-                        stations,
-                        step_to_index,
-                        raw,
-                        grid_points,
-                    )
-                    decode_elapsed = time.monotonic() - decode_started
-                    metrics.grib_bytes += batch_bytes
-                    metrics.download_seconds += batch_download
-                    metrics.decode_seconds += decode_elapsed
-                    metrics.batches += 1
-                    print(
-                        f"  batch {batch_number}: steps {batch_steps[0]}..{batch_steps[-1]}, "
-                        f"{batch_bytes / 1024**2:.1f} MiB, download {batch_download:.1f}s, "
-                        f"decode {decode_elapsed:.1f}s, messages {pf_messages + fc_messages}, "
-                        f"elapsed {time.monotonic() - metrics.started_monotonic:.1f}s",
-                        flush=True,
-                    )
-                finally:
-                    pf_path.unlink(missing_ok=True)
-                    fc_path.unlink(missing_ok=True)
-                    remaining = directory_size(temp_dir)
-                    if remaining:
-                        raise RuntimeError(
-                            f"temporary source cleanup left {remaining} bytes after batch {batch_number}"
+            if args.workers > 1:
+                jobs=[]
+                for batch_number,batch_steps in enumerate(chunks(steps,args.batch_steps),1):
+                    indexes=[step_to_index[h] for h in batch_steps]
+                    if all(np.isfinite(v[:,:,indexes]).all() for v in raw.values()):
+                        print(f"  batch {batch_number}: steps {batch_steps[0]}..{batch_steps[-1]} uit compact checkpoint",flush=True)
+                        continue
+                    params=tuple(p for p in ("tp","sf") if p in raw and not np.isfinite(raw[p+"_packing_error"][:,:,indexes]).all()) if all(np.isfinite(raw[p][:,:,indexes]).all() for p in raw_params) else raw_params
+                    jobs.append((batch_number,batch_steps,params))
+                with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers,mp_context=multiprocessing.get_context('spawn')) as pool:
+                    def submit(pool,job):
+                        number,h,params=job
+                        return pool.submit(process_native_batch,args.source,run,cycle,h,params,stations,grid_points,str(temp_dir),max_temp_bytes//args.workers)
+                    for number,result in bounded_batch_results(pool,jobs,submit,args.workers):
+                        grid_points=merge_native_batch(raw,step_to_index,grid_points,result)
+                        metrics.grib_bytes+=result['bytes'];metrics.download_seconds+=result['download'];metrics.decode_seconds+=result['decode'];metrics.batches+=1
+                        metrics.peak_temp_bytes=max(metrics.peak_temp_bytes,result['peak']*args.workers)
+                        print(f"  parallel batch {number}: steps {result['steps']}, download {result['download']:.1f}s, decode {result['decode']:.1f}s",flush=True)
+                        if run_checkpoint is not None:save_checkpoint(run_checkpoint,run,steps,stations,raw_params,raw,grid_points,metrics)
+            else:
+                for batch_number, batch_steps in enumerate(chunks(steps, args.batch_steps), start=1):
+                    batch_indexes = [step_to_index[step] for step in batch_steps]
+                    if all(
+                        np.isfinite(values[:, :, batch_indexes]).all()
+                        for values in raw.values()
+                    ):
+                        print(
+                            f"  batch {batch_number}: steps {batch_steps[0]}..{batch_steps[-1]} "
+                            "uit compact checkpoint",
+                            flush=True,
                         )
-                if time.monotonic() - batch_started <= 0:
-                    raise RuntimeError("invalid batch timing")
-                if run_checkpoint is not None and grid_points is not None:
-                    save_checkpoint(
-                        run_checkpoint,
-                        run,
-                        steps,
-                        stations,
-                        raw_params,
-                        raw,
-                        grid_points,
-                        metrics,
-                    )
+                        continue
+                    batch_params = tuple(p for p in ("tp", "sf") if p in raw and not np.isfinite(raw[p+"_packing_error"][:,:,batch_indexes]).all()) if all(np.isfinite(raw[p][:,:,batch_indexes]).all() for p in raw_params) else raw_params
+                    batch_started = time.monotonic()
+                    pf_path = temp_dir / f"pf_{batch_number:03d}.grib2"
+                    fc_path = temp_dir / f"fc_{batch_number:03d}.grib2"
+                    batch_bytes = 0
+                    batch_download = 0.0
+                    try:
+                        size, elapsed = retrieve_batch(
+                            client,
+                            run,
+                            cycle,
+                            batch_steps,
+                            batch_params,
+                            pf_path,
+                            perturbed=True,
+                        )
+                        batch_bytes += size
+                        batch_download += elapsed
+                        update_peak_temp(metrics, temp_dir, max_temp_bytes)
+                        size, elapsed = retrieve_batch(
+                            client,
+                            run,
+                            cycle,
+                            batch_steps,
+                            batch_params,
+                            fc_path,
+                            perturbed=False,
+                        )
+                        batch_bytes += size
+                        batch_download += elapsed
+                        update_peak_temp(metrics, temp_dir, max_temp_bytes)
 
+                        decode_started = time.monotonic()
+                        grid_points, pf_messages = decode_batch(
+                            pf_path,
+                            True,
+                            batch_steps,
+                            batch_params,
+                            stations,
+                            step_to_index,
+                            raw,
+                            grid_points,
+                        )
+                        grid_points, fc_messages = decode_batch(
+                            fc_path,
+                            False,
+                            batch_steps,
+                            batch_params,
+                            stations,
+                            step_to_index,
+                            raw,
+                            grid_points,
+                        )
+                        decode_elapsed = time.monotonic() - decode_started
+                        metrics.grib_bytes += batch_bytes
+                        metrics.download_seconds += batch_download
+                        metrics.decode_seconds += decode_elapsed
+                        metrics.batches += 1
+                        print(
+                            f"  batch {batch_number}: steps {batch_steps[0]}..{batch_steps[-1]}, "
+                            f"{batch_bytes / 1024**2:.1f} MiB, download {batch_download:.1f}s, "
+                            f"decode {decode_elapsed:.1f}s, messages {pf_messages + fc_messages}, "
+                            f"elapsed {time.monotonic() - metrics.started_monotonic:.1f}s",
+                            flush=True,
+                        )
+                    finally:
+                        pf_path.unlink(missing_ok=True)
+                        fc_path.unlink(missing_ok=True)
+                        remaining = directory_size(temp_dir)
+                        if remaining:
+                            raise RuntimeError(
+                                f"temporary source cleanup left {remaining} bytes after batch {batch_number}"
+                            )
+                    if time.monotonic() - batch_started <= 0:
+                        raise RuntimeError("invalid batch timing")
+                    if run_checkpoint is not None and grid_points is not None:
+                        save_checkpoint(
+                            run_checkpoint,
+                            run,
+                            steps,
+                            stations,
+                            raw_params,
+                            raw,
+                            grid_points,
+                            metrics,
+                        )
             if any(not np.isfinite(values).all() for values in raw.values()):
                 raise RuntimeError("one or more member/station/step combinations are missing")
             fields = transform_fields(raw)

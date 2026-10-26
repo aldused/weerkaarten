@@ -40,7 +40,7 @@ fi
 
 # Four daily cycles, explicitly selected after the normal public-data delay.
 if ((${#CYCLE_ARGS[@]} == 0)); then
-  read -r cycle_date cycle_hour < <("$PY" -c 'from datetime import datetime,timedelta,timezone; n=datetime.now(timezone.utc)-timedelta(hours=7); print(n.strftime("%Y%m%d"),n.hour//6*6)')
+  read -r cycle_date cycle_hour < <("$PY" -c 'from datetime import datetime,timedelta,timezone; n=datetime.now(timezone.utc)-timedelta(hours=6, minutes=30); print(n.strftime("%Y%m%d"),n.hour//6*6)')
   CYCLE_ARGS=(--date "$cycle_date" --cycle "$cycle_hour")
 fi
 
@@ -157,7 +157,7 @@ producer_command=(
 if ((${#CYCLE_ARGS[@]})); then
   producer_command+=("${CYCLE_ARGS[@]}")
 fi
-producer_command+=(--batch-steps 1 --max-temp-gib 1 --hourly)
+producer_command+=(--batch-steps 1 --max-temp-gib 4 --workers 4 --source ecmwf --hourly)
 if [[ "${PLUIM_DIRECT_ARCHIVE_ONLY:-0}" == "1" ]]; then
   producer_command+=(--archive-only)
 fi
