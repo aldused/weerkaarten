@@ -84,7 +84,11 @@
   // ── kaart ───────────────────────────────────────────────────────────────
   var kaart = L.map("kaart", { zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90, minZoom: 6, maxZoom: 13,
     maxBounds: [[49.4, 0.5], [55.2, 10.5]], attributionControl: true, preferCanvas: true });
-  kaart.fitBounds([[50.72, 3.3], [53.58, 7.25]]);
+  function heelNL(anim) {     // onderin ruimte voor de legenda, zodat Zuid-Limburg vrij blijft
+    var opt = { paddingTopLeft: [8, 8], paddingBottomRight: [8, Math.min(120, ($("legenda") ? $("legenda").offsetHeight : 90) + 16)], animate: !!anim };
+    if (anim) kaart.flyToBounds([[50.74, 3.35], [53.56, 7.23]], opt); else kaart.fitBounds([[50.74, 3.35], [53.56, 7.23]], opt);
+  }
+  heelNL(false);
   kaart.attributionControl.setPrefix(false);
   kaart.attributionControl.addAttribution("Radar: KNMI (CC BY 4.0)");
   var ondergrond = WeerlabOndergrond.voegToe(kaart, { pad: "" });
@@ -118,7 +122,7 @@
   }
   function eigenStijl(rol) {
     var k = lijnKleuren();
-    if (rol === "water") return { pane: "accuWater", stroke: true, color: k.water, weight: 0.6, fill: true, fillColor: k.water, fillOpacity: 0.62, interactive: false };
+    if (rol === "water") return { pane: "accuWater", stroke: false, fill: true, fillColor: k.water, fillOpacity: 0.62, interactive: false };
     if (rol === "kust") return { pane: "accuLijn", color: k.kust, weight: 1.1, fill: false, interactive: false };
     if (rol === "grens") return { pane: "accuLijn", color: k.grens, weight: 1.0, fill: false, interactive: false };
     return { pane: "accuLijn", color: k.prov, weight: 0.8, fill: false, interactive: false };
@@ -290,10 +294,11 @@
         L.polygon(gaten, { pane: "accuMasker", color: cs.getPropertyValue("--accent-strong").trim() || "#035e7a", weight: 2.5, fill: false, interactive: false })
       ]).addTo(kaart);
       kaart.invalidateSize();
-      if (vlieg === "direct") kaart.fitBounds(gebiedGrenzen(S.gebied), { padding: [24, 24], animate: false });
-      else if (vlieg !== false) kaart.flyToBounds(gebiedGrenzen(S.gebied), { padding: [24, 24], duration: 0.7 });
+      var pad = { paddingTopLeft: [24, 24], paddingBottomRight: [24, Math.min(120, $("legenda").offsetHeight + 20)] };
+      if (vlieg === "direct") kaart.fitBounds(gebiedGrenzen(S.gebied), Object.assign({ animate: false }, pad));
+      else if (vlieg !== false) kaart.flyToBounds(gebiedGrenzen(S.gebied), Object.assign({ duration: 0.7 }, pad));
     } else if (vlieg !== false) {
-      kaart.flyToBounds([[50.72, 3.3], [53.58, 7.25]], { duration: 0.7 });
+      heelNL(true);
     }
     if (S.veld) { herschaal(); tekenMaxima(); }
     schrijfHash();
@@ -1457,7 +1462,7 @@
 
   /** Mercator-view die de NL-uitsnede vult (met marge) in w×h. */
   function exportView(w, h, kader) {
-    var lon0 = 2.9, lon1 = 7.6, lat0 = 50.62, lat1 = 53.72;
+    var lon0 = 2.9, lon1 = 7.6, lat0 = 50.42, lat1 = 53.72;       // ruim zuid: Zuid-Limburg (50,75°N) niet tegen de rand
     if (S.gebied) {
       var gb = gebiedGrenzen(S.gebied), dl = (gb[1][1] - gb[0][1]) * 0.08, db = (gb[1][0] - gb[0][0]) * 0.08;
       lon0 = gb[0][1] - dl; lon1 = gb[1][1] + dl; lat0 = gb[0][0] - db; lat1 = gb[1][0] + db;

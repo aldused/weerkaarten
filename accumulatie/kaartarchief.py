@@ -80,12 +80,12 @@ def _my(lat):
 
 
 class View:
-    """Mercator-view die 2,9–7,6°O × 50,62–53,72°N in het kader past (als de site)."""
+    """Mercator-view die 2,9–7,6°O × 50,42–53,72°N in het kader past (als de site-export)."""
 
     def __init__(self, w, h, kader=None):
         kx, ky, kw, kh = kader or (0, 0, w, h)
         x0, x1 = math.radians(2.9), math.radians(7.6)
-        y0, y1 = float(_my(50.62)), float(_my(53.72))
+        y0, y1 = float(_my(50.42)), float(_my(53.72))      # ruim zuid: Zuid-Limburg niet tegen de rand
         self.s = min(kw / (x1 - x0), kh / (y1 - y0))
         self.cx, self.cy = (x0 + x1) / 2, (y0 + y1) / 2
         self.ox, self.oy = kx + kw / 2, ky + kh / 2
