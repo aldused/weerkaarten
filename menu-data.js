@@ -34,6 +34,21 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
+    "id": "neerslagaccumulatie",
+    "name": "Neerslagaccumulatie",
+    "description": "Hoeveel neerslag er viel · KNMI-radar per km, elk tijdvak",
+    "category": "nu",
+    "type": "nu",
+    "section": "Beeld",
+    "icon": "radar",
+    "href": "index.html#neerslagaccumulatie",
+    "src": "neerslagaccumulatie.html?v=20261026-3",
+    "thumbnail": null,
+    "facets": {},
+    "keywords": "Neerslagaccumulatie neerslagsom regensom hoeveel regen gevallen radar KNMI RTCOR RFCOR regenmeters bijgesteld etmaal week maand provincie Rijnmond kaartarchief",
+    "restricted": true
+  },
+  {
     "id": "nowcast",
     "name": "Buienverwachting",
     "description": "De verwachte beweging van buien",
