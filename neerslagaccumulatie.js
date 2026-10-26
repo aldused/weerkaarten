@@ -220,8 +220,9 @@
           }
         }
         if (v >= 0.1) {
-          var li = Math.min(1023, (v * schaalLut) | 0) * 4;
-          d[p] = lut[li]; d[p + 1] = lut[li + 1]; d[p + 2] = lut[li + 2]; d[p + 3] = 225;
+          var li = Math.min(1023, (v * schaalLut) | 0) * 4, rand = Math.min(ri, NR - 1 - ri, ki, NK - 1 - ki);
+          d[p] = lut[li]; d[p + 1] = lut[li + 1]; d[p + 2] = lut[li + 2];
+          d[p + 3] = rand >= 8 ? 225 : 225 * (rand + 0.5) / 8;     // zacht uitlopen aan de rand van het radargebied
         }
         if (s === 2 && arceer && ((i - j + 4096) % streep) < streep / 3) { d[p] = 80; d[p + 1] = 80; d[p + 2] = 80; d[p + 3] = 200; }
       }
@@ -302,6 +303,23 @@
     var d = C.dichtstePlaats(lon, lat, S.plaatsen, km || 6);
     return d ? d.plaats.naam : null;
   }
+  /**
+   * Naam voor een maximum: de plaats als die dichtbij ligt, anders afstand en richting
+   * vanaf de dichtstbijzijnde plaats ("11 km N van Pieterburen") — nooit de
+   * provincienaam, want "Groningen" boven de Waddenzee leest als de stad.
+   */
+  var RICHTING = ["N", "NO", "O", "ZO", "Z", "ZW", "W", "NW"];
+  var NAAM_KM = 2;     // alleen een plaatsnaam als de plaats binnen 2 km van het maximum ligt
+  function locatieNaam(lon, lat, km) {
+    var dicht = C.dichtstePlaats(lon, lat, S.plaatsen, km || 6);
+    if (dicht) return dicht.plaats.naam;
+    var ver = C.dichtstePlaats(lon, lat, S.plaatsen, 60);
+    if (!ver) return lat.toFixed(2) + "°N " + lon.toFixed(2) + "°O";
+    var p = ver.plaats, dx = (lon - p.lon) * Math.cos(lat * Math.PI / 180), dy = lat - p.lat;
+    var hoek = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+    return Math.round(ver.km) + " km " + RICHTING[Math.round(hoek / 45) % 8] + " van " + p.naam;
+  }
+  function bijNaam(naam) { return / van /.test(naam) ? ", " + naam : " bij " + naam; }
 
   // ── regenmeters (KNMI-neerslagnet, handmatig, 08–08 UTC) ────────────────
   var STATIONS_URL = LOKAAL ? "neerslagstations.json" : "https://data.weerlab.nl/neerslagstations.json";
@@ -583,7 +601,7 @@
   }
   function natste(filter, minKm, km) {
     return C.toplijst(S.veld, filter, N_NATST, minKm).map(function (m, i) {
-      m.rang = i + 1; m.naam = plaatsNaam(m.lon, m.lat, km || 8) || provincieVan(m.cel) || (m.lat.toFixed(2) + "°N " + m.lon.toFixed(2) + "°O");
+      m.rang = i + 1; m.naam = locatieNaam(m.lon, m.lat, km || NAAM_KM);
       return m;
     });
   }
@@ -680,7 +698,7 @@
   kaart.on("mousemove", function (e) {
     var w = waardeOp(e.latlng.lng, e.latlng.lat);
     if (!w || !w.cel) { tip.style.display = "none"; return; }
-    var naam = plaatsNaam(e.latlng.lng, e.latlng.lat, 4);
+    var naam = locatieNaam(e.latlng.lng, e.latlng.lat, NAAM_KM);
     var idx = w.cel[0] * C.NKOL + w.cel[1];
     var h = (naam ? "<div class='plaats'>" + esc(naam) + "</div>" : "") +
       "<div class='waarde'>" + (w.waarde == null ? "geen data" : C.mm(w.waarde, 1) + " mm") + "</div>" +
@@ -926,8 +944,8 @@
     var v = S.veld, h = "<p class='meta'>Bron: <b>radarrastercellen</b> (ca. 1 km), geen stationsmetingen. Maxima liggen minstens 10 km uit elkaar, zodat één neerslagkern niet als meerdere plekken verschijnt.</p>";
     h += "<h3>Natste rastercellen in " + esc(gebiedNaam()) + "</h3><table class='lijst'><tr><th>Plaats (dichtstbij)</th><th style='text-align:right'>Som</th></tr>";
     C.toplijst(v, inGebied, 10, S.gebied ? 5 : 10).forEach(function (m, i) {
-      var naam = plaatsNaam(m.lon, m.lat, 8);
-      h += rij((i + 1) + ". " + (naam ? "bij " + naam : m.lat.toFixed(3) + "°N " + m.lon.toFixed(3) + "°O"), provincieVan(m.cel) + (m.tel < v.verwacht ? " · onvolledig" : ""), m.som, m.lat, m.lon);
+      var naam = locatieNaam(m.lon, m.lat, NAAM_KM);
+      h += rij((i + 1) + ". " + (/ van /.test(naam) ? naam : "bij " + naam), provincieVan(m.cel) + (m.tel < v.verwacht ? " · onvolledig" : ""), m.som, m.lat, m.lon);
     });
     h += "</table><h3>Hoogste per provincie</h3><table class='lijst'>";
     var perProv = S.provincies.map(function (naam, pi) {
@@ -1235,7 +1253,7 @@
       }
       return null;
     }
-    var alleTop = natste(rmFilter, 5, 5), top = alleTop.filter(zichtbaar);
+    var alleTop = natste(rmFilter, 5), top = alleTop.filter(zichtbaar);
     ctx.font = "800 26px DM Sans, sans-serif";
     top.forEach(function (m) {
       var q = rmPx(m.lon, m.lat), t = m.naam + "  " + C.mm(m.som, 0) + " mm";
@@ -1273,7 +1291,7 @@
     ctx.fillText(C.nlTijd(p.begin, { kort: true }) + " – " + C.nlTijd(p.eind, { kort: true }) + " · " + duurTekst(p.eind - p.begin), bx, y); y += 30;
     if (alleTop[0]) {
       ctx.fillStyle = "#0f172a"; ctx.font = "700 22px DM Sans, sans-serif";
-      ctx.fillText("Hoogste som: " + C.mm(alleTop[0].som, 1) + " mm bij " + alleTop[0].naam, bx, y);
+      ctx.fillText("Hoogste som: " + C.mm(alleTop[0].som, 1) + " mm" + bijNaam(alleTop[0].naam), bx, y);
     }
     // legenda
     var lx = 36, ly = H - 98, lb = 620;
@@ -1426,7 +1444,7 @@
         c.toBlob(function (b) { laden(""); download(b, "neerslagaccumulatie_rijnmond" + (S.laag === "bijgesteld" ? "_bijgesteld" : "") + "_" + iso(p.begin).slice(0, 13).replace(/[-:T]/g, "") + "-" + iso(p.eind).slice(0, 13).replace(/[-:T]/g, "") + ".png"); }, "image/png");
       }).catch(function (e) { laden(""); fout("Export mislukt: " + e.message); });
     }
-    var maat = soort === "png" ? [2400, 2700] : soort === "169" ? [1920, 1080] : [1080, 1080];
+    var maat = soort === "png" ? [2400, 3200] : soort === "169" ? [1920, 1080] : [1080, 1080];
     laden("Afbeelding maken…");
     Promise.all(EXPORT_GEO.map(laadGeo))
       .then(function (geo) { return maakExportBeeld(maat[0], maat[1], geo); })
@@ -1473,10 +1491,15 @@
   function maakExportBeeld(W, H, geo) {
     var cv = document.createElement("canvas"); cv.width = W; cv.height = H;
     var ctx = cv.getContext("2d"), u = Math.min(W, H) / 1080, p = S.periode, v = S.veld;
-    var liggend = W / H > 1.3;
-    var kader = liggend ? { x: Math.round(W * 0.30), y: 0, w: Math.round(W * 0.70), h: H } : { x: 0, y: 0, w: W, h: H };
+    var liggend = W / H > 0.95;          // 16:9 én 1:1: tekstpaneel links, kaart rechts in een staand vlak
+    var paneel = W / H > 1.3 ? 0.30 : 0.36;
+    var kader = liggend ? { x: Math.round(W * paneel), y: 0, w: W - Math.round(W * paneel), h: H } : { x: 0, y: 0, w: W, h: H };
     // Provincie/regio staand of vierkant: boven ruimte voor de titel, onder voor de legenda (kaart vult niet meer de hele hoogte)
-    if (S.gebied && !liggend) kader = { x: 0, y: Math.round(250 * u), w: W, h: Math.round(H - 250 * u - 175 * u) };
+    // Staand/vierkant: vaste band boven (titel) en onder (legenda), zodat die nooit over de kaart vallen
+    if (!liggend) {
+      var boven = Math.round(((S.laag === "bijgesteld" ? 268 : 234) + 40) * u), onder = Math.round(205 * u);
+      kader = { x: 0, y: boven, w: W, h: H - boven - onder };
+    }
     var view = exportView(W, H, kader);
     ctx.fillStyle = "#c8dde5"; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = "#f1f0e8"; tekenGeo(ctx, geo[0], view, true); tekenGeo(ctx, geo[1], view, true);
@@ -1498,21 +1521,29 @@
       ctx.fillStyle = "rgba(246,248,251,.62)"; ctx.fill("evenodd"); ctx.restore();
       ctx.strokeStyle = "#035e7a"; ctx.lineWidth = 3 * u; tekenGeo(ctx, gf, view, false);
     }
+    // posterlayout: buiten het kaartvlak effen achtergrond (geen schuine radarranden in de banden)
+    ctx.fillStyle = liggend ? "#00205b" : "#f6f8fb";
+    if (liggend) ctx.fillRect(0, 0, kader.x, H);
+    else { ctx.fillRect(0, 0, W, kader.y); ctx.fillRect(0, kader.y + kader.h, W, H - kader.y - kader.h); }
     // maxima
     var alleTop = natsteLandelijk(), top = alleTop.filter(zichtbaar);
     ctx.font = "700 " + Math.round(22 * u) + "px DM Sans, sans-serif"; ctx.textBaseline = "middle";
-    var bezet = [];     // labelvakken: bij overlap rechts → links → boven → onder proberen
+    // labelvakken: bij overlap rechts → links → boven → onder proberen; titel- en legendaruimte zijn taboe
+    var bezet = liggend ? [[0, 0, kader.x, H]] : [[0, 0, W, kader.y], [0, kader.y + kader.h, W, H]];
     top.forEach(function (m) {
       var pt = view.px(m.lon, m.lat), t = m.naam + "  " + C.mm(m.som, 0) + " mm";
       var tw = ctx.measureText(t).width, th = 24 * u, opties = [
         [pt[0] + 10 * u, pt[1], "left"], [pt[0] - 10 * u, pt[1], "right"],
         [pt[0] + 6 * u, pt[1] - th, "left"], [pt[0] + 6 * u, pt[1] + th, "left"]];
-      var keus = opties[0];
+      var keus = null;
       for (var i = 0; i < opties.length; i++) {
         var o = opties[i], x0 = o[2] === "left" ? o[0] : o[0] - tw, vak = [x0, o[1] - th / 2, x0 + tw, o[1] + th / 2];
+        if (vak[0] < 8 * u || vak[2] > W - 8 * u) continue;
         if (!bezet.some(function (b) { return vak[0] < b[2] && vak[2] > b[0] && vak[1] < b[3] && vak[3] > b[1]; })) { keus = o; bezet.push(vak); break; }
       }
+      if (!keus) return;               // past nergens: stip én label weg (geen losse stippen)
       ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(pt[0], pt[1], 5 * u, 0, 7); ctx.fill();
+      bezet.push([pt[0] - 6 * u, pt[1] - 6 * u, pt[0] + 6 * u, pt[1] + 6 * u]);
       ctx.textAlign = keus[2];
       ctx.lineWidth = 4 * u; ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.strokeText(t, keus[0], keus[1]);
       ctx.fillText(t, keus[0], keus[1]);
@@ -1523,9 +1554,13 @@
     if (!liggend) { ctx.fillStyle = "rgba(255,255,255,.88)"; rondeRect(ctx, bx - 20 * u, by - 22 * u, bw + 40 * u, (S.laag === "bijgesteld" ? 268 : 234) * u, 12 * u); ctx.fill(); }
     else { ctx.fillStyle = "#00205b"; ctx.fillRect(0, 0, kader.x, H); }
     var tk = liggend ? "#fff" : "#00205b", tk2 = liggend ? "rgba(255,255,255,.82)" : "#334155";
-    ctx.textBaseline = "alphabetic"; ctx.fillStyle = tk; ctx.font = "700 " + Math.round(38 * u) + "px DM Sans, sans-serif";
+    ctx.textBaseline = "alphabetic"; ctx.fillStyle = tk;
+    var titel = "Neerslagaccumulatie " + gebiedNaam(), tg = 38 * u;      // krimpt tot het langste woord in de kolom past
+    ctx.font = "700 " + Math.round(tg) + "px DM Sans, sans-serif";
+    var langste = titel.split(" ").reduce(function (m, w) { return Math.max(m, ctx.measureText(w).width); }, 0);
+    if (langste > bw) { tg *= bw / langste; ctx.font = "700 " + Math.floor(tg) + "px DM Sans, sans-serif"; }
     var y = by + 34 * u;
-    y = tekstRegels(ctx, "Neerslagaccumulatie " + gebiedNaam(), bx, y, bw, 44 * u);
+    y = tekstRegels(ctx, titel, bx, y, bw, tg * 1.16);
     if (S.laag === "bijgesteld") {
       ctx.font = "700 " + Math.round(22 * u) + "px DM Sans, sans-serif";
       var lw0 = ctx.measureText("Radar bijgesteld met regenmeters").width;
@@ -1538,7 +1573,7 @@
     y = tekstRegels(ctx, p.label + " · " + duurTekst(p.eind - p.begin), bx, y + 2 * u, bw, 28 * u);
     if (alleTop[0]) {
       ctx.fillStyle = tk; ctx.font = "700 " + Math.round(24 * u) + "px DM Sans, sans-serif";
-      y = tekstRegels(ctx, "Hoogste som: " + C.mm(alleTop[0].som, 1) + " mm bij " + alleTop[0].naam, bx, y + 14 * u, bw, 30 * u);
+      y = tekstRegels(ctx, "Hoogste som: " + C.mm(alleTop[0].som, 1) + " mm" + bijNaam(alleTop[0].naam), bx, y + 14 * u, bw, 30 * u);
     }
     // legenda
     var lw = liggend ? bw : Math.min(W - 80 * u, 760 * u), lx = bx, ly = liggend ? H - 230 * u : H - 150 * u;

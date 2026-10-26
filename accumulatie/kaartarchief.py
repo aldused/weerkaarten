@@ -34,7 +34,8 @@ from .periode import NL, UTC, umin, van_umin
 
 REPO = Path(__file__).resolve().parent.parent
 FONT = "/System/Library/Fonts/Helvetica.ttc"
-B, H = 1350, 1500
+B, H = 1350, 1800                       # staand; boven en onder vaste banden voor titel en legenda
+BAND_BOVEN, BAND_ONDER = 330, 250       # px (bij B=1350); de kaart zelf valt daar nooit onder
 SS = 2   # supersampling voor gladde lijnen
 
 PALET = [  # gelijk aan accumulatie_core.js
@@ -126,7 +127,9 @@ def veld_rgba(view, w, h, mm, status, mx):
     nat = (st > 0) & (v >= 0.1)
     li = np.minimum(1023, (v / mx * 1023).astype(int))
     out[nat, :3] = LUT[li[nat]]
-    out[nat, 3] = 235
+    # zacht uitlopen over de laatste 8 cellen van het radargebied (geen harde schuine rand)
+    rand = np.clip(np.minimum.reduce([r, raster.NRIJ - r, k, raster.NKOL - k]) / 8.0, 0, 1)
+    out[nat, 3] = (235 * rand[nat]).astype(np.uint8)
     geen = binnen & (st == 0)
     out[geen] = (150, 150, 150, 120)
     return out
@@ -200,6 +203,22 @@ def toplijst(som, tel, masker, n, min_km):
 _PLAATSEN = None
 
 
+RICHTING = ["N", "NO", "O", "ZO", "Z", "ZW", "W", "NW"]
+
+
+def locatie_naam(lon, lat, km=2):
+    """Plaatsnaam alleen binnen km van het punt, anders "11 km N van Pieterburen" (nooit een provincienaam)."""
+    naam = plaats_bij(lon, lat, km)
+    if naam:
+        return naam
+    global _PLAATSEN
+    cl = math.cos(math.radians(lat))
+    best = min(_PLAATSEN, key=lambda p: ((p["lon"] - lon) * cl * 111.32) ** 2 + ((p["lat"] - lat) * 110.57) ** 2)
+    dx, dy = (lon - best["lon"]) * cl * 111.32, (lat - best["lat"]) * 110.57
+    hoek = (math.degrees(math.atan2(dx, dy)) + 360) % 360
+    return f"{round(math.hypot(dx, dy))} km {RICHTING[round(hoek / 45) % 8]} van {best['naam']}"
+
+
 def plaats_bij(lon, lat, max_km=8):
     global _PLAATSEN
     if _PLAATSEN is None:
@@ -223,7 +242,7 @@ LAGEN = {
 def render(v, titel, sub, gebieden, verwerkt: datetime, laag: str = "ruw") -> bytes:
     """PNG (bytes) van veld v met titel, periode, legenda, maxima en bron."""
     W, Hh = B * SS, H * SS
-    view = View(W, Hh)
+    view = View(W, Hh, (0, BAND_BOVEN * SS, W, Hh - (BAND_BOVEN + BAND_ONDER) * SS))
     img = Image.new("RGBA", (W, Hh), (200, 221, 229, 255))
     d = ImageDraw.Draw(img)
     teken_geo(d, geo("basemap/europa_land.json"), view, vul=(241, 240, 232, 255))
@@ -255,18 +274,32 @@ def render(v, titel, sub, gebieden, verwerkt: datetime, laag: str = "ruw") -> by
     kaal = kaal.convert("RGB").resize((360, 360), Image.LANCZOS)
     tbuf = io.BytesIO()
     kaal.save(tbuf, "PNG", optimize=True)
+    # posterlayout: kaart alleen in het middenvlak, banden effen (titel en legenda staan nooit over de kaart)
+    ImageDraw.Draw(img).rectangle([0, 0, B, BAND_BOVEN], fill=(246, 248, 251, 255))
+    ImageDraw.Draw(img).rectangle([0, H - BAND_ONDER, B, H], fill=(246, 248, 251, 255))
     d = ImageDraw.Draw(img)
     u = B / 1080
-    # maxima
-    top = toplijst(v.som, v.telling, nl, 3, 25)
+    # 5 natste plekken; labels nooit in de titel-/legendaband of over elkaar
+    top = toplijst(v.som, v.telling, nl, 5, 25)
     f = font(21 * u, True)
+    bezet = [(0, 0, B, BAND_BOVEN), (0, H - BAND_ONDER, B, H)]
     for r, k, lon, lat, s in top:
         x, y = view.px(lon, lat)
         x, y = float(x) / SS, float(y) / SS
-        t = f"{plaats_bij(lon, lat) or ''}  {s / 100:.0f} mm".strip()
-        d.ellipse([x - 5 * u, y - 5 * u, x + 5 * u, y + 5 * u], fill=(17, 17, 17, 255))
-        d.text((x + 10 * u, y), t, font=f, fill=(17, 17, 17, 255), anchor="lm",
-               stroke_width=int(3 * u), stroke_fill=(255, 255, 255, 230))
+        t = f"{locatie_naam(lon, lat)}  {s / 100:.0f} mm"
+        tw, th = d.textlength(t, font=f), 26 * u
+        stip = (x - 6 * u, y - 6 * u, x + 6 * u, y + 6 * u)
+        if any(stip[0] < b[2] and stip[2] > b[0] and stip[1] < b[3] and stip[3] > b[1] for b in bezet):
+            continue
+        for ax, ay, anker in ((x + 10 * u, y, "lm"), (x - 10 * u, y, "rm"), (x + 6 * u, y - th, "lm"), (x + 6 * u, y + th, "lm")):
+            vak = (ax, ay - th / 2, ax + tw, ay + th / 2) if anker == "lm" else (ax - tw, ay - th / 2, ax, ay + th / 2)
+            if vak[0] < 6 or vak[2] > B - 6 or any(vak[0] < b[2] and vak[2] > b[0] and vak[1] < b[3] and vak[3] > b[1] for b in bezet):
+                continue
+            bezet += [vak, stip]
+            d.ellipse([x - 5 * u, y - 5 * u, x + 5 * u, y + 5 * u], fill=(17, 17, 17, 255))
+            d.text((ax, ay), t, font=f, fill=(17, 17, 17, 255), anchor=anker,
+                   stroke_width=int(3 * u), stroke_fill=(255, 255, 255, 230))
+            break                          # past het nergens: stip én label weg (geen losse stippen)
     # tekstblok
     bx, by = 40 * u, 40 * u
     kop, laaglabel = LAGEN[laag]
@@ -285,8 +318,8 @@ def render(v, titel, sub, gebieden, verwerkt: datetime, laag: str = "ruw") -> by
         d.text((bx, yy), regel, font=font(19 * u), fill=(51, 65, 85, 255))
         yy += 26 * u
     if top:
-        pb = plaats_bij(top[0][2], top[0][3])
-        d.text((bx, yy + 4 * u), f"Hoogste som: {top[0][4] / 100:.1f} mm".replace(".", ",") + (f" bij {pb}" if pb else ""),
+        pb = locatie_naam(top[0][2], top[0][3])
+        d.text((bx, yy + 4 * u), f"Hoogste som: {top[0][4] / 100:.1f} mm".replace(".", ",") + (f", {pb}" if " van " in pb else f" bij {pb}"),
                font=font(20 * u, True), fill=(15, 23, 42, 255))
     # legenda
     lw, lx, ly = 720 * u, 40 * u, H - 150 * u
@@ -430,7 +463,7 @@ def werk_bij(arch: Archief, _gewijzigd=None, laatste: datetime | None = None, fo
             "soort": soort, "label": label, "titel": titel, "begin": f"{b:%Y-%m-%dT%H:%MZ}",
             "eind": f"{e:%Y-%m-%dT%H:%MZ}", "png": png_rel, "thumb": f"archief/{soort}/{label}_t.png",
             "rev": rev, "max": top[0][4] if top else 0,
-            "maxplaats": plaats_bij(top[0][2], top[0][3]) if top else None,
+            "maxplaats": locatie_naam(top[0][2], top[0][3]) if top else None,
             "compleet": v.aanwezig == v.verwacht and bool((v.telling[nl] == v.verwacht).all()),
             "rf": v.n_rf, "rt": v.n_rt, "frames": v.aanwezig, "verwacht": v.verwacht,
             "schaal": mx, "gemaakt": f"{verwerkt:%Y-%m-%dT%H:%MZ}",
