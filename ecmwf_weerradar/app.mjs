@@ -1,4 +1,4 @@
-import {TimeNavigation,isTimeNavigationKey} from './time-navigation.mjs';
+import {isTimeNavigationKey} from './time-navigation.mjs';
 import {readConvectiveFields} from './convective-fields.mjs';
 import {installGestureProfile} from './gesture-profile.mjs';
 import {buildSignificantFieldAsync,buildThunderFieldAsync,significantVariables,significantType,thunderVariables,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
@@ -114,31 +114,7 @@ function trimFieldCache(){
 const accumulationRequests=new Map(),significantRequests=new Map();
 // Keep two complete recent frames or modes; their keys include immutable time/run and viewport/settings.
 const retainedViews=new Map();
-const timeNavigation=new TimeNavigation(index=>{if(index===wanted)return;stopPlayback();requestFrame(index);},{cached:index=>!!frames[index]&&(retainedViews.has(viewKey(frames[index],mode))||nextFrameReady&&current?.timeline===frames&&index===(current.index+1)%frames.length)});
-$('hours').addEventListener('pointerover',event=>{
-  const button=event.target.closest('button[data-index]');
-  if(!button||button.contains(event.relatedTarget))return;
-  timeNavigation.hover(Number(button.dataset.index),event.pointerType);
-});
-$('hours').addEventListener('pointerleave',()=>timeNavigation.cancel());
-// The map also follows the mouse over the day buttons and the time bar,
-// without clicking. Touch keeps tap/drag behaviour.
-$('days').addEventListener('pointerover',event=>{
-  const button=event.target.closest('button[data-day]');
-  if(event.pointerType!=='mouse'||!button||button.contains(event.relatedTarget))return;
-  const day=dayGroups.find(d=>d.key===button.dataset.day);
-  const entry=chooseDayEntry(day,requestedContext?.timeline[wanted]?.time??current?.time);
-  if(entry&&frames[entry.index]?.time===entry.time)timeNavigation.hover(entry.index,event.pointerType);
-});
-$('days').addEventListener('pointerleave',()=>timeNavigation.cancel());
-$('time-slider').addEventListener('pointermove',event=>{
-  const slider=$('time-slider');
-  if(event.pointerType!=='mouse'||event.buttons||slider.disabled||!frames.length)return;
-  const r=slider.getBoundingClientRect();if(!r.width)return;
-  const ratio=Math.max(0,Math.min(1,(event.clientX-r.left)/r.width));
-  timeNavigation.hover(nearestIndex(frames,frames[0].time+ratio*Number(slider.max)*HOUR),event.pointerType);
-});
-$('time-slider').addEventListener('pointerleave',()=>timeNavigation.cancel());
+// Time selection requires a click, slider input, or keyboard action.
 
 let modePreparation,modePreparationTimer;
 function clearRetainedViews(){for(const view of retainedViews.values())removeLayers(view.ids);retainedViews.clear();}
@@ -262,7 +238,7 @@ const movingOverlay=new MovingOverlay(map,$('places'),queueCityDraw);
 map.on('movestart',()=>movingOverlay.start());
 map.on('move',()=>movingOverlay.move());
 map.on('moveend',()=>movingOverlay.finish());
-map.on('movestart',()=>{timeNavigation.cancel();clearTimeout(sliderTimer);cancelPreparation();cancelModePreparation();clearRetainedViews();});
+map.on('movestart',()=>{clearTimeout(sliderTimer);cancelPreparation();cancelModePreparation();clearRetainedViews();});
 map.on('resize',()=>{queueCityDraw();clearRetainedViews();cancelModePreparation();});
 map.on('moveend', () => {
   const b=map.getBounds(); updateCurrentBounds([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
@@ -370,7 +346,7 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
   $('model-select').setAttribute('aria-busy','true');
   const startup=++startupRevision;
   retryLoad=()=>start(undefined,modelId,focusRegion);
-  timeNavigation.cancel();refreshing=true;stopPlayback();cancelPreparation();cancelModePreparation();clearRetainedViews();clearTimeout(sliderTimer);revision++;renderController?.abort();status(`${MODELS[modelId].label}-verwachting ophalen…`);
+  refreshing=true;stopPlayback();cancelPreparation();cancelModePreparation();clearRetainedViews();clearTimeout(sliderTimer);revision++;renderController?.abort();status(`${MODELS[modelId].label}-verwachting ophalen…`);
   try {
     const now=Date.now();
     let timeline;
@@ -677,7 +653,7 @@ function loadMapDetails(){
 }
 let renderController;
 async function requestFrame(index,force=false,context={meta,timeline:frames,fullTimeline:current?.fullTimeline}){
-  timeNavigation.cancel();clearTimeout(sliderTimer);
+  clearTimeout(sliderTimer);
   if(!context.timeline.length)return;
   const fullTimeline=context.fullTimeline||context.timeline;
   const variable=mode==='temperature'?tempVariable(modelFor(context.meta)):null;
@@ -976,7 +952,7 @@ document.addEventListener('keydown',e=>{
   if(e.defaultPrevented)return;
   if(!$('area-overlay').hidden||document.querySelector('dialog[open]'))return;
   if(isTimeNavigationKey(e)&&frames.length&&!refreshing){
-    e.preventDefault();e.stopPropagation();timeNavigation.cancel();clearTimeout(sliderTimer);stopPlayback();
+    e.preventDefault();e.stopPropagation();clearTimeout(sliderTimer);stopPlayback();
     requestFrame(e.key==='Home'?0:e.key==='End'?frames.length-1:wanted+(e.key==='ArrowRight'?1:-1));
     return;
   }
@@ -985,7 +961,7 @@ document.addEventListener('keydown',e=>{
   if(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('input,select,textarea,dialog,#map,[contenteditable=true]'))return;
   if(e.code==='Space'&&!e.target.closest('button')){e.preventDefault();$('play').click();}
 },{capture:true});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){timeNavigation.cancel();clearTimeout(sliderTimer);stopPlayback();cancelPreparation();cancelModePreparation();}else prepareAdjacentFrames();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){clearTimeout(sliderTimer);stopPlayback();cancelPreparation();cancelModePreparation();}else prepareAdjacentFrames();});
 
 function sample(sampleData,lat,lon){
   if(!sampleData?.data?.values)return NaN;
