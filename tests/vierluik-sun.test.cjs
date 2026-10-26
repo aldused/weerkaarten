@@ -1,0 +1,6 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),S=require('../vierluik-sun'),C=require('../vierluik-core');
+const noon=Date.parse('2026-06-21T12:00:00Z');
+test('sunshine distinguishes diffuse global radiation from direct radiation',()=>{assert.ok(S.minutes(80,noon,52,5)<1);assert.ok(S.minutes(80,noon,52,5,true)>S.minutes(80,noon,52,5));assert.ok(S.minutes(900,noon,52,5)>50);});
+test('night stays zero; missing remains missing, including at night',()=>{assert.equal(S.minutes(500,Date.parse('2026-12-21T00:00Z'),52,5),0);assert.ok(Number.isNaN(S.minutes(NaN,Date.parse('2026-12-21T00:00Z'),52,5)));});
+test('sunrise interval cannot contain more sunny minutes than daylight',()=>{const t=Date.parse('2026-10-26T07:00Z'),r=S.reference(t,52,5);assert.ok(r.minutes>0&&r.minutes<60);assert.equal(S.minutes(2000,t,52,5,true),r.minutes);});
+test('derived grid retains missing cells, geometry, native UTC hours and units',()=>{const p={data:new Float32Array([800,NaN,0,500]),nSteps:1,nLat:2,nLon:2,nComp:1,grid:{lat_min:51,lat_max:52,lon_min:4,lon_max:5}},d=S.derive(p,['2026-06-21T12:00:00Z'],C.timeMs);assert.ok(d.data[0]>0&&d.data[0]<=60);assert.ok(Number.isNaN(d.data[1]));assert.equal(d.data[2],0);assert.equal(d.schaal,1);assert.equal(d.grid,p.grid);});

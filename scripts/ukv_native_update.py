@@ -97,6 +97,18 @@ def wind_components(speed,direction):
  radians=np.deg2rad(direction)
  return -speed*np.sin(radians),-speed*np.cos(radians)
 
+def solar_parameter(run,folder):
+ # ASDI supplies instantaneous direct horizontal flux. Trapezoidal hourly
+ # averages are estimates, not a native sunshine-duration observation.
+ raw=folder/'raw';raw.mkdir(parents=True,exist_ok=True);out=folder/'processed';out.mkdir(exist_ok=True)
+ field='radiation_flux_in_shortwave_direct_downward_at_surface'
+ jobs=[(url(run,h,field),raw/name(run,h,field)) for h in range(55)]
+ with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:list(pool.map(download,jobs))
+ sample=Sampler(jobs[0][1]);values=[sample.sample(read(p,'W m-2',run,h)) for h,(_,p) in enumerate(jobs)]
+ hourly=np.maximum((np.stack(values[:-1])+np.stack(values[1:]))*.5,0).astype('float32')
+ filename='ukv_native_data_straling_direct.bin';write_bin(out/filename,(hourly,))
+ return dict(file=f'ukv-native/{run:%Y%m%d%H}/{filename}',components=1,label='Geschatte uurgemiddelde directe straling (W/m²)',source='Met Office UKV direct horizontal flux; trapezoidal average of hourly instantaneous values; Crown copyright, CC BY-SA 4.0')
+
 def build(run,folder):
  raw=folder/'raw';raw.mkdir(parents=True,exist_ok=True);out=folder/'processed';out.mkdir(exist_ok=True)
  jobs=[(url(run,h,field),raw/name(run,h,field)) for h in range(1,55) for field,unit,label in FIELDS.values()]
@@ -131,6 +143,7 @@ def build(run,folder):
  for k,(arrays,label,source) in specs.items():
   filename=f'ukv_native_data_{k}.bin';write_bin(out/filename,arrays)
   params[k]=dict(file=f'ukv-native/{run:%Y%m%d%H}/{filename}',components=len(arrays),label=label,source='Met Office UKV 2 km (Crown copyright; CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/; uitgesneden en omgeroosterd): '+source)
+ params['straling_direct']=solar_parameter(run,folder)
  for k in ['temp','rv','dauwpunt']:params[k]['height_m']=1.5
  params['wolkenbasis']['kind']='ukv_cbh'
  meta=dict(model='Met Office UKV 2 km',run_utc=run.isoformat().replace('+00:00','Z'),run=run.astimezone(LOCAL).strftime('%d.%m.%Y %H:%M LT'),bijgewerkt=datetime.now(LOCAL).strftime('%d-%m-%Y %H:%M'),uren=54,tijden=[(run+timedelta(hours=h)).astimezone(LOCAL).isoformat() for h in range(1,55)],grid=GRID,parameters=params,overlay='harmonie_overlay.png',native_resolution_km=2,export_grid_step_degrees=.02,source='Met Office UKV, rechtstreeks via ASDI open data',attribution='British Crown copyright, Met Office; CC BY-SA 4.0',license='https://creativecommons.org/licenses/by-sa/4.0/',source_url='https://registry.opendata.aws/met-office-uk-deterministic/',schema_version=1)

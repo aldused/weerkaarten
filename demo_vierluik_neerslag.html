@@ -907,6 +907,7 @@ body.six-hours #map-focus-time { white-space:normal; }
 
 <script src="zesluik-runs.js?v=20261004-runs1"></script>
 <script src="vierluik-core.js?v=20261023-wintertijd"></script>
+<script src="vierluik-sun.js?v=20261026-native-zon"></script>
 <script src="vierluik-significant.js?v=20260928-significant-snel1"></script>
 <script>
 (function() {
@@ -1987,7 +1988,7 @@ function laagBeschikbaar(md, varNaam, modelId) {
   if (key === 'windrichting') return !!md.meta.parameters.wind;
   if (key === 'significant') return VierluikSignificant.required.every(function(k){return !!md.meta.parameters[k];});
   if (key === 'cumul') return !!md.meta.parameters.neerslag;
-  if (key === 'cumzon') return !!md.meta.parameters.zon;
+  if (key === 'zon' || key === 'cumzon') return !!(md.meta.parameters.zon || md.meta.parameters.straling_direct || md.meta.parameters.straling);
   if (key === 'radar') return !!(md.meta.parameters.radar || md.meta.parameters.neerslag);
   return !!md.meta.parameters[key];
 }
@@ -3111,6 +3112,17 @@ function loadParamIfNeeded(modelId, key) {
     return loadParamIfNeeded(modelId, 'neerslag').then(function() {
       if (!md.paramData['radar']) computeRadarUitNeerslag(md);
     });
+  }
+  if (key === 'zon' && !md.meta.parameters.zon) {
+    if(md.paramData.zon)return Promise.resolve();
+    var radiationKey=md.meta.parameters.straling_direct?'straling_direct':md.meta.parameters.straling?'straling':null;
+    if(!radiationKey)return Promise.resolve();
+    markeerLaden(md,'zon',true);
+    return loadParamIfNeeded(modelId,radiationKey).then(function(){
+      if(modelData[modelId]!==md || !md.paramData[radiationKey])return;
+      if(!md.paramData.zon)md.paramData.zon=VierluikSun.derive(md.paramData[radiationKey],md.meta.tijden,VierluikCore.timeMs,radiationKey==='straling_direct');
+      requestRender();
+    }).finally(function(){markeerLaden(md,'zon',false);});
   }
   if (key === 'cumzon') {
     if (md.paramData['cumzon']) return Promise.resolve();
