@@ -182,6 +182,10 @@ def main(argv: list[str]) -> int:
     args = p.parse_args(argv)
 
     out_path = Path(args.out)
+    import fcntl
+    lock = out_path.with_suffix('.lock').open('w')
+    try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError: return 0
     existing = {}
     if out_path.exists():
         try:
@@ -234,7 +238,11 @@ def main(argv: list[str]) -> int:
         "current_run": run_iso,
         "stations": stations_db,
     }
-    out_path.write_text(json.dumps(out_doc, separators=(",", ":")))
+    import os, tempfile
+    with tempfile.NamedTemporaryFile(mode='w', dir=out_path.parent, prefix='.jvens-', delete=False) as temp:
+        temp.write(json.dumps(out_doc, separators=(",", ":")))
+        temp.flush(); os.fsync(temp.fileno())
+    os.replace(temp.name, out_path)
     print(f"Geschreven: {out_path} ({out_path.stat().st_size} bytes), {total_added}/{len(STATIONS)} stations bijgewerkt")
     return 0 if total_added > 0 else 1
 

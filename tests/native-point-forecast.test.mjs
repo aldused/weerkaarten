@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {nativePointForecast,utcTimes} from '../cloudflare-worker/native-point-forecast.mjs';
+assert.deepEqual(utcTimes({tijden:['2026-10-25T01:00','2026-10-25T02:00','2026-10-25T02:00','2026-10-25T03:00']}),['2026-10-24T23:00:00.000Z','2026-10-25T00:00:00.000Z','2026-10-25T01:00:00.000Z','2026-10-25T02:00:00.000Z']);
+const grid={n_lat:2,n_lon:2,lat_min:51,lat_max:52,lon_min:4,lon_max:5};
+const run=new Date().toISOString(),m={run_utc:run,tijden:[run,new Date(Date.parse(run)+3600000).toISOString()],parameters:{}};
+const data={temp:[[10],[12]],rv:[[50],[70]],wind:[[0,0],[1,0]],neerslag:[[1],[4]],bewolking:[[.2,.3,.4],[.4,.5,.6]]};
+for(const [key,rows] of Object.entries(data))m.parameters[key]={key,grid,steps:2,components:rows[0].length,bytes_per_value:4};
+const bucket={async get(key,options){if(key.endsWith('.json'))return {json:async()=>m};const values=data[key]?.flat();if(!values)return null;const buf=new ArrayBuffer(values.length*4);const v=new DataView(buf);values.forEach((n,i)=>v.setFloat32(i*4,n,true));assert.equal(options.range.offset,16);return {arrayBuffer:async()=>buf};}};
+const url=new URL('https://om.weerlab.nl/om/forecast?latitude=51&longitude=4&models=knmi_harmonie_arome_netherlands&hourly=temperature_2m,dew_point_2m,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code&wind_speed_unit=kn');
+const x=await nativePointForecast(url,bucket);assert.deepEqual(x.hourly.temperature_2m,[10,12]);assert.equal(x.hourly.wind_direction_10m[0],null);assert(Math.abs(x.hourly.wind_speed_10m[1]-3.6/1.852)<1e-6);assert(x.hourly.dew_point_2m.every(Number.isFinite));assert(x.weerlab_unavailable_variables.includes('weather_code'));assert.deepEqual(x.hourly.weather_code,[null,null]);
+url.searchParams.set('models','icon_d2,knmi_harmonie_arome_netherlands');const multi=await nativePointForecast(url,bucket);assert.deepEqual(multi.hourly.temperature_2m_icon_d2,[10,12]);assert.deepEqual(multi.hourly.temperature_2m_knmi_harmonie_arome_netherlands,[10,12]);
+console.log('Native point forecasts: DST fold, model separation, wind units/calm, derived dewpoint, missing fields explicit.');

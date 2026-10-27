@@ -138,10 +138,11 @@ async function modelMetadata(m,signal){
  }));
 }
 async function modelData(m,base,fields,days,signal){
+ if(m.id==='ecmwf_aifs025')throw Error('AIFS-ensemble tijdelijk uitgeschakeld: nog geen eigen rechtstreekse bron');
  if(m.id==='icon_global'){fields=fields.split(',').filter(f=>['temperature_2m','dew_point_2m','relative_humidity_2m','precipitation','cloud_cover','wind_speed_10m','wind_direction_10m','wind_gusts_10m'].includes(f)).join(',');if(!fields)throw Error('Dit element ontbreekt in de rechtstreekse ICON Global EPS-bron');}
  for(let attempt=0;attempt<2;attempt++){
   const before=await modelMetadata(m,signal).catch(()=>null);
-  const q=new URLSearchParams({latitude:place.lat,longitude:place.lon,models:m.id,hourly:fields,forecast_days:view==='winter'?Math.min(16,days+1):days,wind_speed_unit:'kmh',timezone:'GMT',temporal_resolution:view==='winter'?'hourly':'native',...(view==='winter'?{daily:'temperature_2m_min,temperature_2m_max'}:{}),_weerlab_request:String(Date.now())});
+  const q=new URLSearchParams({latitude:place.lat,longitude:place.lon,models:m.id,hourly:fields,forecast_days:view==='winter'?Math.min(16,days+1):days,wind_speed_unit:'kmh',timezone:'GMT',temporal_resolution:view==='winter'?'hourly':'native',_weerlab_request:String(Date.now())});
   const data=await json(base+'?'+q,signal);if(!data.hourly?.time?.length)throw new Error('Geen gegevens ontvangen');
   const after=before?await modelMetadata(m,signal).catch(()=>null):null;
   if(before&&after&&metaSignature(before)!==metaSignature(after))continue;
@@ -156,7 +157,7 @@ async function load(){
  const days=Number($('days').value),start=Math.floor(Date.now()/DAY)*DAY;
  try{
   const base=location.protocol==='https:'&&/(^|\.)weerlab\.nl$/.test(location.hostname)?'https://om.weerlab.nl/om/ensemble':'https://ensemble-api.open-meteo.com/v1/ensemble';
-  const fields=view==='aifs'?'temperature_2m,precipitation,wind_speed_10m':view==='wolken'?'cloud_cover':view==='winter'?'temperature_2m,snowfall,snow_depth':view==='wind'?'wind_speed_10m,wind_gusts_10m':'temperature_2m,precipitation';
+  const fields=view==='aifs'?'temperature_2m,precipitation,wind_speed_10m':view==='wolken'?'cloud_cover':view==='winter'?'temperature_2m,snowfall':view==='wind'?'wind_speed_10m,wind_gusts_10m':'temperature_2m,precipitation';
   const results=await Promise.all((view==='aifs'?AIFS_MODELS:view==='winter'?MODELS.slice(0,1):MODELS).map(async m=>{
    try{return await modelData(m,base,view==='wolken'&&m.id==='ecmwf_ifs025'?'cloud_cover,cloud_cover_high,cloud_cover_mid,cloud_cover_low':fields,days,signal);}catch(e){return {...m,error:e.name==='AbortError'?'Laden duurde te lang':e.message};}
   }));
@@ -184,6 +185,6 @@ $('download').onclick=async()=>{
 };
 if(view==='wolken')document.querySelector('.comparison-note').textContent='Links: totale bewolking van ECMWF, GFS en ICON. Rechts: hoge, middelbare en lage bewolking van ECMWF. Staafjes tonen de mediaan; lijntjes de middelste 80% van de ensembleleden (P10–P90). Alle assen 0–100%.';
 if(view==='winter')document.querySelector('.comparison-note').textContent='Etmalen 00–24 UTC. Sneeuw vanaf 0,1 cm; sneeuwdek vanaf 1 cm op enig moment. Vorstkansen tellen koudere temperaturen mee. Alleen volledige etmalen en geldige leden tellen mee.';
-if(view==='aifs')document.querySelector('.comparison-note').textContent='ECMWF links, ECMWF AIFS rechts: temperatuur, neerslag en wind. Dezelfde tijdas en schaal per rij. Laatst beschikbare ensemblegegevens; runtijden kunnen verschillen. Neerslag per volledige 6 uur (UTC), wind met Beaufort-as. Ontbrekende gegevens blijven leeg.';
+if(view==='aifs')document.querySelector('.comparison-note').textContent='AIFS-ensemble is tijdelijk niet aangesloten. ECMWF IFS links blijft actueel. AIFS Single voor WGT/TX is een afzonderlijk product. '+'ECMWF links, ECMWF AIFS rechts: temperatuur, neerslag en wind. Dezelfde tijdas en schaal per rij. Laatst beschikbare ensemblegegevens; runtijden kunnen verschillen. Neerslag per volledige 6 uur (UTC), wind met Beaufort-as. Ontbrekende gegevens blijven leeg.';
 syncPlace();load();
 })(typeof window==='undefined'?globalThis:window);

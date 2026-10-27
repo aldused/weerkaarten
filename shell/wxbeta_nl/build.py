@@ -7,10 +7,10 @@ from om_common import fetch,parse,iso,UTC
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from basemap import BOUNDS,setup as map_setup,outlines as map_outlines
 from presentation import header as map_header,footer as map_footer
-REV='nl-native-gust-mosmap-local-6'
+REV='nl-ecmwf-direct-10day-1'
 ROOT=Path(__file__).resolve().parents[2]
 
-def steps(cycle):return list(range(3,145,3))+(list(range(150,361,6)) if cycle in (0,12) else [])
+def steps(cycle):return list(range(3,145,3))+(list(range(150,241,6)) if cycle in (0,12) else [])
 def source_meta(run):return fetch(f'https://api.open-meteo.com/data_run/ecmwf_ifs/{run:%Y/%m/%d/%H%M}Z/meta.json')
 def sample_point(p,run,leads):
  h=p['hourly'];lookup={parse(t):i for i,t in enumerate(h['time'])}
@@ -94,7 +94,7 @@ def render(task):
  valid=run+dt.timedelta(hours=lead);interval=3 if lead<=144 else 6
  map_header(fig,'Maximale windstoten op 10 m',run,valid,f'ECMWF IFS · native 9 km · maximum over {interval} uur · km/u')
  cax=fig.add_axes([.08,.075,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',ticks=levels,spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_label('Maximale windstoot 10 m (km/u) · lijnen: luchtdruk (hPa)',fontsize=10)
- map_footer(fig,'Modelwaarden · kleuren op land, cijfers ook op zee · ECMWF / Open-Meteo CC BY 4.0')
+ map_footer(fig,'Modelwaarden · kleuren op land, cijfers ook op zee · ECMWF Open Data rechtstreeks, CC BY 4.0')
  out.parent.mkdir(parents=True,exist_ok=True);temporary=out.with_suffix('.tmp.png');fig.savefig(temporary,facecolor='white',dpi=288);plt.close(fig);temporary.replace(out)
 
 def main():

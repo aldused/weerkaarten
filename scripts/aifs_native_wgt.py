@@ -10,7 +10,7 @@ ROOT=Path('/Volumes/WEERLAB/Modeldata/ECMWF/AIFS-WGT')
 BASE='https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com'
 PARAMS=['2t','2d','10u','10v','lcc','mcc','hcc','tcc','tp','ssrd','msl','skt']
 LAT=np.arange(49,56.001,.25);LON=np.arange(.5,11.501,.25)
-STEPS=np.arange(0,169,6)
+STEPS=np.arange(0,241,6)
 def stem(run,h):return f'{BASE}/{run:%Y%m%d}/{run:%H}z/aifs-single/0p25/oper/{run:%Y%m%d%H}0000-{h}h-oper-fc'
 def message(path,run,h,param):
  with path.open('rb') as f:g=ec.codes_grib_new_from_file(f)
@@ -63,7 +63,7 @@ def build(run,folder):
    if h==0 and p in errors:continue
    fields[p][i],err=message(raw/f'{h:03d}-{p}.grib2',run,int(h),p)
    if p in errors:errors[p][i]=err
- hours=np.arange(169)
+ hours=np.arange(int(STEPS[-1])+1)
  def interp(a):
   from scipy.interpolate import interp1d
   return interp1d(STEPS,a,axis=0)(hours)
@@ -79,6 +79,18 @@ def build(run,folder):
  meta={'schema_version':1,'model':'ECMWF AIFS 0,25°','run_utc':run.isoformat(),'native_resolution_km':31,'export_grid_step_degrees':.25,'tijden':[(run+timedelta(hours=int(h))).isoformat() for h in hours],'grid':dict(n_lat=len(LAT),n_lon=len(LON),lat_min=float(LAT[0]),lat_max=float(LAT[-1]),lon_min=float(LON[0]),lon_max=float(LON[-1])),'parameters':parameters,'source':'ECMWF Open Data direct via AWS','attribution':'© ECMWF 2026, CC-BY-4.0','interpolation':'native 6h -> hourly; wind vectors; precipitation and solar totals conserved','missing_fields':['snow_depth','wind_gusts_10m','soil_temperature_0cm','temperature_850hPa','temperature_925hPa']}
  path=out/'meta.json';temp=path.with_suffix('.tmp');temp.write_text(json.dumps(meta));temp.replace(path);return path
 
+def publish_points(meta):
+ import subprocess
+ from build_point_source import build_point_source
+ folder=meta.parent.parent
+ stamp=folder/'point-source-published.txt'
+ identity=meta.read_text()
+ if stamp.exists() and stamp.read_text()==identity:return
+ path,files=build_point_source('aifs',meta,folder/'point-source')
+ for file in sorted(files,key=lambda f:f.name=='meta.json'):
+  subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(file),'r2:weerlab-harmonie/point-source/aifs/'+file.name,'--header-upload','Cache-Control: public, max-age=60'],check=True)
+ stamp.write_text(identity)
+
 def ensure():
  assert_volume();ROOT.mkdir(parents=True,exist_ok=True)
  with (ROOT/'update.lock').open('w') as lock:
@@ -86,16 +98,20 @@ def ensure():
   now=datetime.now(timezone.utc)-timedelta(hours=7);run=now.replace(hour=now.hour//6*6,minute=0,second=0,microsecond=0)
   for _ in range(4):
    folder=ROOT/run.strftime('%Y%m%d%H');meta=folder/'processed/meta.json'
-   if meta.exists():
+   if meta.exists() and len(json.loads(meta.read_text()).get('tijden', [])) >= 240:
     m=json.loads(meta.read_text())
     if m.get('native_resolution_km')!=31 or m.get('model')!='ECMWF AIFS 0,25°':
      m.update(model='ECMWF AIFS 0,25°',native_resolution_km=31,export_grid_step_degrees=.25);tmp=meta.with_suffix('.tmp');tmp.write_text(json.dumps(m));tmp.replace(meta)
+    try:publish_points(meta)
+    except Exception as error:print("AIFS-puntpublicatie uitgesteld; WGT gebruikt eigen bestanden:",error,flush=True)
     return meta
    import requests
-   r=requests.head(stem(run,168)+'.index',timeout=20)
+   r=requests.head(stem(run,240)+'.index',timeout=20)
    if r.status_code==200:
     result=build(run,folder)
     for old in old_runs([p.name for p in ROOT.iterdir() if p.is_dir()],8,folder.name):shutil.rmtree(ROOT/old)
+    try:publish_points(result)
+    except Exception as error:print("AIFS-puntpublicatie uitgesteld; WGT gebruikt eigen bestanden:",error,flush=True)
     return result
    if r.status_code!=404:r.raise_for_status()
    run-=timedelta(hours=6)

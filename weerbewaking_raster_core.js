@@ -210,7 +210,7 @@
   }
   function parseEnsemble(txt) {
     const d = JSON.parse(txt), h = d.hourly; if (!h || !h.time) throw new Error('ensemble onleesbaar');
-    const times = h.time.map(t => new Date(t + ':00Z'));
+    const times = h.time.map(t => new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(t) ? t : t+'Z'));
     const series = (base) => { const out = []; if (h[base]) out.push(h[base]); for (let m = 1; m <= 50; m++) { const k = `${base}_member${String(m).padStart(2, '0')}`; if (h[k]) out.push(h[k]); } return out; };
     const temps = series('temperature_2m'), rains = series('precipitation');
     if (temps.length < 10) throw new Error('te weinig ensembleleden');
@@ -287,7 +287,7 @@
       const bits = []; for (let i = 2; i <= 6; i++) { const b = ens.dailyMax(starts[i], starts[i + 1]); if (b && b.p90 - b.p10 >= 3) bits.push(`${dn(i).toLowerCase()} (maximum tussen ${Math.round(b.p10)} en ${Math.round(b.p90)} graden)`); }
       out += '\nOnzekerheid\n' + (bits.length ? `Het ECMWF-ensemble toont een grote spreiding op ${join(bits)}. Houd hier rekening mee bij het gebruik van de verwachting.\n` : 'De ensembleleden van ECMWF zijn het goed met elkaar eens over het temperatuurverloop in de komende dagen.\n');
     }
-    return out + `\nBron: ${bron}, ECMWF-ensemble (Open-Meteo), KNMI via Meteoalarm.`;
+    return out + `\nBron: ${bron}, ECMWF-ensemble (eigen rechtstreekse aanvoer), KNMI via Meteoalarm.`;
   }
   function daySentences(d, hs, tz, prevDir, isToday, now) {
     const s = [], n = d.cloud || 0;
@@ -343,7 +343,7 @@
     const v = (k, i) => (h[k] && h[k][i] != null) ? h[k][i] : null;
     h.time.forEach((t, i) => {
       if (v('temperature_2m', i) == null) return;
-      const date = new Date(t + ':00Z'), cl = v('cloud_cover', i), dr = v('direct_radiation', i), su = v('sunshine_duration', i), curve = WP.Sunshine && WP.Sunshine.curves[src];
+      const date = new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(t) ? t : t+'Z'), cl = v('cloud_cover', i), dr = v('direct_radiation', i), su = v('sunshine_duration', i), curve = WP.Sunshine && WP.Sunshine.curves[src];
       const zonMin = dr != null ? WP.Sunshine.minuten(dr, date, city.lat, city.lon, curve) : (su == null ? null : Math.min(su / 60, WP.Sunshine.daylightMinutes(date, city.lat, city.lon)));
       const L = WP.SymbolLogic, neff = L.nEff((cl || 0) / 12.5, zonMin, WP.Sunshine.daylightMinutes(date, city.lat, city.lon)), nn = L.halfUp(neff), wx = L.wmo(v('weather_code', i), v('precipitation', i) || 0);
       hours.push({ date, interval: 3600e3, start: new Date(+date - 3600e3), temp: v('temperature_2m', i), dew: v('dew_point_2m', i), ww: v('weather_code', i), cloud: nn, nEff: neff, symbol: L.symbool(nn, wx),
@@ -363,7 +363,7 @@
       const [Y, M, D] = k.split('-').map(Number), date = new Date(Date.UTC(Y, M - 1, D)), wpDay = wp && wp.days.find(z => z.date.toISOString().slice(0, 10) === k), probs = hs.map(x => x.prob).filter(x => x != null);
       days.push({ date, tx: full ? Math.max(...temps) : null, tn: full ? Math.min(...temps) : null, ww: dww != null ? dww : pick.ww, cloud: ds ? ds.n : (cl.length ? Math.round(cl.reduce((a, b) => a + b, 0) / cl.length) : null),
         dir: (sx || sy) ? (Math.atan2(sx, sy) * 180 / Math.PI + 360) % 360 : null, kn: kn.length ? kn.reduce((a, b) => a + b, 0) / kn.length : null, gust: Math.max(0, ...hs.map(x => x.gust || 0)) || null,
-        sun: full ? hs.reduce((s, x) => s + (x.sun || 0), 0) / 60 : null, uvi: wpDay ? wpDay.uvi : null, uvLow: wpDay ? wpDay.uvLow : null, rain, rainN: 0, prob: probs.length ? Math.max(...probs) : null, symbol: ds ? ds.symbol : null, symbolN: null });
+        sun: full && hs.every(x=>x.sun!=null) ? hs.reduce((s, x) => s + x.sun, 0) / 60 : null, uvi: wpDay ? wpDay.uvi : null, uvLow: wpDay ? wpDay.uvLow : null, rain, rainN: 0, prob: probs.length ? Math.max(...probs) : null, symbol: ds ? ds.symbol : null, symbolN: null });
     }
     return { obs: wp ? wp.obs : null, days, hours, expires: Date.now() + 3600e3, fetched: Date.now() };
   }

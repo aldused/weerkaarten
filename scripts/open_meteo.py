@@ -23,9 +23,11 @@ Gebruik:
 """
 from __future__ import annotations
 
+import json
 import os
 from urllib.parse import urlsplit, parse_qsl, urlencode
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -40,6 +42,43 @@ import weerlab_network_fence  # Blokkeer uitsluitend Open-Meteo, ook redirects.
 _KEY_PATH = Path.home() / ".open_meteo_key"
 _KEY_CACHE: Optional[str] = None
 _KEY_CHECKED = False
+
+# Eén compacte JSON-regel per rasterjob. Dit bestand staat bewust naast de
+# bestaande modelkaarten.log en bevat geen API-key of coördinaten.
+_USAGE_LOG = Path(os.environ.get(
+    "OPEN_METEO_USAGE_LOG",
+    "/Users/aldus/KNMI_Project/weerlab/open_meteo_usage.jsonl",
+))
+
+
+def registreer_gebruik(
+    *,
+    consumer: str,
+    model: str,
+    resultaat: str,
+    locaties: int,
+    verzoeken: int,
+    variabelen: int,
+    dagen: int,
+) -> None:
+    """Leg geaggregeerd API-gebruik vast zonder sleutel of locaties te loggen."""
+    regel = {
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "consumer": consumer,
+        "model": model,
+        "resultaat": resultaat,
+        "locaties": int(locaties),
+        "verzoeken": int(verzoeken),
+        "variabelen": int(variabelen),
+        "dagen": int(dagen),
+    }
+    try:
+        _USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with _USAGE_LOG.open("a", encoding="utf-8") as bestand:
+            bestand.write(json.dumps(regel, ensure_ascii=False, separators=(",", ":")) + "\n")
+    except OSError as exc:
+        # Meting mag een weerkaart nooit blokkeren.
+        print(f"[open_meteo] gebruikslog niet schrijfbaar: {exc}")
 
 
 def _load_key() -> Optional[str]:
@@ -107,7 +146,7 @@ def om_url(endpoint: str, **params: Any) -> str:
     """Bouw een volledige Open-Meteo URL inclusief apikey indien beschikbaar."""
     if any(m.strip() in {"icon_eu", "icon_seamless"} for m in _format_param(params.get("models", "")).split(",")):
         raise ValueError("ICON-EU is uitgeschakeld; geen Open-Meteo-aanvraag")
-    if any((m.strip().startswith("gfs") or m.strip() == "icon_global") for m in _format_param(params.get("models", "")).split(",")):
+    if endpoint in (FORECAST, ENSEMBLE) and all(m.strip() in {"ecmwf_ifs", "ecmwf_ifs025", "ecmwf_seamless", "ecmwf_aifs", "ecmwf_aifs_single", "knmi_harmonie_arome_netherlands", "knmi_harmonie_arome_europe", "harmonie_nl", "icon_d2", "icon_global", "gfs_seamless", "gfs_global", "gfs025", "gfs05"} for m in _format_param(params.get("models", "")).split(",")):
         route = "ensemble" if endpoint == ENSEMBLE else "forecast" if endpoint == FORECAST else endpoint.replace("_", "-")
         return "https://om.weerlab.nl/om/" + route + "?" + urlencode({k: _format_param(v) for k, v in params.items() if v is not None and k != "apikey"})
     raise RuntimeError("Open-Meteo is uitgeschakeld; deze route heeft nog geen eigen bron")

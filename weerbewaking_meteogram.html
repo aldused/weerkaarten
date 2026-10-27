@@ -253,7 +253,10 @@ async function fetchAll(){
     const j=await r.json();
     const h=j.hourly;
     if(!h||!h.time||!h.time.length) throw new Error('geen hourly data');
-    cache={times:h.time,offsetSec:j.utc_offset_seconds??7200,geladen:new Date(),perModel:{}};
+    const zoned=h.time.map(t=>new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(t)?t:t+'Z'));
+    const local=zoned.map(t=>t.toLocaleString('sv-SE',{timeZone:'Europe/Amsterdam'}).replace(' ','T').slice(0,16));
+    const offset=(Date.parse(local[0]+'Z')-zoned[0].getTime())/1000;
+    cache={times:local,offsetSec:offset,geladen:new Date(),perModel:{}};
     for(const m of MODELS) cache.perModel[m.key]=parseModel(h,m.slug);
     TIMES=cache.times; OFFSET=cache.offsetSec;
     updateModelButtons();

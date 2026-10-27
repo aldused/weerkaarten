@@ -8,14 +8,14 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 from basemap import BOUNDS,setup as map_setup,outlines as map_outlines
 from presentation import header as map_header,footer as map_footer
 ROOT=Path(__file__).resolve().parents[2]
-def steps(cycle):return list(range(3,145,3))+(list(range(150,361,6)) if cycle in (0,12) else [])
-REV='nl-mosmap-local-3'
+def steps(cycle):return list(range(3,145,3))+(list(range(150,241,6)) if cycle in (0,12) else [])
+REV='nl-ecmwf-direct-10day-1'
 MAP_LATITUDE=52.2
 def revision(layer):return REV+'-cloud4' if layer=='overview' else REV+'-bft2' if layer=='mslp_bft' else REV
 SURFACE={'temperature_2m':'°C','pressure_msl':'hPa','wind_speed_10m':'m/s','wind_direction_10m':'°','cloud_cover':'%','precipitation':'mm','cape':'J/kg'}
 UPPER={'temperature_850hPa':'°C','geopotential_height_500hPa':'m','wind_speed_300hPa':'m/s','wind_direction_300hPa':'°','pressure_msl':'hPa'}
-MODEL_INFO={'ecmwf_ifs':('ECMWF IFS','native 9 km',2),'ecmwf_ifs025':('ECMWF IFS','0,25° · circa 25 km',1),'gfs025':('GFS','0,25° · circa 25 km',1),'gfs_global':('GFS','native circa 13 km',2),'icon_eu':('ICON-EU','native circa 7 km',3),'ecmwf_ens':('ECMWF ENS-gemiddelde','0,25° · circa 25 km',1),'cams':('CAMS · Saharastof','native circa 40 km',1)}
-def resolution_for(model,layer):return '0,25° · circa 25 km' if model=='gfs_global' and layer in ('t850','z500') else MODEL_INFO[model][1]
+MODEL_INFO={'ecmwf_ifs':('ECMWF IFS','native 9 km',2),'ecmwf_ifs025':('ECMWF IFS','0,1° · eigen ECMWF',1),'gfs025':('GFS','0,1° · eigen ECMWF',1),'gfs_global':('GFS','native circa 13 km',2),'icon_eu':('ICON-EU','native circa 7 km',3),'ecmwf_ens':('ECMWF ENS-gemiddelde','0,1° · eigen ECMWF',1),'cams':('CAMS · Saharastof','native circa 40 km',1)}
+def resolution_for(model,layer):return '0,1° · eigen ECMWF' if model=='gfs_global' and layer in ('t850','z500') else MODEL_INFO[model][1]
 DOMAINS={'gfs_global':'ncep_gfs013','icon_eu':'dwd_icon_eu'}
 def fields_for(model):
  if model=='ecmwf_ifs':return SURFACE
@@ -160,7 +160,7 @@ def render(task):
  cax=fig.add_axes([.06,.075,.42,.016] if layer=='overview' else [.08,.075,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_ticks(np.arange(13)) if layer=='mslp_bft' else None;cb.set_label(('Temperatuur op 2 meter' if layer=='overview' else 'Windkracht' if layer=='mslp_bft' else title)+' ('+unit+')',fontsize=10)
  if layer=='overview':
   rain_axis=fig.add_axes([.55,.075,.40,.016]);rain_bar=fig.colorbar(rain_cf,cax=rain_axis,orientation='horizontal',spacing='uniform',ticks=[.1,.5,1,2,4,8,16,32,64]);rain_bar.ax.tick_params(labelsize=8);rain_bar.set_label(f'Neerslag · mm/uur · gemiddelde over {interval} uur',fontsize=9)
- credit='KNMI Open Data · HARMONIE 43' if model=='harmonie43' else 'NOAA/NCEP GFS Open Data' if model=='gfs025' else 'Copernicus CAMS / ADS' if model=='cams' else 'ECMWF' if model=='ecmwf_ens' else model_label+' / Open-Meteo CC BY 4.0'
+ credit='KNMI Open Data · HARMONIE 43' if model=='harmonie43' else 'NOAA/NCEP GFS Open Data' if model=='gfs025' else 'Copernicus CAMS / ADS' if model=='cams' else 'ECMWF' if model=='ecmwf_ens' else model_label+' Open Data rechtstreeks, CC BY 4.0'
  description='modelwaarden' if model=='gfs_global' else 'waarden van oorspronkelijke modelcellen'
  map_footer(fig,f'{count} modelcellen · kleuren op land, cijfers ook op zee · '+credit)
  out.parent.mkdir(parents=True,exist_ok=True);tmp=out.with_suffix('.tmp.png');fig.savefig(tmp,facecolor='white',dpi=288);plt.close(fig);tmp.replace(out)
@@ -195,7 +195,7 @@ def main():
       # Re-read before each atomic publication, preserving the gust updater.
       manifest=json.loads(manifest_path.read_text());entry=manifest['runs'][key]
       if parse(entry['run_utc'])!=run:raise ValueError('Nederlandrun wijzigde tijdens renderen')
-      entry.setdefault('layers',{})[layer]=dict(renderer=revision(layer),resolution='9 km' if model=='ecmwf_ifs' else '0,25° · circa 25 km',base=manifest['base'],frames=[dict(lead=h,valid_utc=iso(run+dt.timedelta(hours=h)),valid_label=(run+dt.timedelta(hours=h)).strftime('%d-%m-%Y %H:%M UTC')) for _,h in selected],files={layer:[f'{folder}/{layer}_{h:03d}.png' for _,h in selected]})
+      entry.setdefault('layers',{})[layer]=dict(renderer=revision(layer),resolution='9 km' if model=='ecmwf_ifs' else '0,1° · eigen ECMWF',base=manifest['base'],frames=[dict(lead=h,valid_utc=iso(run+dt.timedelta(hours=h)),valid_label=(run+dt.timedelta(hours=h)).strftime('%d-%m-%Y %H:%M UTC')) for _,h in selected],files={layer:[f'{folder}/{layer}_{h:03d}.png' for _,h in selected]})
       if layer=='t2m':entry['layers']['t2m_grid']={**entry['layers'][layer],'files':{'t2m_grid':entry['layers'][layer]['files'][layer]}}
       manifest['updated']=iso(dt.datetime.now(UTC));tmp=manifest_path.with_suffix('.tmp');tmp.write_text(json.dumps(manifest));tmp.replace(manifest_path)
       if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(manifest_path),'r2:weerlab-data/wxbeta-nl/current.json','--header-upload','Cache-Control: no-cache'],check=True)

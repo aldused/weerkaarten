@@ -18,7 +18,7 @@ build_and_upload() {
   local model="$1"
   local meta="$2"
   "$PYTHON" scripts/build_point_source.py --model "$model" --meta "$meta" --output "$OUTPUT"
-  for file in "$OUTPUT/$model"/*; do
+  for file in "$OUTPUT/$model"/*.bin "$OUTPUT/$model"/meta.json; do
     local name
     name="$(basename "$file")"
     local content_type="application/octet-stream"
@@ -26,7 +26,7 @@ build_and_upload() {
     "$RCLONE" copyto "$file" "$REMOTE/point-source/$model/$name" \
       --header-upload "Content-Type: $content_type" \
       --header-upload "Cache-Control: public, max-age=60" \
-      --no-traverse
+      --ignore-times --no-traverse
     echo "R2 point-source upload: $model/$name"
   done
 }

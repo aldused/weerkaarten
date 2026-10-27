@@ -28,6 +28,7 @@ DEFAULT_PARAMETERS = (
     "bewolking",
     "cape",
     "onweer",
+    "dauwpunt", "druk", "straling", "straling_direct", "zon_min", "zon", "zicht", "cloud_total", "surface_temperature",
 )
 
 

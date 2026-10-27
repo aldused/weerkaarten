@@ -122,6 +122,13 @@ def prune(current):
  for name in old([n.strip('/') for n in r.stdout.splitlines()],2):
   subprocess.run(['/opt/homebrew/bin/rclone','purge','r2:weerlab-data/icond2-eps/'+name],check=True)
 
+def resumable_run(pending, state, now):
+ if not pending.exists():return None
+ run=datetime.fromisoformat(json.loads(pending.read_text())['run_utc'])
+ published=json.loads(state.read_text()).get('run_key','') if state.exists() else ''
+ if published>=run.strftime('%Y%m%d%H') or not 0<=(now-run).total_seconds()<18*3600:return None
+ return run
+
 def main():
  ap=argparse.ArgumentParser();ap.add_argument('--run');ap.add_argument('--publish',action='store_true');ap.add_argument('--prune',action='store_true');ap.add_argument('--workers',type=int,default=3);args=ap.parse_args()
  import plistlib
@@ -132,18 +139,18 @@ def main():
  lock=(ROOT/'update.lock').open('w')
  try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
  except BlockingIOError:return
- pending=ROOT/'pending.json'
+ pending=ROOT/'pending.json';state=ROOT/'published.json';resume=resumable_run(pending,state,datetime.now(UTC))
  if args.run:run=datetime.fromisoformat(args.run.replace('Z','+00:00'))
- elif pending.exists() and (datetime.now(UTC)-datetime.fromisoformat(json.loads(pending.read_text())['run_utc'])).total_seconds()<18*3600:
-  run=datetime.fromisoformat(json.loads(pending.read_text())['run_utc'])
+ elif resume is not None:run=resume
  else:run=choose()
  p=points();stamp=run.strftime('%Y%m%d%H');folder=ROOT/'runs'/stamp;folder.mkdir(parents=True,exist_ok=True)
- pending.write_text(json.dumps({'run_utc':run.isoformat()}))
  state=ROOT/'published.json'
  if state.exists() and json.loads(state.read_text())['run_key']>=stamp:
+  pending.unlink(missing_ok=True)
   print('Run reeds gepubliceerd')
   if args.prune:prune(json.loads(state.read_text())['run_key'])
   return
+ pending.write_text(json.dumps({'run_utc':run.isoformat()}))
  snapshot=folder/'points.json'
  if snapshot.exists() and json.loads(snapshot.read_text())!=p:raise ValueError('Locatie-indeling gewijzigd; gebruik nieuwe cacheversie')
  snapshot.write_text(json.dumps(p));grid=coords(run,p,folder);arrays={};print(f'ICON-D2-EPS {stamp}: {len(p)} locaties, 20leden,49uurstappen',flush=True)

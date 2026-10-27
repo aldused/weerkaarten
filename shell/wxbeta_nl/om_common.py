@@ -5,6 +5,10 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"scripts"))
 from open_meteo import upgrade_url,bulk_sessie
 UTC=dt.timezone.utc
 def fetch(url):
+ if 'open-meteo.com' in url:
+  from native_point_source import fetch_native
+  native=fetch_native(url)
+  if native is not None:return native
  url=upgrade_url(url)
  for attempt in range(3):
   try:

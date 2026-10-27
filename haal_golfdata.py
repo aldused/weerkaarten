@@ -433,7 +433,8 @@ def haal_yrno_golven(punten):
 
 
 def haal_open_meteo_golven(punten):
-    """Haal golfhoogtedata op via Open-Meteo Marine API (fallback)."""
+    """Externe terugval uit; RWS en MET Norway blijven de eigen bronnen."""
+    return []
     resultaten = []
 
     for naam, lat, lon, land in punten:

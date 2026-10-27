@@ -143,6 +143,23 @@ run_publisher() {
   return "$status"
 }
 
+sync_jan_visser_native() {
+  if "$PY" - "$REPO_DIR/pluim_direct_meta.json" "$REPO_DIR/jvens.json" <<'CHECK'
+import json,sys
+from datetime import datetime
+try:
+ target=json.load(open(sys.argv[1]))['run']
+ current=json.load(open(sys.argv[2])).get('current_run','')
+ sys.exit(0 if not current or datetime.fromisoformat(target.replace('Z','+00:00'))>datetime.fromisoformat(current.replace('Z','+00:00')) else 1)
+except Exception:sys.exit(0)
+CHECK
+  then
+    if ! /bin/bash "$REPO_DIR/shell/jan_visser_ens_cache.sh" >> /tmp/nl.edaldus.janvisser-ens.log 2>> /tmp/nl.edaldus.janvisser-ens.err; then
+      echo "Jan Visser wacht op beschikbare eigen ECMWF-data; volgende controle probeert opnieuw."
+    fi
+  fi
+}
+
 cd "$REPO_DIR"
 seed_publish_state
 echo "[$(date -u +%FT%TZ)] pluim_direct_cache start (velden: $FIELDS)"
@@ -238,6 +255,7 @@ published_archive_revision=$(sed -n '1p' "$PUBLISHED_REVISION_STAMP" 2>/dev/null
 if [[ -f "$PUBLISH_STATE" ]] && cmp -s "$meta" "$PUBLISH_STATE" \
     && [[ "$local_archive_revision" == "$published_archive_revision" ]]; then
   echo "Directe run is lokaal en op R2 al volledig gepubliceerd."
+  sync_jan_visser_native
   exit 0
 fi
 
@@ -263,4 +281,5 @@ run_publisher "public, max-age=60" "$meta"
 persist_publish_state "$meta"
 echo "[$(date -u +%FT%TZ)] publicatie runmanifest klaar"
 
+sync_jan_visser_native
 echo "[$(date -u +%FT%TZ)] pluim_direct_cache klaar"

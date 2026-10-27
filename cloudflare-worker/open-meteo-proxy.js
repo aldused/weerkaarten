@@ -1,3 +1,5 @@
+import nativePlaces from './native-places.json' with {type:'json'};
+import {nativePointForecast,nativePointModels} from './native-point-forecast.mjs';
 import {ecmwfDirect,noOpenMeteoFetch} from './ecmwf-direct-only.mjs';
 import {iconGlobalEnsemble} from './icon-global-eps-native.mjs';
 import {iconGlobalForecast} from './icon-global-native-forecast.mjs';
@@ -66,6 +68,18 @@ export default {
       return handleEns6(url, request, env, noOpenMeteoFetch);
     }
 
+    if(url.pathname==='/native-model-meta'){
+      const model=url.searchParams.get('model'), sources={ncep_gefs025:['https://data.weerlab.nl/gefs_manifest.json',31,384],ncep_gefs05:['https://data.weerlab.nl/gefs_manifest.json',31,384],dwd_icon_d2_eps:['https://data.weerlab.nl/icond2_eps_manifest.json',20,48],dwd_icon_global_eps:['https://data.weerlab.nl/icon_global_eps_manifest.json',40,180]};
+      try{const spec=sources[model];if(!spec)throw Error('Geen eigen metadata voor dit model');const r=await fetch(spec[0]);if(!r.ok)throw Error('Eigen manifest onbereikbaar');const m=await r.json();if(!m.complete||m.member_count!==spec[1])throw Error('Eigen ensemble onvolledig');const start=Date.parse(m.run_utc)/1000;return json({last_run_initialisation_time:start,last_run_availability_time:Date.parse(m.updated_utc||m.run_utc)/1000,last_run_modification_time:Date.parse(m.updated_utc||m.run_utc)/1000,data_end_time:start+spec[2]*3600,source:m.source},200);}catch(e){return json({error:true,reason:e.message,paid_fallback:false},503);}
+    }
+
+    if(url.pathname==='/native-geocode'){
+      const term=(url.searchParams.get('name')||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+      const count=Math.max(1,Math.min(20,Number(url.searchParams.get('count'))||5));
+      const matches=term.length<2?[]:nativePlaces.filter(p=>p.naam.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(term)).sort((a,b)=>Number(b.naam.toLowerCase()===term)-Number(a.naam.toLowerCase()===term)||(b.pop||0)-(a.pop||0)).slice(0,count);
+      return json({results:matches.map((p,i)=>({id:i,name:p.naam,latitude:p.lat,longitude:p.lon,country_code:p.land,country:p.land,timezone:'Europe/Amsterdam'})),source:'Weerlab eigen plaatsenbestand',generationtime_ms:0},200);
+    }
+
     if(url.pathname==='/native-ecmwf-meta'){try{return json(await ecmwfDirect(url,true),200);}catch(e){return json({error:true,reason:e.message,paid_fallback:false},503);}}
 
     // Sync-endpoints voor gedeelde drafts (Stefan ↔ jij)
@@ -102,6 +116,8 @@ export default {
     if (!target) {
       return json({ error: `Unknown endpoint: ${endpoint}` }, 404);
     }
+
+    if(endpoint==='forecast' && (!url.searchParams.get('models') || url.searchParams.get('models').split(',').every(m=>nativePointModels.has(m)))){try{return json(await nativePointForecast(url,env.HARMONIE_DATA),200);}catch(e){return json({error:true,reason:e.message,paid_fallback:false},503);}}
 
     if(endpoint==='ensemble'&&['ecmwf_ifs025','ecmwf_ifs','ecmwf_seamless'].includes(url.searchParams.get('models'))){try{return json(await ecmwfDirect(url),200);}catch(e){return json({error:true,reason:e.message,paid_fallback:false},503);}}
 
