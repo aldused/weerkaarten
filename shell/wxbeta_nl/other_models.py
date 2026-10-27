@@ -6,7 +6,7 @@ import layers as nl
 from layers import BOUNDS,MODEL_INFO,REV,UTC,parse,iso
 PROJECT=Path('/Users/aldus/KNMI_Project')
 def chart_revision(model,layer):return nl.revision(layer)+('-gfs2' if model=='gfs_global' else '')
-MODELS={'gfs':'gfs_global','iconeu':'icon_eu','ens':'ecmwf_ens','cams':'cams'}
+MODELS={'gfs':'gfs_global','ens':'ecmwf_ens','cams':'cams'}
 
 def load_ensemble(source):
  import cfgrib

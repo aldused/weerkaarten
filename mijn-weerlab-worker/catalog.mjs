@@ -223,7 +223,7 @@ export const catalog=[
   {
     "id": "hres10",
     "name": "Weerkaarten Europa",
-    "description": "ECMWF, GFS en ICON-EU, met straalstroom en eigen CAMS-kaarten voor Saharastof",
+    "description": "ECMWF en GFS, met straalstroom en eigen CAMS-kaarten voor Saharastof",
     "section": "",
     "category": "verwachting",
     "href": "index.html#weerkaarten-hres10",

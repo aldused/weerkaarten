@@ -184,7 +184,7 @@ def render(task):
 
 
 def main():
- ap=argparse.ArgumentParser();ap.add_argument('--state',type=Path,required=True);ap.add_argument('--publish',action='store_true');ap.add_argument('--regions',nargs='+',choices=['europe','netherlands','northsea']);ap.add_argument('--models',nargs='+',default=['ecmwf','gfs','iconeu']);ap.add_argument('--cycles',nargs='+',default=['00','18','12','06']);args=ap.parse_args();args.state.mkdir(parents=True,exist_ok=True)
+ ap=argparse.ArgumentParser();ap.add_argument('--state',type=Path,required=True);ap.add_argument('--publish',action='store_true');ap.add_argument('--regions',nargs='+',choices=['europe','netherlands','northsea']);ap.add_argument('--models',nargs='+',default=['ecmwf','gfs']);ap.add_argument('--cycles',nargs='+',default=['00','18','12','06']);args=ap.parse_args();args.models=[m for m in args.models if m not in ("iconeu","icon_eu")];args.state.mkdir(parents=True,exist_ok=True)
  lock=(args.state/'build.lock').open('a')
  try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
  except BlockingIOError:return

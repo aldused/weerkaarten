@@ -112,14 +112,16 @@ export default {
       } catch(error) {return json({error:true,reason:error.message,source:'NOAA Open Data direct',paid_fallback:false},503);}
     }
 
+    if (/dwd_icon_eu/.test(url.pathname)) return json({error:'ICON-EU is uitgeschakeld op Weerlab.'},503);
+
     if (!env.OPEN_METEO_KEY) {
       return json({ error: 'Server misconfigured: OPEN_METEO_KEY secret ontbreekt' }, 500);
     }
 
     const disabledModel = (url.searchParams.get('models') || '').split(',')
-      .some(model => /^(ukmo_|meteofrance_arome)/.test(model.trim()));
+      .some(model => /^(ukmo_|meteofrance_arome|icon_eu$|icon_seamless$|dwd_icon_eu)/.test(model.trim()));
     if (disabledModel) {
-      return json({ error: 'UKMO en AROME zijn voorlopig uitgeschakeld op Weerlab.' }, 503);
+      return json({ error: 'UKMO, AROME en ICON-EU zijn uitgeschakeld op Weerlab.' }, 503);
     }
 
     const fresh = url.searchParams.get('_weerlab_fresh') === '1';

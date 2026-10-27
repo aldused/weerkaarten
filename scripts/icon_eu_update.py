@@ -7,6 +7,8 @@ Gebruik:
 """
 from __future__ import annotations
 
+raise SystemExit("ICON-EU uitgeschakeld; geen downloads.")
+
 import argparse
 import json
 import os

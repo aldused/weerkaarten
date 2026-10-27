@@ -259,8 +259,7 @@ const MENU_PRODUCTS = [
         "icond2ruc",
         "arome",
         "ecmwf",
-        "gfs",
-        "iconeu"
+        "gfs"
       ],
       "gebied": [
         "nl"
@@ -269,7 +268,7 @@ const MENU_PRODUCTS = [
         "4"
       ]
     },
-    "keywords": "Hoge resolutie 4-luik 4 regiomodellen naast elkaar Neerslag Temperatuur Wind Bewolking HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC AROME Nederland 4-luik HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC AROME ECMWF HRES GFS Vergelijk wereldmodellen Globale modellen 4-luik ECMWF · GFS · ICON-EU Neerslag Temperatuur Wind ECMWF HRES GFS ICON-EU Europa 4-luik ECMWF HRES GFS ICON-EU",
+    "keywords": "Hoge resolutie 4-luik 4 regiomodellen naast elkaar Neerslag Temperatuur Wind Bewolking HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC AROME Nederland 4-luik HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC AROME ECMWF HRES GFS Vergelijk wereldmodellen Globale modellen 4-luik ECMWF · GFS Neerslag Temperatuur Wind ECMWF HRES GFS Europa 4-luik ECMWF HRES GFS",
     "restricted": false
   },
   {
@@ -323,8 +322,7 @@ const MENU_PRODUCTS = [
       ],
       "model": [
         "ecmwf",
-        "gfs",
-        "iconeu"
+        "gfs"
       ],
       "gebied": [
         "eu"
@@ -333,7 +331,7 @@ const MENU_PRODUCTS = [
         "1"
       ]
     },
-    "keywords": "Modelkaarten Europa tot +384 u Overzicht Temperatuur Neerslag Wind Hoogtevelden Onweer / CAPE ECMWF HRES GFS ICON-EU Europa 1 kaart ECMWF HRES GFS ICON-EU",
+    "keywords": "Modelkaarten Europa tot +384 u Overzicht Temperatuur Neerslag Wind Hoogtevelden Onweer / CAPE ECMWF HRES GFS Europa 1 kaart ECMWF HRES GFS",
     "restricted": false
   },
   {
@@ -1312,7 +1310,6 @@ const MENU_LABELS = {
     "arome": "AROME",
     "ecmwf": "ECMWF HRES",
     "gfs": "GFS",
-    "iconeu": "ICON-EU",
     "eps": "ECMWF ENS"
   },
   "gebied": {

@@ -94,7 +94,6 @@ MODELKENNIS = {
     "dmi_om": {"familie": "harmonie", "res_km": 2.0, "naam": "DMI HARMONIE"},
     "icond2": {"familie": "icon", "res_km": 2.2, "naam": "ICON-D2 (DWD)"},
     "icond2ruc": {"familie": "icon", "res_km": 2.2, "naam": "ICON-D2-RUC (DWD)", "ruc": True},
-    "icon_eu": {"familie": "icon", "res_km": 7.0, "naam": "ICON-EU (DWD)"},
     "icon_global_om": {"familie": "icon", "res_km": 13.0, "naam": "ICON globaal (DWD)"},
     "ecmwf_om": {"familie": "ecmwf", "res_km": 25.0, "naam": "ECMWF IFS"},
     "gfs_global_om": {"familie": "gfs", "res_km": 13.0, "naam": "GFS (NOAA)"},
@@ -103,7 +102,6 @@ MODELKENNIS = {
 OM_DATASET = {
     "ecmwf_ifs025": "ecmwf_ifs025",
     "icon_global": "dwd_icon",
-    "icon_eu": "dwd_icon_eu",
     "icon_d2": "dwd_icon_d2",
     "gfs_seamless": "ncep_gfs013",
     "dmi_harmonie_arome_europe": "dmi_harmonie_arome_europe",

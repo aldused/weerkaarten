@@ -4,7 +4,7 @@
 const PM=typeof module!=='undefined'&&module.exports?require('./pluim_math.js'):root.WeerlabPlumeMath;
 const DN=typeof module!=='undefined'&&module.exports?require('./pluim-dag-nacht.js'):root.WeerlabDayNight;
 const HOUR=3600000, DAY=24*HOUR;
-const MODELS=[{id:'ecmwf_ifs025',name:'ECMWF',sources:[['IFS','ecmwf_ifs025_ensemble']]},{id:'gfs_seamless',name:'GFS',sources:[['0,25°','ncep_gefs025'],['0,5°','ncep_gefs05']]},{id:'icon_seamless',name:'ICON',sources:[['Global','dwd_icon_global_eps_native'],['EU','dwd_icon_eu_eps_native']]}];
+const MODELS=[{id:'ecmwf_ifs025',name:'ECMWF',sources:[['IFS','ecmwf_ifs025_ensemble']]},{id:'gfs_seamless',name:'GFS',sources:[['0,25°','ncep_gefs025'],['0,5°','ncep_gefs05']]},{id:'icon_global',name:'ICON',sources:[['Global','dwd_icon_global_eps_native']]}];
 const AIFS_MODELS=[MODELS[0],{id:'ecmwf_aifs025',name:'ECMWF AIFS',sources:[['AIFS','ecmwf_aifs025_ensemble']]}];
 const FIELDS={cloud_cover:{title:'Totale bewolking',unit:'%'},cloud_cover_high:{title:'Hoge bewolking',unit:'%'},cloud_cover_mid:{title:'Middelbare bewolking',unit:'%'},cloud_cover_low:{title:'Lage bewolking',unit:'%'},temperature_2m:{title:'Temperatuur',unit:'°C'},precipitation:{title:'Neerslag',unit:'mm / 6 uur'},wind_speed_10m:{title:'Wind',unit:'Bft'},wind_gusts_10m:{title:'Windstoten',unit:'km/u'}};
 const finite=v=>typeof v==='number'&&Number.isFinite(v);
