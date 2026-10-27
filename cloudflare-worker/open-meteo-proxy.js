@@ -6,40 +6,12 @@ import {iconGlobalForecast} from './icon-global-native-forecast.mjs';
 import {gefsEnsemble} from './gefs-native.mjs';
 import {gfsForecast} from './gfs-native-forecast.mjs';
 import {nativeEnsemble} from './icond2-eps-native.mjs';
-/**
- * Cloudflare Worker — Open-Meteo proxy voor weerlab.nl
- *
- * Voegt de commerciële API-key server-side toe zodat de key niet
- * in de publieke HTML/JS van weerlab.nl staat. Gebruikt de customer-*
- * endpoints voor gegarandeerde performance (geen 429 rate limits).
- *
- * Routes:
- *   om.weerlab.nl/eumetview?...      -> view.eumetsat.int/geoserver/wms
- *   om.weerlab.nl/model-point?...     -> point-major HARMONIE/ICON-D2 data uit R2
- *   weerlab.nl/om/forecast?...      -> customer-api.open-meteo.com/v1/forecast
- *   weerlab.nl/om/ensemble?...      -> customer-ensemble-api.open-meteo.com/v1/ensemble
- *   weerlab.nl/om/previous?...      -> customer-previous-runs-api.open-meteo.com/v1/forecast
- *   weerlab.nl/om/air-quality?...   -> customer-air-quality-api.open-meteo.com/v1/air-quality
- *   weerlab.nl/om/marine?...        -> customer-marine-api.open-meteo.com/v1/marine
- *   weerlab.nl/om/archive?...       -> customer-archive-api.open-meteo.com/v1/archive
- *   weerlab.nl/om/flood?...         -> customer-flood-api.open-meteo.com/v1/flood
- *
- * De API-key wordt opgeslagen als Worker "Secret" (environment variable),
- * NIET in deze code. Set met: wrangler secret put OPEN_METEO_KEY
- * of via Cloudflare dashboard > Worker > Settings > Variables > Add secret.
+/* Weerlab native-data gateway. Legacy /om names are compatibility routes only.
+ * Own ECMWF, KNMI, DWD and NOAA sources; no Open-Meteo key or upstream fallback.
+ * EUMETView, point-source and draft routes keep their existing contracts.
  */
-
 import {handleEns6} from './ens6-runs.mjs';
-
-const ENDPOINTS = {
-  'forecast':    { host: 'customer-api.open-meteo.com',               path: '/v1/forecast'    },
-  'ensemble':    { host: 'customer-ensemble-api.open-meteo.com',      path: '/v1/ensemble'    },
-  'previous':    { host: 'customer-previous-runs-api.open-meteo.com', path: '/v1/forecast'    },
-  'air-quality': { host: 'customer-air-quality-api.open-meteo.com',   path: '/v1/air-quality' },
-  'marine':      { host: 'customer-marine-api.open-meteo.com',        path: '/v1/marine'      },
-  'archive':     { host: 'customer-archive-api.open-meteo.com',       path: '/v1/archive'     },
-  'flood':       { host: 'customer-flood-api.open-meteo.com',         path: '/v1/flood'       },
-};
+const ENDPOINTS = Object.fromEntries(['forecast','ensemble','previous','air-quality','marine','archive','flood'].map(k=>[k,true]));
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
