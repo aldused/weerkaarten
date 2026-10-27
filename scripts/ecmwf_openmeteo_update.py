@@ -179,6 +179,9 @@ def local_forecast_times(times: list[str]) -> list[str]:
 
 def main() -> int:
     args = parse_args()
+    if args.model in {"icon_global", "icon_seamless"}:
+        print("ICON Global gebruikt de eigen DWD-aanvoer; Open-Meteo staat uit.")
+        return 0
     if args.model.startswith("gfs"):
         print("GFS gebruikt de eigen NOAA-aanvoer; Open-Meteo staat uit.")
         return 0

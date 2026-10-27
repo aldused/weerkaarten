@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {iconGlobalEnsemble} from '../cloudflare-worker/icon-global-eps-native.mjs';
+const ids=Array.from({length:40},(_,i)=>i+1),run=new Date(Date.now()-6*3600000).toISOString(),key=run.slice(0,13).replaceAll('-','').replace('T',''),time=Array.from({length:181},(_,i)=>new Date(Date.parse(run)+i*3600000).toISOString());
+const station={id:'de-bilt',name:'De Bilt',lat:52.1,lon:5.18,url:`https://data.weerlab.nl/icon-global-eps/${key}/de-bilt.json`};
+const manifest={complete:true,member_count:40,member_ids:ids,control_member:null,run_utc:run,run_key:key,steps:181,fields:['temperature_2m'],stations:[station]};
+const hourly={time};for(const id of ids)hourly['temperature_2m_member'+String(id).padStart(2,'0')]=Array(181).fill(id);
+const data={run_utc:run,member_ids:ids,latitude:52.1,longitude:5.18,hourly};let calls=0;
+const fetcher=async u=>{calls++;return {ok:true,json:async()=>u.endsWith('manifest.json')?manifest:data};};
+const url=new URL('https://om.weerlab.nl/om/ensemble?models=icon_global&latitude=52.1&longitude=5.18&hourly=temperature_2m');
+const out=await iconGlobalEnsemble(url,fetcher);assert.equal(out.member_ids.length,40);assert.equal(out.control_member,null);assert.equal(out.hourly.temperature_2m_member40[0],40);assert.equal(out.hourly.temperature_2m,undefined);assert.equal(calls,2);
+const missing=new URL(url);missing.searchParams.set('hourly','cloud_cover_low');await assert.rejects(()=>iconGlobalEnsemble(missing,fetcher),/ontbreekt/);
+manifest.member_ids=ids.slice(1);await assert.rejects(()=>iconGlobalEnsemble(url,fetcher),/onvolledig/);
+console.log('ICON Global API: 40 real members, no invented control, missing field and incomplete run rejected.');

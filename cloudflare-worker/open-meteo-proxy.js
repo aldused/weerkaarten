@@ -1,3 +1,5 @@
+import {iconGlobalEnsemble} from './icon-global-eps-native.mjs';
+import {iconGlobalForecast} from './icon-global-native-forecast.mjs';
 import {gefsEnsemble} from './gefs-native.mjs';
 import {gfsForecast} from './gfs-native-forecast.mjs';
 import {nativeEnsemble} from './icond2-eps-native.mjs';
@@ -96,6 +98,14 @@ export default {
     const target = ENDPOINTS[endpoint];
     if (!target) {
       return json({ error: `Unknown endpoint: ${endpoint}` }, 404);
+    }
+
+    if ((url.searchParams.get('models')||'').split(',').some(m=>m.trim()==='icon_global')) {
+      try {
+        if(endpoint==='ensemble') return json(await iconGlobalEnsemble(url),200);
+        if(endpoint==='forecast') return json(await iconGlobalForecast(url,env.HARMONIE_DATA),200);
+        return json({error:true,reason:'Geen eigen ICON Global-bron voor deze route',paid_fallback:false},503);
+      } catch(error) { return json({error:true,reason:error.message,source:'DWD Open Data direct',paid_fallback:false},503); }
     }
 
     if (endpoint === 'ensemble' && (url.searchParams.get('models')||'').split(',').some(m=>m.trim()==='icon_d2')) {

@@ -125,7 +125,9 @@ def _format_param(value: Any) -> str:
 
 def om_url(endpoint: str, **params: Any) -> str:
     """Bouw een volledige Open-Meteo URL inclusief apikey indien beschikbaar."""
-    if any(m.strip().startswith("gfs") for m in _format_param(params.get("models", "")).split(",")):
+    if any(m.strip() in {"icon_eu", "icon_seamless"} for m in _format_param(params.get("models", "")).split(",")):
+        raise ValueError("ICON-EU is uitgeschakeld; geen Open-Meteo-aanvraag")
+    if any((m.strip().startswith("gfs") or m.strip() == "icon_global") for m in _format_param(params.get("models", "")).split(",")):
         route = "ensemble" if endpoint == ENSEMBLE else "forecast" if endpoint == FORECAST else endpoint.replace("_", "-")
         return "https://om.weerlab.nl/om/" + route + "?" + urlencode({k: _format_param(v) for k, v in params.items() if v is not None and k != "apikey"})
     host, path = _resolve_endpoint(endpoint)
@@ -190,7 +192,9 @@ def upgrade_url(url: str) -> str:
     """
     parsed = urlsplit(url)
     pairs = parse_qsl(parsed.query, keep_blank_values=True)
-    if any(m.strip().startswith("gfs") for k, v in pairs if k == "models" for m in v.split(",")):
+    if any(m.strip() in {"icon_eu", "icon_seamless"} for k,v in pairs if k == "models" for m in v.split(",")):
+        raise ValueError("ICON-EU is uitgeschakeld; geen Open-Meteo-aanvraag")
+    if any((m.strip().startswith("gfs") or m.strip() == "icon_global") for k, v in pairs if k == "models" for m in v.split(",")):
         route = "ensemble" if "ensemble" in parsed.netloc else "forecast" if parsed.path.endswith("/forecast") and "previous" not in parsed.netloc else "previous"
         return "https://om.weerlab.nl/om/" + route + "?" + urlencode([(k, v) for k, v in pairs if k != "apikey"])
     key = _load_key()
