@@ -390,7 +390,7 @@
           const data = await response.json();
           if (!Array.isArray(data && data.runs)) throw new Error('ongeldig runarchief');
           const m=state.progressMeta;
-          if(m && (!data.runs.some(r=>Date.parse(r.run)>=Date.parse(m.run) && !r.source?.progressive))) {
+          if(m && (!data.runs.some(r=>Date.parse(r.run)===Date.parse(m.run) && !r.source?.progressive))) {
             const response=await originalFetch(`https://data.weerlab.nl/${m.path}/${slug}.json`,{cache:'no-store'});
             if(response.ok) {
               const partial=await response.json(), r=partial.runs?.find(r=>r.run===m.run);
@@ -772,7 +772,7 @@
          || m.available_through_hour>m.expected_through_hour
          || Object.keys(m.station_digests || {}).length!==stations.length)return null;
       const latest=archiveManifestReferenceMs();
-      return Number.isFinite(latest) && Date.parse(m.run)<=latest ? null : m;
+      return state.archiveManifest?.runs?.some(r=>r.complete===true && Date.parse(r.run)===Date.parse(m.run)) || (Number.isFinite(latest) && latest-Date.parse(m.run)>=MAX_ARCHIVE_AGE_MS) ? null : m;
     } catch(_) {return null;}
   }
 

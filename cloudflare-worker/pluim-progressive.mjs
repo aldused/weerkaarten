@@ -27,6 +27,6 @@ export function verifyProgress(document, m, slug) {
 export async function readProgress(read, completeEntries=[]) {
   const m=await read('/pluim_progressive_meta.json').catch(()=>null);
   if(!validProgress(m))return null;
-  if(completeEntries.some(e=>Date.parse(e.run)>=Date.parse(m.run)))return null;
+  if(completeEntries.some(e=>Date.parse(e.run)===Date.parse(m.run) || Date.parse(e.run)-Date.parse(m.run)>=86400000))return null;
   return m;
 }
