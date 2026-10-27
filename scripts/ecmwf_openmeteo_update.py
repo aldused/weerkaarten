@@ -178,6 +178,8 @@ def local_forecast_times(times: list[str]) -> list[str]:
 
 
 def main() -> int:
+    print("Open-Meteo-producent uitgeschakeld; uitsluitend eigen modelaanvoer.")
+    return 0
     args = parse_args()
     if args.model in {"icon_global", "icon_seamless"}:
         print("ICON Global gebruikt de eigen DWD-aanvoer; Open-Meteo staat uit.")

@@ -17,7 +17,6 @@ class NativeGFS(unittest.TestCase):
   with patch.object(om,'_load_key',side_effect=AssertionError('paid key accessed')):
    with self.assertRaises(ValueError):om.om_url(om.FORECAST,models='icon_eu')
    with self.assertRaises(ValueError):om.upgrade_url('https://api.open-meteo.com/v1/forecast?models=icon_seamless')
- def test_other_models_keep_existing_route(self):
-  with patch.object(om,'_load_key',return_value=None):
-   self.assertEqual(om.upgrade_url('https://api.open-meteo.com/v1/forecast?models=dmi_harmonie_arome_europe'),'https://api.open-meteo.com/v1/forecast?models=dmi_harmonie_arome_europe')
+ def test_other_models_without_own_route_are_blocked(self):
+  with self.assertRaises(RuntimeError):om.upgrade_url('https://api.open-meteo.com/v1/forecast?models=dmi_harmonie_arome_europe')
 if __name__=='__main__':unittest.main()

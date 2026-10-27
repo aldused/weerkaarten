@@ -1,3 +1,4 @@
+import {ecmwfDirect,noOpenMeteoFetch} from './ecmwf-direct-only.mjs';
 import {iconGlobalEnsemble} from './icon-global-eps-native.mjs';
 import {iconGlobalForecast} from './icon-global-native-forecast.mjs';
 import {gefsEnsemble} from './gefs-native.mjs';
@@ -62,8 +63,10 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/ens6-runs' || url.pathname === '/ens6-run') {
-      return handleEns6(url, request, env);
+      return handleEns6(url, request, env, noOpenMeteoFetch);
     }
+
+    if(url.pathname==='/native-ecmwf-meta'){try{return json(await ecmwfDirect(url,true),200);}catch(e){return json({error:true,reason:e.message,paid_fallback:false},503);}}
 
     // Sync-endpoints voor gedeelde drafts (Stefan ↔ jij)
     //   GET om.weerlab.nl/draft/<key>   → laatste opgeslagen JSON of {}
@@ -100,6 +103,8 @@ export default {
       return json({ error: `Unknown endpoint: ${endpoint}` }, 404);
     }
 
+    if(endpoint==='ensemble'&&['ecmwf_ifs025','ecmwf_ifs','ecmwf_seamless'].includes(url.searchParams.get('models'))){try{return json(await ecmwfDirect(url),200);}catch(e){return json({error:true,reason:e.message,paid_fallback:false},503);}}
+
     if ((url.searchParams.get('models')||'').split(',').some(m=>m.trim()==='icon_global')) {
       try {
         if(endpoint==='ensemble') return json(await iconGlobalEnsemble(url),200);
@@ -122,76 +127,8 @@ export default {
       } catch(error) {return json({error:true,reason:error.message,source:'NOAA Open Data direct',paid_fallback:false},503);}
     }
 
-    if (/dwd_icon_eu/.test(url.pathname)) return json({error:'ICON-EU is uitgeschakeld op Weerlab.'},503);
+    return json({error:true,reason:'Open-Meteo is uitgeschakeld op Weerlab. Voor dit onderdeel is nog geen eigen rechtstreekse bron beschikbaar.',paid_fallback:false},503);
 
-    if (!env.OPEN_METEO_KEY) {
-      return json({ error: 'Server misconfigured: OPEN_METEO_KEY secret ontbreekt' }, 500);
-    }
-
-    const disabledModel = (url.searchParams.get('models') || '').split(',')
-      .some(model => /^(ukmo_|meteofrance_arome|icon_eu$|icon_seamless$|dwd_icon_eu)/.test(model.trim()));
-    if (disabledModel) {
-      return json({ error: 'UKMO, AROME en ICON-EU zijn uitgeschakeld op Weerlab.' }, 503);
-    }
-
-    const fresh = url.searchParams.get('_weerlab_fresh') === '1';
-    const cacheTtl = (endpoint === 'ensemble' || endpoint === 'forecast' || endpoint === 'previous')
-      ? OPEN_METEO_FAST_TTL
-      : OPEN_METEO_DEFAULT_TTL;
-
-    // Bouw de upstream URL: behoud publieke query parameters en voeg apikey toe.
-    // Interne _weerlab_* parameters sturen alleen proxygedrag en gaan niet naar Open-Meteo.
-    const upstream = new URL(`https://${target.host}${target.path}`);
-    for (const [k, v] of url.searchParams) {
-      if (k.startsWith(INTERNAL_QUERY_PREFIX)) continue;
-      upstream.searchParams.set(k, v);
-    }
-    upstream.searchParams.set('apikey', env.OPEN_METEO_KEY);
-
-    // Cache in Cloudflare edge. Forecast/ensemble krijgt een kortere TTL zodat
-    // ochtend- en avondruns snel zichtbaar worden; _weerlab_fresh=1 omzeilt de
-    // edge-cache volledig voor actieve updatechecks.
-    const cacheKey = new Request(upstream.toString().replace(env.OPEN_METEO_KEY, 'x'), request);
-    const cache = caches.default;
-    let response = fresh ? null : await cache.match(cacheKey);
-    const usage = summarizeOpenMeteoUsage(url, endpoint);
-
-    if (!response) {
-      const headers = { 'User-Agent': 'weerlab.nl-om-proxy/1.0' };
-      if (fresh) headers['Cache-Control'] = 'no-cache';
-      const upstreamResp = await fetch(upstream.toString(), {
-        headers,
-        cf: fresh ? { cacheTtl: 0 } : { cacheTtl, cacheEverything: true },
-      });
-
-      // Clone zodat we headers kunnen aanpassen
-      response = new Response(upstreamResp.body, upstreamResp);
-      response.headers.set('Cache-Control', fresh ? 'no-store' : `public, max-age=${cacheTtl}`);
-      response.headers.set('X-Cache-Status', fresh ? 'BYPASS' : 'MISS');
-      response.headers.set('X-Open-Meteo-Cache-Ttl', String(fresh ? 0 : cacheTtl));
-      response.headers.set('X-Weerlab-OM-Locations', String(usage.locations));
-      response.headers.set('X-Weerlab-OM-Upstream', '1');
-      for (const [k, v] of Object.entries(CORS_HEADERS)) {
-        response.headers.set(k, v);
-      }
-      // Verberg upstream server info
-      response.headers.delete('Server');
-      response.headers.delete('X-Cache');
-
-      if (!fresh && upstreamResp.ok) {
-        ctx.waitUntil(cache.put(cacheKey, response.clone()));
-      }
-      logOpenMeteoUsage(usage, fresh ? 'BYPASS' : 'MISS', upstreamResp.status, true);
-    } else {
-      response = new Response(response.body, response);
-      response.headers.set('X-Cache-Status', 'HIT');
-      response.headers.set('X-Open-Meteo-Cache-Ttl', String(cacheTtl));
-      response.headers.set('X-Weerlab-OM-Locations', String(usage.locations));
-      response.headers.set('X-Weerlab-OM-Upstream', '0');
-      logOpenMeteoUsage(usage, 'HIT', response.status, false);
-    }
-
-    return response;
   },
 };
 

@@ -35,35 +35,15 @@ import requests
 # Key laden
 # ---------------------------------------------------------------------------
 
+import weerlab_network_fence  # Blokkeer uitsluitend Open-Meteo, ook redirects.
+
 _KEY_PATH = Path.home() / ".open_meteo_key"
 _KEY_CACHE: Optional[str] = None
 _KEY_CHECKED = False
 
 
 def _load_key() -> Optional[str]:
-    """Lees de API-key. Caching in proces — key verandert niet per run."""
-    global _KEY_CACHE, _KEY_CHECKED
-    if _KEY_CHECKED:
-        return _KEY_CACHE
-    _KEY_CHECKED = True
-
-    # 1) Environment variable (voor CI/tests)
-    env_key = os.environ.get("OPEN_METEO_KEY", "").strip()
-    if env_key:
-        _KEY_CACHE = env_key
-        return _KEY_CACHE
-
-    # 2) ~/.open_meteo_key bestand
-    try:
-        if _KEY_PATH.exists():
-            key = _KEY_PATH.read_text().strip()
-            if key:
-                _KEY_CACHE = key
-                return _KEY_CACHE
-    except Exception:
-        pass
-
-    _KEY_CACHE = None
+    """Open-Meteo is removed; never read or use the former key."""
     return None
 
 
@@ -130,6 +110,7 @@ def om_url(endpoint: str, **params: Any) -> str:
     if any((m.strip().startswith("gfs") or m.strip() == "icon_global") for m in _format_param(params.get("models", "")).split(",")):
         route = "ensemble" if endpoint == ENSEMBLE else "forecast" if endpoint == FORECAST else endpoint.replace("_", "-")
         return "https://om.weerlab.nl/om/" + route + "?" + urlencode({k: _format_param(v) for k, v in params.items() if v is not None and k != "apikey"})
+    raise RuntimeError("Open-Meteo is uitgeschakeld; deze route heeft nog geen eigen bron")
     host, path = _resolve_endpoint(endpoint)
     key = _load_key()
 
@@ -197,6 +178,7 @@ def upgrade_url(url: str) -> str:
     if any((m.strip().startswith("gfs") or m.strip() == "icon_global") for k, v in pairs if k == "models" for m in v.split(",")):
         route = "ensemble" if "ensemble" in parsed.netloc else "forecast" if parsed.path.endswith("/forecast") and "previous" not in parsed.netloc else "previous"
         return "https://om.weerlab.nl/om/" + route + "?" + urlencode([(k, v) for k, v in pairs if k != "apikey"])
+    weerlab_network_fence.check(url)
     key = _load_key()
     if not key:
         return url

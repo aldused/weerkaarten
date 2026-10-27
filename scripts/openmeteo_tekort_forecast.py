@@ -41,6 +41,7 @@ def parse_station_coords(aws: int):
 
 
 def fetch_forecast(lat: float, lon: float):
+    raise RuntimeError("Open-Meteo is uitgeschakeld")
     """Deterministische ECMWF IFS-025 forecast."""
     params = urllib.parse.urlencode({
         "latitude":  lat,
@@ -62,6 +63,7 @@ def fetch_forecast(lat: float, lon: float):
 
 
 def fetch_ensemble(lat: float, lon: float):
+    raise RuntimeError("Open-Meteo is uitgeschakeld")
     """ECMWF-ensemble (50 perturbed + control) via ensemble-api."""
     params = urllib.parse.urlencode({
         "latitude":  lat,
@@ -99,6 +101,11 @@ def parse_ensemble(data: dict):
 
 
 def main():
+    # Observations remain; this provider no longer supplies forecast data.
+    data={"gegenereerd":datetime.now().strftime("%Y-%m-%d %H:%M"),"stations":{},"status":"uitgeschakeld","reden":"Open-Meteo is verwijderd; nog geen eigen verdampingsverwachting"}
+    with open(OUT_JSON,"w") as f:json.dump(data,f)
+    print(data["reden"])
+    return
     print("=" * 60)
     print("openmeteo_tekort_forecast.py — 15-daagse forecast")
     print("=" * 60)
