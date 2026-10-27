@@ -160,6 +160,10 @@ DIGEST_KEYS = (
 
 
 def fetch_with_retry(url: str, tries: int = 4) -> dict:
+    from urllib.parse import urlsplit
+    host = (urlsplit(url).hostname or "").lower()
+    if host == "open-meteo.com" or host.endswith(".open-meteo.com"):
+        raise RuntimeError("Open-Meteo is uitgeschakeld")
     last_err: Exception | None = None
     for i in range(tries):
         try:

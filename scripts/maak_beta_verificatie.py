@@ -124,6 +124,7 @@ def haal_werkelijk(wigos_id, dag: date):
 
 # ── Harmonie voorspelling ophalen via Open-Meteo ──────────────────────────────
 def haal_harmonie_voorspelling(lat, lon):
+    return {}  # Aanvullende externe verificatie uitgeschakeld.
     """Haal Harmonie TX/TN op voor komende dagen via Open-Meteo."""
     try:
         url = (f"https://api.open-meteo.com/v1/forecast"

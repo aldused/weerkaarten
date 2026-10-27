@@ -37,7 +37,7 @@ STATIONS = [
 
 KEEP_RUNS = 10
 ENS_URL = (
-    "https://ensemble-api.open-meteo.com/v1/ensemble"
+    "https://om.weerlab.nl/om/ensemble"
     "?latitude={lat}&longitude={lon}"
     "&hourly=temperature_2m,precipitation"
     "&models=ecmwf_ifs025"
@@ -192,7 +192,7 @@ def main(argv: list[str]) -> int:
 
     start = today_utc_str()
     end = add_days_utc(start, 15)
-    run_iso = f"{start}T00:00:00.000Z"
+    run_iso = None
 
     total_added = 0
     for name, lat, lon in STATIONS:
@@ -202,6 +202,10 @@ def main(argv: list[str]) -> int:
         except Exception as e:
             print(f"FOUT station {name}: {e}", file=sys.stderr)
             continue
+        actual_run = data.get("run_utc")
+        if not actual_run or (run_iso is not None and actual_run != run_iso):
+            raise RuntimeError("Ontbrekende of gemengde eigen ECMWF-bronrun")
+        run_iso = actual_run
         hourly = data.get("hourly", {})
         if not hourly.get("time"):
             print(f"Geen data voor {name}", file=sys.stderr)
@@ -222,6 +226,8 @@ def main(argv: list[str]) -> int:
         total_added += 1
         print(f"OK {name}: {len(temp)} 6h-bins, {len(precip)} 12h-bins")
 
+    if not total_added or not run_iso:
+        return 1  # Bestaande cache behouden als de eigen bron ontbreekt.
     out_doc = {
         "schema": 1,
         "updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

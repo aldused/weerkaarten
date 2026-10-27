@@ -98,6 +98,7 @@ def haal_gemeten(dagen: int) -> dict:
 
 
 def haal_model(slug: str, ss: dict, dagen: int) -> dict | None:
+    return None  # Open-Meteo uit; bestaande kalibraties blijven behouden.
     key = (Path.home() / ".open_meteo_key").read_text().strip()
     st = sorted(ss)
     payload = {

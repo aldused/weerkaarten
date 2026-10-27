@@ -3,6 +3,7 @@ maak_zeetemp_kaart.py
 Zeewatertemperaturen Europa + ingezoomde Noordzee
 Data: Open-Meteo Marine API (CMEMS)
 """
+raise SystemExit("Zeetemperatuur tijdelijk gestopt: wacht op eigen bron")
 import os, glob, requests
 from datetime import datetime
 import matplotlib.pyplot as plt

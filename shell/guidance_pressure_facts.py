@@ -144,6 +144,10 @@ def extrema(veld):
 
 
 def _haal_json(url, pogingen=3):
+    from urllib.parse import urlsplit
+    host = (urlsplit(url).hostname or "").lower()
+    if host == "open-meteo.com" or host.endswith(".open-meteo.com"):
+        raise RuntimeError("Open-Meteo is uitgeschakeld")
     """JSON ophalen met korte herpoging bij tijdelijke API- of netwerkfouten."""
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (weerlab-guidance)"})
     for poging in range(pogingen):

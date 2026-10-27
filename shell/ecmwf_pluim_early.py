@@ -317,6 +317,7 @@ def try_early_run(
     fetch=trend.fetch_with_retry,
 ) -> list[str]:
     """Return changed station paths, or [] when no newer early run is ready."""
+    return []  # Externe vroege voorlevering uitgeschakeld.
     stations = trend.STATIONS if stations is None else stations
     cache_buster = int(datetime.now(timezone.utc).timestamp() * 1000)
     latest = fetch(f"{EARLY_LATEST_META_URL}?cache_buster={cache_buster}")
