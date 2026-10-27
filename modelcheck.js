@@ -1,17 +1,17 @@
-/* KNMI station observations and current Open-Meteo model series.
+/* KNMI station observations and native HARMONIE/ICON-D2 model series.
    All calculations use UTC instants; only display is Europe/Amsterdam. */
 (function () {
   'use strict';
   const MIN = 60000;
   const valid = v => typeof v === 'number' && Number.isFinite(v);
   const utc = value => typeof value === 'string' ? Date.parse(/[zZ]$|[+-]\d\d:\d\d$/.test(value) ? value : value + 'Z') : NaN;
-  function interpolate(series, t) {
+  function interpolate(series, t, maxGap = 20 * MIN) {
     if (!series || !Number.isFinite(t)) return null;
     const exact = series.find(p => p.t === t);
     if (exact) return valid(exact.v) ? exact.v : null;
     for (let i = 1; i < series.length; i++) {
       const a = series[i - 1], b = series[i];
-      if (a.t < t && t < b.t && b.t - a.t <= 20 * MIN && valid(a.v) && valid(b.v)) {
+      if (a.t < t && t < b.t && b.t - a.t <= maxGap && valid(a.v) && valid(b.v)) {
         return a.v + (b.v - a.v) * (t - a.t) / (b.t - a.t);
       }
     }
@@ -32,15 +32,44 @@
     const values = rows.filter(r => valid(r.obs) && valid(r.model)).map(r => delta(r.obs, r.model));
     return {count: values.length, mean: values.length ? values.reduce((a,b) => a+b, 0) / values.length : null, cold: values.filter(v => v < -.5).length, close: values.filter(v => Math.abs(v) <= .5).length, warm: values.filter(v => v > .5).length};
   }
-  const core = {utc, interpolate, observation, normalizeStations, stats, delta};
+  // Canvas/point-source timestamps without an offset are Dutch local time.
+  function modelTime(value) {
+    if (typeof value !== 'string') return NaN;
+    if (/[zZ]$|[+-]\d\d:\d\d$/.test(value)) return Date.parse(value);
+    const wall = Date.parse(value + 'Z');
+    if (!Number.isFinite(wall)) return NaN;
+    const formatter = new Intl.DateTimeFormat('sv-SE', {timeZone:'Europe/Amsterdam', year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+    let instant = wall;
+    for (let i = 0; i < 3; i++) {
+      const parts = Object.fromEntries(formatter.formatToParts(instant).map(p => [p.type,p.value]));
+      const local = Date.UTC(+parts.year,+parts.month-1,+parts.day,+parts.hour,+parts.minute,+parts.second);
+      instant += wall - local;
+    }
+    return instant;
+  }
+  async function loadNativeModels(list, fetcher, endpoint = 'https://om.weerlab.nl/model-point') {
+    const output = {harmonie:{}, icond2:{}}, failures = new Set(), jobs = [];
+    for (const key of Object.keys(output)) for (const station of list) jobs.push(async () => {
+      try {
+        const query = new URLSearchParams({model:key,lat:station.lat,lon:station.lon,params:'temp',hours:'12',samples:'1',radius_km:'0'});
+        const item = await fetcher(endpoint + '?' + query);
+        if (item.model !== key || !item.tijden?.length || item.data?.temp?.length !== item.tijden.length) throw new Error('Ongeldige modelrespons');
+        const series = item.tijden.map((t,i) => ({t:modelTime(t),v:valid(item.data.temp[i]?.[0]) ? item.data.temp[i][0] : null})).filter(p => Number.isFinite(p.t)).sort((a,b)=>a.t-b.t);
+        if (!series.some(p=>valid(p.v))) throw new Error('Geen modeltemperaturen');
+        output[key][station.name] = series;
+      } catch (error) { failures.add(key === 'harmonie' ? 'HARMONIE' : 'ICON-D2'); console.warn('Temperatuurvergelijking:', key, error.message); }
+    });
+    let cursor = 0;
+    await Promise.all(Array.from({length:Math.min(4,jobs.length)}, async () => { while (cursor < jobs.length) await jobs[cursor++](); }));
+    return {output, failures:[...failures]};
+  }
+  const core = {utc, interpolate, observation, normalizeStations, stats, delta, modelTime, loadNativeModels};
   if (typeof module !== 'undefined') module.exports = core;
   if (typeof document === 'undefined') return;
   const $ = id => document.getElementById(id);
-  const MODELS = {harmonie: {name:'HARMONIE', api:'knmi_harmonie_arome_netherlands', color:'#c3813c'}, icond2:{name:'ICON-D2', api:'icon_d2', color:'#6877b9'}};
-  const production = /(^|\.)weerlab\.nl$/.test(location.hostname);
+  const MODELS = {harmonie: {name:'HARMONIE', color:'#c3813c'}, icond2:{name:'ICON-D2', color:'#6877b9'}};
   const localPreview = ['127.0.0.1','localhost'].includes(location.hostname);
   const obsURL = localPreview ? '/__live/observations' : 'https://data.weerlab.nl/actueel.json';
-  const modelURL = localPreview ? '/__live/model' : production ? 'https://om.weerlab.nl/om/forecast' : 'https://api.open-meteo.com/v1/forecast';
   let stations = [], models = {}, frames = [], latest = null, selected = 'De Bilt', model = 'harmonie', mode = 'pair', busy = false, geo = null, modelErrors = [], observationError = false;
   const fmt = v => valid(v) ? v.toFixed(1).replace('.', ',') : '—';
   const signed = v => valid(v) ? (Math.abs(v) < .05 ? '0,0' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(1).replace('.', ',')) : '—';
@@ -48,7 +77,7 @@
   const date = t => new Date(t).toLocaleDateString('nl-NL', {timeZone:'Europe/Amsterdam', day:'numeric',month:'short',year:'numeric'});
   const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const chosenTime = () => frames[Number($('time').value)];
-  const modelValue = (key, station, t) => interpolate(models[key]?.[station.name], t);
+  const modelValue = (key, station, t) => interpolate(models[key]?.[station.name], t, 60 * MIN);
   const verdict = d => !valid(d) ? 'Geen vergelijking beschikbaar' : Math.abs(d) < .05 ? 'Gelijk aan de verwachting' : `${fmt(Math.abs(d))} °C ${d > 0 ? 'warmer dan verwacht' : 'kouder dan verwacht'}`;
   const deltaClass = d => !valid(d) ? 'muted' : Math.abs(d) <= .5 ? 'close' : d > 0 ? 'warm' : 'cold';
   function color(d) {
@@ -69,30 +98,7 @@
     }).join('');
   }
   async function loadModels(list) {
-    // Multi-location requests preserve order; location_id is used when provided.
-    // Chunking bounds request size and lets other stations survive one failed request.
-    const output = {harmonie:{}, icond2:{}}, failures = new Set();
-    const jobs = [];
-    for (const [key, info] of Object.entries(MODELS)) {
-      for (let start = 0; start < list.length; start += 8) jobs.push(async () => {
-        const chunk = list.slice(start, start + 8);
-        const params = new URLSearchParams({latitude:chunk.map(s=>s.lat).join(','),longitude:chunk.map(s=>s.lon).join(','),minutely_15:'temperature_2m',models:info.api,past_minutely_15:'12',forecast_minutely_15:'8',timezone:'UTC',temperature_unit:'celsius'});
-        try {
-          const json = await fetchJSON(modelURL + '?' + params), results = Array.isArray(json) ? json : [json];
-          if (results.length !== chunk.length) throw new Error('Onvolledige modelrespons');
-          const ids = new Set();
-          for (let i = 0; i < results.length; i++) {
-            const item = results[i], index = Number.isInteger(item.location_id) ? item.location_id : i;
-            if (!chunk[index] || ids.has(index) || !item.minutely_15?.time?.length || item.minutely_15_units?.temperature_2m !== '°C') throw new Error('Ongeldige modelrespons');
-            ids.add(index);
-            output[key][chunk[index].name] = item.minutely_15.time.map((t,j) => ({t:utc(t),v:valid(item.minutely_15.temperature_2m?.[j]) ? item.minutely_15.temperature_2m[j] : null})).filter(p => Number.isFinite(p.t)).sort((a,b)=>a.t-b.t);
-          }
-        } catch (error) { failures.add(info.name); console.warn('Temperatuurvergelijking:', info.name, error.message); }
-      });
-    }
-    let cursor = 0;
-    await Promise.all(Array.from({length:Math.min(3,jobs.length)}, async () => { while (cursor < jobs.length) await jobs[cursor++](); }));
-    return {output, failures:[...failures]};
+    return loadNativeModels(list, fetchJSON);
   }
   function status() {
     const old = latest && Date.now() - latest > 30 * MIN;
@@ -102,7 +108,7 @@
     if (modelErrors.length) issues.push(`${modelErrors.join(' en ')} gedeeltelijk of niet beschikbaar; ontbrekende waarden zijn —.`);
     if (!geo) issues.push('De provinciekaart is niet beschikbaar; stations zijn ook te kiezen via de lijst.');
     $('notice').classList.toggle('warning', !!issues.length);
-    $('notice').textContent = issues.length ? issues.join(' ') : `KNMI-metingen per 10 minuten · laatste meting ${time(latest)} uur · modellen via Open-Meteo · automatisch verversen elke 5 minuten`;
+    $('notice').textContent = issues.length ? issues.join(' ') : `KNMI-metingen per 10 minuten · laatste meting ${time(latest)} uur · modellen rechtstreeks van KNMI en DWD · automatisch verversen elke 5 minuten`;
   }
   async function refresh() {
     if (busy) return;
