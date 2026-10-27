@@ -1199,8 +1199,8 @@ async function laadData(){
   try {
     const fetchKeys = ['harmonie', 'icond2'];
     const fetches = [
-      laadEigenPunt(`${basis}&models=knmi_harmonie_arome_netherlands`),
-      laadEigenPunt(`${basis}&models=icon_d2`),
+      laadEigenPunt(`${basis}&models=knmi_harmonie_arome_netherlands`).catch(e=>({_error:e.message})),
+      laadEigenPunt(`${basis}&models=icon_d2`).catch(e=>({_error:e.message})),
     ];
     if (modelActief.icond2ruc) {
       fetchKeys.push('icond2ruc');
@@ -1211,8 +1211,8 @@ async function laadData(){
     if (vergelijkActief && huidigLat2 != null) {
       const basis2 = bouwUrl(huidigLat2, huidigLon2);
       fetchKeys2.push('harmonie', 'icond2');
-      fetches.push(laadEigenPunt(`${basis2}&models=knmi_harmonie_arome_netherlands`));
-      fetches.push(laadEigenPunt(`${basis2}&models=icon_d2`));
+      fetches.push(laadEigenPunt(`${basis2}&models=knmi_harmonie_arome_netherlands`).catch(e=>({_error:e.message})));
+      fetches.push(laadEigenPunt(`${basis2}&models=icon_d2`).catch(e=>({_error:e.message})));
       if (modelActief.icond2ruc) {
         fetchKeys2.push('icond2ruc');
         fetches.push(laadIconD2RucData(huidigLat2, huidigLon2).catch(e => ({_error: e.message || String(e)})));
@@ -1225,6 +1225,7 @@ async function laadData(){
       if (results[idx]?._error) console.warn(key, results[idx]._error);
       else laatsteData[key] = results[idx];
     });
+    if(!Object.keys(laatsteData).length)throw Error('Eigen modelbronnen worden bijgewerkt of zijn tijdelijk niet beschikbaar');
     if (fetchKeys2.length) {
       laatsteData2 = {};
       const offset = fetchKeys.length;
@@ -1235,7 +1236,9 @@ async function laadData(){
       });
     }
     document.getElementById('run-info').textContent = 'Eigen KNMI/DWD-data · kwartierweergave uit uurwaarden (neerslagsom behouden) · bijgewerkt: ' + new Date().toLocaleTimeString('nl-NL', {hour:'2-digit',minute:'2-digit'});
-    document.getElementById('status').style.display = 'none';
+    const errors=fetchKeys.map((key,i)=>results[i]?._error?modelLabel(key)+': tijdelijk niet beschikbaar':null).filter(Boolean);
+    document.getElementById('status').textContent=errors.join(' · ');
+    document.getElementById('status').style.display=errors.length?'':'none';
     tekenCharts();
   } catch(e) {
     document.getElementById('status').innerHTML = `&#9888; ${e.message}`;
