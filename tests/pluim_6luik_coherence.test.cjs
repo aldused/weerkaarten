@@ -18,7 +18,7 @@ function extractFunction(name) {
   throw new Error(`${name} is niet volledig`);
 }
 
-assert.match(source, /pluim_run_switcher_986ffccbe63e\.js/, '6-luik gebruikt niet de directe gezamenlijke runkeuze');
+assert.match(source, /pluim_run_switcher_4d63811a6c2c\.js/, '6-luik gebruikt niet de directe gezamenlijke runkeuze');
 assert.match(source, /data-required="temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m"/, 'early-kernvelden worden niet vooraf bewaakt');
 assert.doesNotMatch(source.match(/data-required="([^"]+)"/)?.[1] || '', /snowfall/,
   'ontbrekende sneeuwval mag de overige vijf panelen niet blokkeren');

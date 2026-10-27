@@ -1056,7 +1056,7 @@ async function loadAndRender(force = false) {
     if(!cached || cached.data!==data) {
       const model=buildModel(data.ens,data.hres,data.meta.last_run_initialisation_time*1000,data.meta.data_end_time*1000);
       const rm=runMetaTeksten(data.meta);
-      model.runId=data.run;model.runLabel=runLabel(data.run);model.coverageLabel=rm.coverageLabel;
+      model.runId=data.run;model.runLabel=runLabel(data.run);model.coverageLabel=data.meta.progressive ? `Run wordt opgebouwd — beschikbaar tot +${data.meta.progressive.available_through_hour} uur van +${data.meta.progressive.expected_through_hour} uur` : rm.coverageLabel;
       model.datumTxt=new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(data.run));
       model.sourceModel=data.model;
       model.footRight=`Bron: ECMWF IFS-ENS · ${model.runLabel}`;
@@ -1075,7 +1075,7 @@ async function loadAndRender(force = false) {
     document.getElementById('hdrDatum').textContent=model.datumTxt;
     document.getElementById('hdrRun').textContent=`ENS6plus – run ${model.runLabel} · ${model.nMembers} leden · ${model.panelStatus}`;
     document.getElementById('runinfo').textContent=`ENS6plus – run ${model.runLabel} · ${station.name} · ${model.coverageLabel} · ${data.model}`;
-    status.textContent=`Actief: ${model.runLabel} · ${station.name}`;
+    status.textContent=`Actief: ${model.runLabel} · ${station.name}${data.meta.progressive ? ` · ${model.coverageLabel}` : ""}`;
     // Nieuwe vroege runs hebben 850/500 hPa en wolkenlagen soms nog niet:
     // wijs dan de nieuwste run aan waarin alle panelen wél staan.
     const shown=model.panels.filter(panel=>!panel.unavailable).length;
@@ -1360,9 +1360,10 @@ function exportPng() {
 
 function scheduleAutoRefresh() {
   if (autoRefreshTimer) clearTimeout(autoRefreshTimer);
-  const delay = isFastUpdateWindow() ? FAST_UPDATE_INTERVAL_MS : NORMAL_UPDATE_INTERVAL_MS;
+  const growing=runControl.runs.find(r=>r.run===runControl.selectedRun)?.progressive;
+  const delay = growing ? 60000 : isFastUpdateWindow() ? FAST_UPDATE_INTERVAL_MS : NORMAL_UPDATE_INTERVAL_MS;
   autoRefreshTimer = setTimeout(async () => {
-    const force = isFastUpdateWindow();
+    const force = isFastUpdateWindow() || runControl.runs.some(r=>r.progressive);
     if (!document.hidden) {
       try { await loadAndRender(force); } catch (_) {}
     }

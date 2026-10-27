@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {validProgress,verifyProgress,readProgress} from '../cloudflare-worker/pluim-progressive.mjs';
+import {handleEns6} from '../cloudflare-worker/ens6-runs.mjs';
+const run='2026-10-27T00:00:00Z',hash='a'.repeat(64),digest='b'.repeat(64);
+const fields=['temperature_2m','precipitation','wind_speed_10m','wind_direction_10m','cloud_cover','wind_gusts_10m','cape'];
+const m={ready:true,progressive:true,complete:false,station_count:39,member_count:51,run,revision:hash,path:`pluim-progressive/20261027T00/${hash}`,available_through_hour:12,expected_through_hour:360,fields,station_digests:Object.fromEntries(['debilt',...Array.from({length:38},(_,i)=>'s'+i)].map(s=>[s,digest]))};
+const d={lat:52.101,lon:5.178,runs:[{run,fetched:run,data_sha256:digest,times_ms:Array.from({length:13},(_,i)=>Date.parse(run)+i*3600000),members:Object.fromEntries(fields.map(f=>[f,Array.from({length:51},()=>Array(13).fill(1))])),source:{provider:'ECMWF Open Data',run_initialisation:run,available_through_hour:12}}]};
+assert(validProgress(m));verifyProgress(d,m,'debilt');
+const bad=structuredClone(d);bad.runs[0].members.temperature_2m[50][12]=null;
+assert.throws(()=>verifyProgress(bad,m,'debilt'));
+assert.equal(await readProgress(async()=>m,[{run}]),null);
+const fetcher=async u=>new Response(JSON.stringify(String(u).includes('pluim_progressive_meta')?m:String(u).includes('pluim-progressive/')?d:{complete:true,member_count:51,station_count:39,runs:[]}));
+const base='https://om.weerlab.nl';
+let res=await handleEns6(new URL(base+'/ens6-runs?latitude=52.101&longitude=5.18'),new Request(base),{},fetcher);
+let body=await res.json();assert.equal(body.runs[0].progressive,true);assert.equal(body.runs[0].available_through_hour,12);
+res=await handleEns6(new URL(base+`/ens6-run?latitude=52.101&longitude=5.18&run=${run}&hourly=cloud_cover,wind_direction_10m`),new Request(base),{},fetcher);
+body=await res.json();assert.equal(res.status,200,JSON.stringify(body));assert.equal(body.ens.hourly.time.length,13);assert.equal(body.meta.progressive.available_through_hour,12);
+console.log('Progressive API: 51-member prefix verified, incomplete member rejected, complete archive preferred.');

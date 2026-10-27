@@ -162,6 +162,28 @@ if [[ "${PLUIM_DIRECT_ARCHIVE_ONLY:-0}" == "1" ]]; then
   producer_command+=(--archive-only)
 fi
 
+# Publish verified growing prefixes before the final-run readiness gate.
+if [[ "${PLUIM_DIRECT_ARCHIVE_ONLY:-0}" != "1" ]]; then
+progressive_command=("${producer_command[@]}")
+progressive_command[1]="shell/ecmwf_pluim_progressive.py"
+"${progressive_command[@]}" > "$RUN_LOG" &
+active_pid=$!
+set +e
+wait "$active_pid"
+progressive_status=$?
+active_pid=""
+set -e
+cat "$RUN_LOG"
+if ((progressive_status != 0)); then
+  echo "Progressieve aanvoer onderbroken; laatst gepubliceerde pluim behouden" >&2
+  exit "$progressive_status"
+fi
+if ! /usr/bin/grep -q '^PROGRESSIVE_FULL:' "$RUN_LOG"; then
+  exit 0
+fi
+
+fi
+
 set +e
 "${producer_command[@]}" > "$RUN_LOG" &
 active_pid=$!

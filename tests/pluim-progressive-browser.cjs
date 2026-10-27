@@ -1,0 +1,32 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const name=fs.readFileSync('weerbewaking_pluim.html','utf8').match(/pluim_run_switcher_[a-f0-9]+\.js/)[0];
+const run='2026-10-27T00:00:00Z',old='2026-10-26T18:00:00Z',rev='a'.repeat(64),digest='b'.repeat(64);
+let through=12;
+const fields=['temperature_2m','precipitation','wind_speed_10m','wind_gusts_10m'];
+const matrix=()=>Array.from({length:51},()=>Array(through+1).fill(1));
+const item=()=>({run,data_sha256:digest,n:through+1,times_ms:Array.from({length:through+1},(_,i)=>Date.parse(run)+i*3600000),members:Object.fromEntries(fields.map(f=>[f,matrix()])),source:{access:'direct_grib2_range_requests',provider:'ECMWF Open Data',run_initialisation:run,progressive:true,available_through_hour:through,expected_through_hour:360}});
+const manifest=()=>({ready:true,progressive:true,station_count:39,member_count:51,run,revision:rev,path:`pluim-progressive/20261027T00/${rev}`,available_through_hour:through,expected_through_hour:360,fields,station_digests:Object.fromEntries(['debilt',...Array.from({length:38},(_,i)=>'s'+i)].map(s=>[s,digest]))});
+let polls,reloads=0;
+const fetch=async u=>{
+ const url=String(u);
+ let data;
+ if(url.includes('pluim_progressive_meta'))data=manifest();
+ else if(url.includes('pluim-progressive/'))data={lat:52.101,lon:5.178,runs:[item()]};
+ else if(url.includes('pluim_archive_meta'))data={complete:true,station_count:39,member_count:51,runs:[]};
+ else if(url.includes('pluim_direct_meta'))data={complete:true,fields,station_count:39,member_count:51,last_run_initialisation_time:Date.parse(old)/1000};
+ else if(url.includes('static/meta'))data={last_run_initialisation_time:Date.parse(old)/1000};
+ else if(url.includes('pluim_trend_'))data={lat:52.101,lon:5.178,runs:[]};
+ else throw Error(url);
+ return new Response(JSON.stringify(data));
+};
+const window={fetch,addEventListener(){},setInterval(f){polls=f},setTimeout(f){f()}};
+const document={currentScript:{dataset:{required:fields.join(',')}},readyState:'loading',hidden:false,addEventListener(){},getElementById(){return null},body:{classList:{toggle(){}}}};
+const location={search:'',href:'https://weerlab.nl/weerbewaking_pluim.html',pathname:'/weerbewaking_pluim.html',reload(){reloads++}};
+vm.runInNewContext(fs.readFileSync(name,'utf8'),{window,document,location,history:{replaceState(){}},URL,URLSearchParams,Request,Response,Date,Map,Set,Promise,console,setTimeout,CustomEvent:class{}});
+(async()=>{
+ const ctl=window.WeerlabPlumeRuns;await ctl.state.ready;await ctl.state.archiveReady;
+ assert.equal(ctl.state.selectedRun.run,run);assert.equal(ctl.state.selectedRun.times_ms.length,13);
+ const res=await window.fetch('https://ensemble-api.open-meteo.com/v1/ensemble?models=ecmwf_ifs025&latitude=52.101&longitude=5.18&hourly=temperature_2m');
+ const data=await res.json();assert.equal(data.hourly.time.length,14);assert.equal(Date.parse(data.hourly.time[12]+"Z"),Date.parse(run)+12*3600000);assert.equal(data.hourly.temperature_2m_member50.length,13);
+ console.log('Progressive browser selects exact newer prefix and serves all 51 members without older-run tail.');
+})().catch(e=>{console.error(e);process.exitCode=1});
