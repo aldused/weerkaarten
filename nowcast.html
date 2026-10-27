@@ -1010,10 +1010,9 @@ function bouwUrl(lat, lon){
   const hourlyBasis = 'cape,convective_inhibition,lifted_index,freezing_level_height';
   const hourlyPL = 'temperature_850hPa,temperature_700hPa,temperature_500hPa,dew_point_850hPa,dew_point_700hPa,wind_speed_850hPa,wind_speed_500hPa,wind_direction_850hPa,wind_direction_500hPa';
   return `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
-    + `&minutely_15=${variabelen}`
-    + `&hourly=${hourlyBasis},${hourlyPL}`
+    + `&hourly=${variabelen},${hourlyBasis},${hourlyPL}`
     + `&wind_speed_unit=kmh&timezone=Europe%2FAmsterdam`
-    + `&past_minutely_15=12&forecast_minutely_15=192&past_hours=3&forecast_hours=12`;
+    + `&forecast_hours=48`;
 }
 
 async function laadGridMeta(modelKey){
@@ -1138,15 +1137,25 @@ function hourlyToMinutely15(hourly){
   const out = {time: []};
   Object.keys(hourly).forEach(k => { if (k !== 'time') out[k] = []; });
   for (let t = start; t <= end; t += 15 * 60 * 1000) {
-    out.time.push(new Date(t).toLocaleString('sv-SE', {timeZone: 'Europe/Amsterdam'}).replace(' ', 'T').slice(0,16));
+    out.time.push(new Date(t).toISOString());
     let hi = 0;
     while (hi < timesMs.length - 2 && timesMs[hi + 1] < t) hi++;
     const lo = hi, up = Math.min(hi + 1, timesMs.length - 1);
     for (const k of Object.keys(out)) {
       if (k === 'time') continue;
-      out[k].push(k === 'wind_direction_10m'
-        ? interpDir(t, timesMs[lo], hourly[k]?.[lo], timesMs[up], hourly[k]?.[up])
-        : interpLinear(t, timesMs[lo], hourly[k]?.[lo], timesMs[up], hourly[k]?.[up]));
+      const left=hourly[k]?.[lo],right=hourly[k]?.[up];
+      const duration=timesMs[up]-timesMs[lo];
+      let value=null;
+      if(k==='precipitation'){
+        // Each value is the total over its preceding source interval.
+        // Divide that amount over quarter-hours, never interpolate totals.
+        if(t>start&&Number.isFinite(right)&&duration>0)value=right*(15*60*1000)/duration;
+      }else if(t===timesMs[lo])value=Number.isFinite(left)?left:null;
+      else if(t===timesMs[up])value=Number.isFinite(right)?right:null;
+      else if(Number.isFinite(left)&&Number.isFinite(right))value=k==='wind_direction_10m'
+        ?interpDir(t,timesMs[lo],left,timesMs[up],right)
+        :k==='wind_gusts_10m'?right:interpLinear(t,timesMs[lo],left,timesMs[up],right);
+      out[k].push(value);
     }
   }
   return out;
@@ -1173,6 +1182,11 @@ async function laadIconD2RucData(lat, lon){
   };
 }
 
+async function laadEigenPunt(url){
+  const data=await fetchT(url);
+  if(!data.hourly?.time?.length)throw Error('Eigen modelbron bevat geen uurwaarden');
+  return {...data,minutely_15:hourlyToMinutely15(data.hourly)};
+}
 async function laadData(){
   document.getElementById('status').innerHTML = '<span class="spinner"></span>Data ophalen…';
   document.getElementById('status').style.display = '';
@@ -1185,8 +1199,8 @@ async function laadData(){
   try {
     const fetchKeys = ['harmonie', 'icond2'];
     const fetches = [
-      fetchT(`${basis}&models=knmi_harmonie_arome_netherlands`),
-      fetchT(`${basis}&models=icon_d2`),
+      laadEigenPunt(`${basis}&models=knmi_harmonie_arome_netherlands`),
+      laadEigenPunt(`${basis}&models=icon_d2`),
     ];
     if (modelActief.icond2ruc) {
       fetchKeys.push('icond2ruc');
@@ -1197,8 +1211,8 @@ async function laadData(){
     if (vergelijkActief && huidigLat2 != null) {
       const basis2 = bouwUrl(huidigLat2, huidigLon2);
       fetchKeys2.push('harmonie', 'icond2');
-      fetches.push(fetchT(`${basis2}&models=knmi_harmonie_arome_netherlands`));
-      fetches.push(fetchT(`${basis2}&models=icon_d2`));
+      fetches.push(laadEigenPunt(`${basis2}&models=knmi_harmonie_arome_netherlands`));
+      fetches.push(laadEigenPunt(`${basis2}&models=icon_d2`));
       if (modelActief.icond2ruc) {
         fetchKeys2.push('icond2ruc');
         fetches.push(laadIconD2RucData(huidigLat2, huidigLon2).catch(e => ({_error: e.message || String(e)})));
@@ -1220,7 +1234,7 @@ async function laadData(){
         else laatsteData2[key] = res;
       });
     }
-    document.getElementById('run-info').textContent = 'Laatst bijgewerkt: ' + new Date().toLocaleTimeString('nl-NL', {hour:'2-digit',minute:'2-digit'});
+    document.getElementById('run-info').textContent = 'Eigen KNMI/DWD-data · kwartierweergave uit uurwaarden (neerslagsom behouden) · bijgewerkt: ' + new Date().toLocaleTimeString('nl-NL', {hour:'2-digit',minute:'2-digit'});
     document.getElementById('status').style.display = 'none';
     tekenCharts();
   } catch(e) {
@@ -1399,7 +1413,7 @@ function updateRainTimeline(s){
   }).join('');
   const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
   setTxt('timeline-title', `Neerslagpad voor ${huidigNaam}`);
-  setTxt('timeline-sub', `Elke balk is 15 minuten, uit ${s.modelText}.`);
+  setTxt('timeline-sub', `Elke balk is 15 minuten, afgeleid uit de beschikbare bronstappen van ${s.modelText}.`);
   setTxt('timeline-wind', s.dirNow != null ? `wind ${dirTekst(s.dirNow)} · ${Math.round(s.windNow ?? 0)} km/u` : 'wind –');
   if (s.peakRain.v >= 1.2) {
     setTxt('timeline-impact', 'Zware kwartierpiek');
