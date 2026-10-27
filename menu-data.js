@@ -57,6 +57,7 @@ const MENU_PRODUCTS = [
     "section": "Beeld",
     "icon": "radar",
     "href": "index.html#nowcast",
+    "src": "nowcast.html?v=20261027-native3",
     "thumbnail": "thumbs/nowcast.webp",
     "facets": {},
     "keywords": "Nowcast 15-min Extrapolatie + 700 hPa-blend ",
