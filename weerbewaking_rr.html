@@ -734,7 +734,7 @@ function vulVijfdaagse(data){
 }
 /* Tabel-persistentie (localStorage, per dag) */
 const TABEL_KEY_PREFIX='wb_rr_tabel_';
-const TABLE_SOURCES='mosmix-temp-weather24-v2';   // oudere opgeslagen tabellen (KNMI-kans, 5 rijen) worden opnieuw opgehaald
+const TABLE_SOURCES='weather24-v3';   // oudere opgeslagen tabellen (KNMI-kans, 5 rijen) worden opnieuw opgehaald
 function tabelSaveKey(){ return TABEL_KEY_PREFIX+huidigeDatumKey(); }
 function saveTabel(){
   const tbody=document.getElementById('vijfdaagse-body');
@@ -758,19 +758,17 @@ function restoreTabel(){
   }catch(e){ return false; }
 }
 
-/* Temperatuur uit MOSMIX (Rotterdam Airport); zon, neerslag en wind uit de Weather24-dagwaarden voor Rotterdam. */
+/* Alle dagwaarden uit Weather24 voor Rotterdam: temperatuur, zon, neerslag en wind. */
 function vijfdaagseDatumKeys(start){
   return [0,1,2,3,4].map(i=>{const d=plusDag(start,i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`});
 }
 async function laadVijfdaagse(){
-  const nu=new Date();
+  const nu=new Date(),keys=vijfdaagseDatumKeys(nu);
   bouwVijfdaagseDagKoppen(nu);
-  const [mos,weather]=await Promise.allSettled([
-    fetch('https://data.weerlab.nl/mosmix_nl.json?_='+Date.now()).then(r=>{if(!r.ok)throw Error('MOSMIX niet beschikbaar');return r.json()}),
-    WeatherProSrc.feedCity('rotterdam').then(c=>{if(!c)throw Error('Geen Weather24-daggegevens voor Rotterdam');return c})
-  ]);
-  const mosmix=mos.status==='fulfilled'?mos.value:null,city=weather.status==='fulfilled'?weather.value:null;
-  vulVijfdaagse(Weather24Table.mixed(mosmix,'Rotterdam Airport',vijfdaagseDatumKeys(nu),city));
+  let city=null;
+  try{ city=await WeatherProSrc.feedCity('rotterdam'); }catch(e){}
+  const temp=veld=>keys.map(k=>{const v=city?.days?.[k]?.[veld];return typeof v==='number'&&Number.isFinite(v)?Math.round(v):'–'});
+  vulVijfdaagse({tmax:temp('tx'),tmin:temp('tn'),...Weather24Table.daily(city,keys)});
   saveTabel();
 }
 
