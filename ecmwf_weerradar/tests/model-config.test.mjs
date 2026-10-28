@@ -27,7 +27,7 @@ test('viewZoom keeps the core, adds context only within maxOut, quarter steps',(
 test('upper-air files keep model, run and valid time',()=>{
  const run='2026-09-23T06:00:00Z',t=h=>Date.parse(run)+h*3600e3;
  const f=h=>({time:t(h),url:'https://x/data_spatial/ecmwf_ifs/2026/09/23/0600Z/a.om',modelMeta:{modelId:'ecmwf_ifs',reference_time:run}});
- assert.match(upperAirFile(f(12),'ecmwf_ifs','temperature_850hPa'),/\/data_spatial\/ecmwf_ifs025\/2026\/09\/23\/0600Z\/2026-09-23T1800\.om$/);
+ assert.equal(upperAirFile(f(12),'ecmwf_ifs','temperature_850hPa'),f(12).url);
  assert.equal(upperAirFile(f(13),'ecmwf_ifs','temperature_850hPa'),null,'no hourly 0.25° levels');
  assert.equal(upperAirFile(f(147),'ecmwf_ifs','temperature_500hPa'),null,'6-hourly after +144');
  assert.equal(upperAirFile(f(13),'harmonie','temperature_850hPa'),null);

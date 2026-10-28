@@ -1,3 +1,4 @@
+import {directIFSRequest} from './native-ifs.mjs';
 import {retryFetch} from './retry-fetch.mjs';
 import {decodeRegularPacket} from './regular-grid.mjs';
 import {decodeProjectedPacket} from './projected-grid.mjs';
@@ -12,6 +13,7 @@ export class FieldPackets{
     this.inflight=new Map();
   }
   wire(file,variable,bounds){
+    const direct=directIFSRequest(file,variable,bounds);if(direct)return direct;
     // A separate transport identity keeps old total-only cloud packets out
     // of both caches while leaving all non-cloud protocols unchanged.
     if(variable==='cloud_cover')variable='cloud_layers';
@@ -58,11 +60,11 @@ export class FieldPackets{
     let cache=await this.openCache(),present;
     signal?.throwIfAborted();
     try{present=await cache?.match(url);}catch{cache=undefined;}
-    if(present){try{return decode(await present.arrayBuffer(),expected);}catch{await cache.delete(url).catch(()=>{});}}
+    if(present){try{return await decode(await present.arrayBuffer(),expected);}catch{await cache.delete(url).catch(()=>{});}}
     signal?.throwIfAborted();
     const bytes=await this.transfer(url,cache,{signal});signal?.throwIfAborted();
     // Private copy: decoded fields are normalised in place and a transfer may be shared.
-    return decode(bytes.slice(0),expected);
+    return await decode(bytes.slice(0),expected);
   }
   /** Background warm-up: store the transport bytes only. No decoding or
    * drawing happens until the visitor actually selects that hour. */

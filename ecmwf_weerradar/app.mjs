@@ -1,3 +1,4 @@
+import {isDirectIFS,nativeIFSLatest,directIFSFrames} from './native-ifs.mjs';
 import {isTimeNavigationKey} from './time-navigation.mjs';
 import {readConvectiveFields} from './convective-fields.mjs';
 import {installGestureProfile} from './gesture-profile.mjs';
@@ -164,7 +165,7 @@ function readField(file,variable,signal){
       if(thunderVariables(frame.modelMeta).length&&fieldFile(frame,'temperature_500hPa'))variables.push('temperature_500hPa');
       const {fields,unavailable}=await readConvectiveFields(variables,v=>readField(fieldFile(frame,v),v,readSignal),readSignal);
       readSignal.throwIfAborted();const started=performance.now();const build=variable==='thunderstorm'?buildThunderFieldAsync:buildSignificantFieldAsync;const result=await build(fields,window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);result.metadata.unavailable=unavailable;$('app').dataset.significantComputeMs=Math.round(performance.now()-started);return result;
-    })():isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
+    })():isAccumulation(variable)&&file.includes('/ifs-interactive/')?await fieldPackets.read(file,variable,window.bounds,readSignal):isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
     if(!['significant_weather','thunderstorm'].includes(variable)&&!isAccumulation(variable)&&(data.metadata.kind!=='regular'||file.includes('/ncep_gfs')))normalizeFieldData(data,variable,intervalByURL.get(file));
     const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
     for(const key of CLOUD_KEYS)if(data[key])field[key]=data[key];
@@ -189,13 +190,14 @@ function tempVariable(modelId){const v=UPPER_AIR_LEVELS[tempLevel];return v!=='t
 // File that holds `variable` for this frame: same model, run and valid time.
 function fieldFile(frame,variable){
  if(['significant_weather','thunderstorm'].includes(variable)){const file=frame.url+'/'+variable;significantRequests.set(file,frame);return file;}
+ if(isAccumulation(variable)&&isDirectIFS(modelFor(frame.modelMeta)))return frame.url;
  if(isAccumulation(variable)){
   const anchor=frame.accumulationAnchor??frame.time-frame.hours*HOUR,file=frame.url+'/sum/'+anchor+'/'+variable;
   accumulationRequests.set(file,{frame,anchor});return file;
  }
 if(modelFor(frame.modelMeta)==='ncep_gfs013')return gfsFieldFile(frame,variable);return variable.endsWith('hPa')?upperAirFile(frame,modelFor(frame.modelMeta),variable):frame.url;}
 $('model-select').value=selectedModel;
-$('model-select').addEventListener('change',()=>{selectedModel=$('model-select').value;start(undefined,selectedModel,true);});
+$('model-select').addEventListener('change',()=>{const next=$('model-select').value,keepView=isDirectIFS(selectedModel)&&isDirectIFS(next);selectedModel=next;start(undefined,next,!keepView);});
 // Optional local diagnostics: no reporting endpoint and no visitor tracking.
 if(params.get('profile')==='1'){
   setInterval(()=>{
@@ -222,7 +224,7 @@ const map = new mapEngine.Map({
   ]},
 });
 map.touchZoomRotate.disableRotation();
-map.addControl(new mapEngine.AttributionControl({compact:true,customAttribution:'<span id="model-attribution"><a href="https://open-meteo.com/" target="_blank" rel="noopener">ECMWF / Open-Meteo</a></span> · Natural Earth'}),'bottom-right');
+map.addControl(new mapEngine.AttributionControl({compact:true,customAttribution:'<span id="model-attribution">Modeldata · Weerlab</span> · Natural Earth'}),'bottom-right');
 map.addControl(new mapEngine.ScaleControl({maxWidth:100,unit:'metric'}),'bottom-left');
 const mapReady = new Promise(resolve => map.once('load',resolve));
 map.on('error', e => {
@@ -350,7 +352,9 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
   try {
     const now=Date.now();
     let timeline;
-    if(modelId==='ecmwf_ifs'){
+    if(isDirectIFS(modelId)){
+      timeline=directIFSFrames(await (prefetchedLatest??json(nativeIFSLatest(modelId),signal)),modelId,now);
+    }else if(modelId==='ecmwf_ifs'){
       const candidateMetas=await discoverRuns(now,prefetchedLatest);
       if(startup!==startupRevision)return;
       timeline=combinedForecastFrames(candidateMetas,now);
@@ -360,7 +364,7 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
     else timeline=regionalFrames(await json(latestModelURL(modelId),signal),modelId,now);
     if(startup!==startupRevision)return;
     $('app').dataset.metadataReadyMs=Math.round(performance.now());
-    timeline.forEach(f=>{intervalByURL.set(f.url,f.hours);f.accumulationAnchor=timeline[0].time-timeline[0].hours*HOUR;});
+    timeline.forEach(f=>{intervalByURL.set(f.url,f.hours);f.accumulationAnchor=isDirectIFS(modelId)?Date.parse(f.modelMeta.reference_time):timeline[0].time-timeline[0].hours*HOUR;});
     if(mode==='snow_total'&&!timeline[0].modelMeta.variables.includes('snowfall_water_equivalent'))mode='rain_total';
     await mapReady;
     if(startup!==startupRevision)return;
@@ -398,7 +402,7 @@ function buildTimeline(timeline){
     button.title=day.full;button.setAttribute('aria-label',day.full);button.setAttribute('aria-pressed','false');
     button.addEventListener('click',()=>{stopPlayback();requestFrame(chooseDayEntry(day,requestedContext?.timeline[wanted]?.time??current?.time)?.index??day.target.index);});container.append(button);
   }
-  $('time-slider').max=(timeline.at(-1).time-timeline[0].time)/HOUR;const span=Number($('time-slider').max);$('range-end').textContent=span>=240?'+10 dagen':`+${span} uur`;
+  $('time-slider').max=(timeline.at(-1).time-timeline[0].time)/HOUR;const span=Number($('time-slider').max);$('range-end').textContent=span>=240?'+'+Math.ceil(span/24)+' dagen':`+${span} uur`;
   document.querySelector('.timeline').setAttribute('aria-label',`Verwachting tot ${forecastLabel(timeline.at(-1).time).text}`);
   $('time-ticks').replaceChildren();
   const divisions=span>=240?10:Math.min(5,Math.ceil(span/12));
@@ -722,7 +726,7 @@ function syncUI(){
   $('model-coverage').textContent=MODELS[modelId].region;
   $('model-resolution').textContent=MODELS[modelId].resolution;
   $('point-model').textContent=MODELS[modelId].label+'-VERWACHTING';
-  $('gfs-info').hidden=modelId!=='ncep_gfs013';$('ecmwf-info').hidden=modelId!=='ecmwf_ifs';$('harmonie-info').hidden=!isBenelux(modelId);$('harmonie-europe-info').hidden=!isEuropeanHarmonie(modelId);
+  $('gfs-info').hidden=modelId!=='ncep_gfs013';$('ecmwf-info').hidden=!isDirectIFS(modelId);$('harmonie-info').hidden=!isBenelux(modelId);$('harmonie-europe-info').hidden=!isEuropeanHarmonie(modelId);
   $('icon-d2-info').hidden=modelId!=='icond2';
   $('snow').disabled=!metadata.variables.includes('snowfall_water_equivalent');
   $('isobars').disabled=!hasIsobars(metadata);
@@ -1144,6 +1148,11 @@ async function checkForNewRun(){
   if(!current||!$('area-overlay').hidden||document.hidden||playing||rendering||refreshing||checkingRun||Date.now()-checkedAt<10*60*1000)return;
   checkedAt=Date.now();checkingRun=true;const polledModel=selectedModel,polledFrame=current;
   try {
+    if(isDirectIFS(selectedModel)){
+      const latest=await json(nativeIFSLatest(selectedModel));
+      if(selectedModel===polledModel&&current===polledFrame&&!playing&&!rendering&&!refreshing&&(Date.parse(latest.reference_time)>Date.parse(current.modelMeta.reference_time)||latest.reference_time===current.modelMeta.reference_time&&latest.version!==current.modelMeta.version))await start(undefined,polledModel);
+      return;
+    }
     if(selectedModel!=='ecmwf_ifs'){
       const latest=await json(latestModelURL(selectedModel));
       if(selectedModel===polledModel&&current===polledFrame&&!playing&&!rendering&&!refreshing&&(Date.parse(latest.reference_time)>Date.parse(current.modelMeta.reference_time)||(isRegional(selectedModel)&&latest.reference_time===current.modelMeta.reference_time&&latest.version!==current.modelMeta.version)))await start(undefined,polledModel);
