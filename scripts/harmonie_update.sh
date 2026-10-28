@@ -485,6 +485,15 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         print(f'   {point_key} ({point_file.stat().st_size/1024/1024:.1f} MB, range-ready)')
 
     print(f'Upload klaar!')
+
+    # 8. Sneeuwkaarten (KNMI_Project/sneeuw): leest dezelfde uitgepakte GRIB-bestanden,
+    #    dus geen tweede download. Een fout hier mag de HARMONIE-publicatie niet raken.
+    print('8. Sneeuwkaarten HARMONIE P1...')
+    try:
+        subprocess.run(['/usr/local/bin/python3', '-m', 'sneeuw.sources.harmonie_p1', '--grib-dir', tmpdir, '--publish'],
+                       cwd='/Users/aldus/KNMI_Project', check=True, timeout=600)
+    except Exception as _e:
+        print(f'   [waarschuwing] sneeuwkaarten mislukt: {_e}')
 " 2>&1
 
 status=$?

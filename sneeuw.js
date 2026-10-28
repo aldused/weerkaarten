@@ -11,24 +11,30 @@ const PRODUCTS = {
   sneeuwdek_kans: {title:'Kans op sneeuwdek', variantLabel:'Minimaal', label: v => '≥ ' + v + ' cm',
     definition: (m, v, t) => `Kans dat er op ${S.fullLabel(t)} minstens ${v} cm sneeuw ligt (modelsneeuwhoogte).`},
   sneeuwhoogte: {title:'Verwachte sneeuwhoogte', variantLabel:'Statistiek',
-    label: v => ({p10:'P10', p50:'Mediaan', mean:'Gemiddeld', p90:'P90', max:'Maximum'})[v],
-    definition: (m, v, t) => ({p10:'P10: 9 van de 10 leden hebben minstens deze hoogte.', p50:'Mediaan: de middelste van de geldige leden.',
+    label: v => ({p10:'P10', p50:'Mediaan', mean:'Gemiddeld', p90:'P90', max:'Maximum', model:'Modelwaarde'})[v],
+    definition: (m, v, t) => ({model:'Deterministische modelsneeuwhoogte (één run, geen spreiding).', p10:'P10: 9 van de 10 leden hebben minstens deze hoogte.', p50:'Mediaan: de middelste van de geldige leden.',
       mean:'Gemiddelde over de geldige leden.', p90:'P90: slechts 1 van de 10 leden heeft meer.', max:'Maximum: het hoogste lid — het natste scenario, niet de verwachting.'})[v]
       + ' Modelsneeuwhoogte op ' + S.fullLabel(t) + '.'},
+  nieuwe_sneeuw: {title:'Nieuwe sneeuw', variantLabel:'Venster',
+    label: v => { const [k, w] = v.split('_'); return `${w} u · ${k === 'we' ? 'mm' : 'dek'}`; },
+    definition: (m, v, t) => { const [k, w] = v.split('_');
+      return k === 'we' ? `Sneeuwval in ${w} uur (${S.windowLabel(t, +w)}) in mm water-equivalent — géén centimeters verse sneeuw; de omrekening hangt af van temperatuur en sneeuwsoort.`
+        : `Netto toename van de modelsneeuwhoogte in ${w} uur (${S.windowLabel(t, +w)}). Smelten en inklinken tellen mee, dus dit is niet de hoeveelheid verse sneeuw.`; }},
   neerslagsoort: {title:'Neerslagsoort', variantLabel:'Weergave',
     label: v => ({dominant:'Meest waarschijnlijk', neerslag:'Kans op neerslag', sneeuw:'Sneeuw', natte_sneeuw:'Natte sneeuw',
       regen_sneeuw:'Regen en sneeuw', ijzel:'IJzel', ijskorrels:'IJskorrels', regen:'Regen'})[v],
-    definition: (m, v, t) => v === 'dominant'
+    definition: (m, v, t) => m.products.neerslagsoort.definition ? m.products.neerslagsoort.definition + ' Tijdstip: ' + S.fullLabel(t) + '.'
+      : v === 'dominant'
       ? `Meest waarschijnlijke neerslagsoort op ${S.fullLabel(t)} (momentopname), alleen waar minstens ${m.criteria.ptype_min_precip_pct} % van de leden neerslag heeft.`
       : v === 'neerslag' ? `Kans dat er op ${S.fullLabel(t)} neerslag valt (welke soort dan ook).`
       : `Kans dat de neerslag op ${S.fullLabel(t)} valt als ${PRODUCTS.neerslagsoort.label(v).toLowerCase()} (aandeel van alle leden, momentopname).`}
 };
-const MODELS = {icond2eps:{staleHours:9}, ecmwfens:{staleHours:22}};
+const MODELS = {icond2eps:{staleHours:9}, ecmwfens:{staleHours:22}, harmoniep1:{staleHours:6}};
 const PLACES = [['Den Helder',52.96,4.76],['Leeuwarden',53.20,5.79],['Groningen',53.22,6.57],['Assen',52.99,6.56],['Zwolle',52.51,6.09],
   ['Lelystad',52.52,5.47],['Amsterdam',52.37,4.90],['Den Haag',52.08,4.30],['Rotterdam',51.92,4.48],['Utrecht',52.09,5.12],['Arnhem',51.98,5.91],
   ['Enschede',52.22,6.89],['Middelburg',51.50,3.61],["'s-Hertogenbosch",51.69,5.30],['Eindhoven',51.44,5.48],['Breda',51.59,4.78],['Maastricht',50.85,5.69]];
 
-let state = {model:'icond2eps', product:'sneeuwval_kans', variant:{sneeuwval_kans:'6', sneeuwdek_kans:'1', sneeuwhoogte:'p50', neerslagsoort:'dominant'}, t:0, cell:-1};
+let state = {model:'icond2eps', product:'sneeuwval_kans', variant:{sneeuwval_kans:'6', sneeuwdek_kans:'1', sneeuwhoogte:'p50', nieuwe_sneeuw:'we_6', neerslagsoort:'dominant'}, t:0, cell:-1};
 try{ const s = JSON.parse(localStorage.getItem('weerlab-sneeuw') || '{}');
   if(PRODUCTS[s.product]) state.product = s.product; if(s.variant) Object.assign(state.variant, s.variant); if(MODELS[s.model]) state.model = s.model; }catch{}
 if(MODELS[params.get('model')]) state.model = params.get('model');
@@ -52,9 +58,9 @@ async function loadModel(keepTime){
   for(const [, r] of entries) if(r.nx !== m.grid.nx || r.ny !== m.grid.ny || r.nt !== m.valid_utc.length) throw Error('Rasterafmetingen kloppen niet met het manifest.');
   const prevMs = times[state.t];
   manifest = m; rasters = Object.fromEntries(entries); times = m.valid_utc.map(Date.parse);
-  if(!m.products[state.product]) state.product = 'sneeuwval_kans';
+  if(!m.products[state.product]) state.product = Object.keys(PRODUCTS).find(p => m.products[p]);
   for(const [p, def] of Object.entries(m.products))
-    if(!def.variants.includes(state.variant[p])) state.variant[p] = def.variants.includes('6') ? '6' : def.variants[0];
+    if(!def.variants.includes(state.variant[p])) state.variant[p] = def.variants.find(v => v === '6' || v.endsWith('_6') || v === 'p50') || def.variants[0];
   if(keepTime && prevMs) { const i = times.indexOf(prevMs); state.t = i >= 0 ? i : 0; }
   else { const now = Date.now(); const i = times.findIndex(t => t >= now - 1800000); state.t = i >= 0 ? i : 0; }
   $('error').hidden = true;
@@ -174,8 +180,9 @@ function setT(i){ state.t = Math.max(0, Math.min(times.length - 1, i)); render()
 
 function legendHTML(){
   // Alle tijdstappen zitten in één bestand per variant: scrubben gaat zonder netwerk.
-  return S.scaleFor(currentEncoding()).map(k => `<span><i style="background:${k.color}"></i>${k.label}</span>`).join('')
-    + '<span><i class="nb"></i>n.b. (te weinig leden of venster vóór runstart)</span>';
+  const classes = manifest.products[state.product].classes;
+  return S.scaleFor(currentEncoding()).filter(k => !classes || classes.includes(k.code)).map(k => `<span><i style="background:${k.color}"></i>${k.label}</span>`).join('')
+    + `<span><i class="nb"></i>n.b. (${manifest.deterministic ? 'geen modelwaarde' : 'te weinig leden'} of venster vóór runstart)</span>`;
 }
 const fmtUpdate = iso => S.fullLabel(Date.parse(iso));
 function render(){
@@ -203,7 +210,7 @@ function value(key, cell, t){
   const [p, v] = key.split('/'); return S.decode(r.frame(t)[cell], encodingOf(p, v));
 }
 const pct = v => v === null ? 'n.b.' : v + ' %';
-const catLabel = v => v === null ? 'n.b.' : v === 0 ? 'geen of weinig kans op neerslag' : (S.CAT_SCALE.find(k => k.code === v) || {label:'?'}).label;
+const catLabel = v => v === null ? 'n.b.' : v === 0 ? (manifest.deterministic ? 'geen neerslag' : 'geen of weinig kans op neerslag') : (S.CAT_SCALE.find(k => k.code === v) || {label:'?'}).label;
 const cm = v => v === null ? 'n.b.' : v.toFixed(1).replace('.', ',') + ' cm';
 function renderPoint(){
   const body = $('point-body');
@@ -212,15 +219,17 @@ function renderPoint(){
   const lon = g.lon_min + (i + .5) * (g.lon_max - g.lon_min) / g.nx, lat = g.lat_max - (j + .5) * (g.lat_max - g.lat_min) / g.ny;
   const m = $('marker'); m.setAttribute('cx', S.lonToX(lon)); m.setAttribute('cy', S.latToY(lat));
   const rows = (label, list) => `<tr><th colspan="2">${label}</th></tr>` + list.map(([a, b]) => `<tr><td>${a}</td><td class="v">${b}</td></tr>`).join('');
-  const P = manifest.products;
-  body.innerHTML = `<p class="note">${lat.toFixed(3).replace('.', ',')}° N · ${lon.toFixed(3).replace('.', ',')}° O · geldig ${S.fullLabel(times[t])}</p><table>`
-    + rows('Kans op sneeuwval (venster tot nu)', P.sneeuwval_kans.variants.map(v => [`${v} u`, pct(value('sneeuwval_kans/' + v, state.cell, t))]))
-    + rows('Kans op sneeuwdek', P.sneeuwdek_kans.variants.map(v => [`≥ ${v} cm`, pct(value('sneeuwdek_kans/' + v, state.cell, t))]))
-    + rows('Sneeuwhoogte', [['Ligt nu (run +0 u, mediaan)', cm(value('sneeuwhoogte/p50', state.cell, 0))],
-        ...P.sneeuwhoogte.variants.map(v => [PRODUCTS.sneeuwhoogte.label(v), cm(value('sneeuwhoogte/' + v, state.cell, t))])])
-    + (P.neerslagsoort ? rows('Neerslagsoort (momentopname)', [['Meest waarschijnlijk', catLabel(value('neerslagsoort/dominant', state.cell, t))],
-        ...P.neerslagsoort.variants.filter(v => v !== 'dominant').map(v => [PRODUCTS.neerslagsoort.label(v), pct(value('neerslagsoort/' + v, state.cell, t))])]) : '')
-    + `</table><p class="note">Waarden van de dichtstbijzijnde kaartcel (~2 km) zonder interpolatie; het modelrooster zelf is ${String(manifest.native_resolution_km).replace('.', ',')} km. Bron: ${manifest.source}, run ${S.fullLabel(Date.parse(manifest.run_utc))}.</p>`;
+  const P = manifest.products, fmt = (p, v) => { const x = value(p + '/' + v, state.cell, t), e = encodingOf(p, v);
+    return e === 'categorie' ? catLabel(x) : x === null ? 'n.b.' : e === 'cm_x2' ? cm(x) : e === 'mm_x4' ? x.toFixed(2).replace('.', ',') + ' mm' : x + ' %'; };
+  const now = P.sneeuwhoogte && (P.sneeuwhoogte.variants.includes('p50') ? 'p50' : P.sneeuwhoogte.variants[0]);
+  const TITLES = {sneeuwval_kans:'Kans op sneeuwval (venster tot nu)', sneeuwdek_kans:'Kans op sneeuwdek', sneeuwhoogte:'Sneeuwhoogte',
+    nieuwe_sneeuw:'Nieuwe sneeuw (venster tot nu)', neerslagsoort: P.neerslagsoort && P.neerslagsoort.period === 'uur' ? 'Neerslagsoort (afgelopen uur)' : 'Neerslagsoort (momentopname)'};
+  let html = '';
+  for(const p of Object.keys(PRODUCTS)) if(P[p]) html += rows(TITLES[p], [
+    ...(p === 'sneeuwhoogte' ? [['Ligt bij runstart (+0 u)', cm(value('sneeuwhoogte/' + now, state.cell, 0))]] : []),
+    ...P[p].variants.map(v => [PRODUCTS[p].label(v), fmt(p, v)])]);
+  body.innerHTML = `<p class="note">${lat.toFixed(3).replace('.', ',')}° N · ${lon.toFixed(3).replace('.', ',')}° O · geldig ${S.fullLabel(times[t])}</p><table>${html}</table>`
+    + `<p class="note">Waarden van de dichtstbijzijnde kaartcel (~2 km) zonder interpolatie; het modelrooster zelf is ${String(manifest.native_resolution_km).replace('.', ',')} km. Bron: ${manifest.source}, run ${S.fullLabel(Date.parse(manifest.run_utc))}.</p>`;
 }
 
 /* ---------- export (direct uit de data, geen schermafdruk) ---------- */

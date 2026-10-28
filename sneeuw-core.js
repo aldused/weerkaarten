@@ -39,15 +39,26 @@
     {code:2, color:'#a99be0', label:'Natte sneeuw'},
     {code:4, color:'#6b35a8', label:'Sneeuw'},
     {code:5, color:'#e0902f', label:'IJskorrels'},
-    {code:6, color:'#c62d42', label:'IJzel'}
+    {code:6, color:'#c62d42', label:'IJzel'},
+    {code:7, color:'#c9a227', label:'Korrelhagel'}
+  ];
+  // Sneeuwval in mm water-equivalent (kaart 4), eigen schaal: geen cm.
+  const MM_SCALE = [
+    {min:0.25, color:'#eef3fa', label:'0,25–0,5 mm'},
+    {min:0.5,  color:'#cfe0f2', label:'0,5–1 mm'},
+    {min:1,    color:'#9fc3e6', label:'1–2 mm'},
+    {min:2,    color:'#6a9fd6', label:'2–5 mm'},
+    {min:5,    color:'#3f72b8', label:'5–10 mm'},
+    {min:10,   color:'#4b4a9c', label:'10–20 mm'},
+    {min:20,   color:'#6e2f86', label:'≥ 20 mm'}
   ];
 
   /** Code (uint8) -> fysieke waarde; null = ontbrekend. */
   function decode(code, encoding){
     if(code === MISSING) return null;
-    return encoding === 'cm_x2' ? code / 2 : code;
+    return encoding === 'cm_x2' ? code / 2 : encoding === 'mm_x4' ? code / 4 : code;
   }
-  function scaleFor(encoding){ return encoding === 'cm_x2' ? CM_SCALE : encoding === 'categorie' ? CAT_SCALE : PCT_SCALE; }
+  function scaleFor(encoding){ return encoding === 'cm_x2' ? CM_SCALE : encoding === 'mm_x4' ? MM_SCALE : encoding === 'categorie' ? CAT_SCALE : PCT_SCALE; }
   /** Kleur bij waarde, of null (transparant) onder de laagste klasse. */
   function colorFor(value, encoding){
     if(value === null) return null;
@@ -99,7 +110,7 @@
     return h > maxHours ? `Let op: deze run is ${Math.round(h)} uur oud; een nieuwere is nog niet verwerkt.` : '';
   }
 
-  const api = {MISSING, MAP, lonToX, latToY, xToLon, yToLat, PCT_SCALE, CM_SCALE, CAT_SCALE, decode, scaleFor, colorFor, hexRGB,
+  const api = {MISSING, MAP, lonToX, latToY, xToLon, yToLat, PCT_SCALE, CM_SCALE, CAT_SCALE, MM_SCALE, decode, scaleFor, colorFor, hexRGB,
     parseRaster, isGzip, cellAt, dayKey, dayLabel, hourLabel, fullLabel, windowLabel, staleWarning};
   if(typeof module === 'object' && module.exports) module.exports = api; else root.SneeuwCore = api;
 })(typeof self !== 'undefined' ? self : this);
