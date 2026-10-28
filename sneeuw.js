@@ -15,6 +15,10 @@ const PRODUCTS = {
     definition: (m, v, t) => ({model:'Deterministische modelsneeuwhoogte (één run, geen spreiding).', p10:'P10: 9 van de 10 leden hebben minstens deze hoogte.', p50:'Mediaan: de middelste van de geldige leden.',
       mean:'Gemiddelde over de geldige leden.', p90:'P90: slechts 1 van de 10 leden heeft meer.', max:'Maximum: het hoogste lid — het natste scenario, niet de verwachting.'})[v]
       + ' Modelsneeuwhoogte op ' + S.fullLabel(t) + '.'},
+  swe_kans: {title:'Kans op sneeuwdek (water-equivalent)', variantLabel:'Minimaal', label: v => '≥ ' + v + ' mm',
+    definition: (m, v, t) => `Kans dat er op ${S.fullLabel(t)} een sneeuwdek ligt met minstens ${v} mm water-equivalent. HarmonEPS geeft geen sneeuwhoogte; hoeveel centimeter dit is, hangt van de sneeuwdichtheid af.`},
+  swe: {title:'Sneeuwdek in water-equivalent', variantLabel:'Statistiek', label: v => ({p50:'Mediaan', p90:'P90', max:'Maximum'})[v],
+    definition: (m, v, t) => ({p50:'Mediaan', p90:'P90 (1 op de 10 leden meer)', max:'Hoogste lid (natste scenario)'})[v] + ` van het sneeuwdek in mm water-equivalent op ${S.fullLabel(t)}; géén centimeters.`},
   nieuwe_sneeuw: {title:'Nieuwe sneeuw', variantLabel:'Venster',
     label: v => { const [k, w] = v.split('_'); return `${w} u · ${k === 'we' ? 'mm' : 'dek'}`; },
     definition: (m, v, t) => { const [k, w] = v.split('_');
@@ -29,12 +33,12 @@ const PRODUCTS = {
       : v === 'neerslag' ? `Kans dat er op ${S.fullLabel(t)} neerslag valt (welke soort dan ook).`
       : `Kans dat de neerslag op ${S.fullLabel(t)} valt als ${PRODUCTS.neerslagsoort.label(v).toLowerCase()} (aandeel van alle leden, momentopname).`}
 };
-const MODELS = {icond2eps:{staleHours:9}, ecmwfens:{staleHours:22}, harmoniep1:{staleHours:6}};
+const MODELS = {icond2eps:{staleHours:9}, ecmwfens:{staleHours:22}, harmoniep1:{staleHours:6}, harmoneps:{staleHours:6}};
 const PLACES = [['Den Helder',52.96,4.76],['Leeuwarden',53.20,5.79],['Groningen',53.22,6.57],['Assen',52.99,6.56],['Zwolle',52.51,6.09],
   ['Lelystad',52.52,5.47],['Amsterdam',52.37,4.90],['Den Haag',52.08,4.30],['Rotterdam',51.92,4.48],['Utrecht',52.09,5.12],['Arnhem',51.98,5.91],
   ['Enschede',52.22,6.89],['Middelburg',51.50,3.61],["'s-Hertogenbosch",51.69,5.30],['Eindhoven',51.44,5.48],['Breda',51.59,4.78],['Maastricht',50.85,5.69]];
 
-let state = {model:'icond2eps', product:'sneeuwval_kans', variant:{sneeuwval_kans:'6', sneeuwdek_kans:'1', sneeuwhoogte:'p50', nieuwe_sneeuw:'we_6', neerslagsoort:'dominant'}, t:0, cell:-1};
+let state = {model:'icond2eps', product:'sneeuwval_kans', variant:{sneeuwval_kans:'6', sneeuwdek_kans:'1', sneeuwhoogte:'p50', swe_kans:'1', swe:'p50', nieuwe_sneeuw:'we_6', neerslagsoort:'dominant'}, t:0, cell:-1};
 try{ const s = JSON.parse(localStorage.getItem('weerlab-sneeuw') || '{}');
   if(PRODUCTS[s.product]) state.product = s.product; if(s.variant) Object.assign(state.variant, s.variant); if(MODELS[s.model]) state.model = s.model; }catch{}
 if(MODELS[params.get('model')]) state.model = params.get('model');
@@ -222,7 +226,7 @@ function renderPoint(){
   const P = manifest.products, fmt = (p, v) => { const x = value(p + '/' + v, state.cell, t), e = encodingOf(p, v);
     return e === 'categorie' ? catLabel(x) : x === null ? 'n.b.' : e === 'cm_x2' ? cm(x) : e === 'mm_x4' ? x.toFixed(2).replace('.', ',') + ' mm' : x + ' %'; };
   const now = P.sneeuwhoogte && (P.sneeuwhoogte.variants.includes('p50') ? 'p50' : P.sneeuwhoogte.variants[0]);
-  const TITLES = {sneeuwval_kans:'Kans op sneeuwval (venster tot nu)', sneeuwdek_kans:'Kans op sneeuwdek', sneeuwhoogte:'Sneeuwhoogte',
+  const TITLES = {sneeuwval_kans:'Kans op sneeuwval (venster tot nu)', sneeuwdek_kans:'Kans op sneeuwdek', sneeuwhoogte:'Sneeuwhoogte', swe_kans:'Kans op sneeuwdek (water-equivalent)', swe:'Sneeuwdek (water-equivalent)',
     nieuwe_sneeuw:'Nieuwe sneeuw (venster tot nu)', neerslagsoort: P.neerslagsoort && P.neerslagsoort.period === 'uur' ? 'Neerslagsoort (afgelopen uur)' : 'Neerslagsoort (momentopname)'};
   let html = '';
   for(const p of Object.keys(PRODUCTS)) if(P[p]) html += rows(TITLES[p], [
