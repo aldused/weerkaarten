@@ -12,6 +12,7 @@
     chevron:'<path d="m9 5 7 7-7 7"/>',
     close:'<path d="m6 6 12 12M6 18 18 6"/>',
     warning:'<path d="m12 3 10 18H2Z"/><path d="M12 9v5m0 3v.01"/>',
+    globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     tools:'<path d="M14.5 6.5a5 5 0 0 0-6.4 6.4L3 18a2.1 2.1 0 0 0 3 3l5.1-5.1a5 5 0 0 0 6.4-6.4L14 13l-3-3Z"/>',
     grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
     list:'<path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1"/>',
@@ -54,7 +55,7 @@
     kaarten:[['veld','Weerelement'],['model','Model / bron'],['gebied','Gebied']],
     pluim:[['bron','Type verwachting'],['grootheid','Weerelement'],['vorm','Weergave']],
   };
-  const productIcon = p => ({warning:'warning',radar:'radar',neerslag:'water',temp:'thermometer',wind:'wind',bewolking:'cloud',sat:'cloud',bliksem:'lightning',vierluik:'grid',pluim:'chart',pluim6:'chart',pluimtrend:'chart',meteogram:'chart',tekst:'text',studio:'tools',water:'water',records:'chart',tabel:'list',skewt:'chart',kansen:'chart'})[p.icon] || 'map';
+  const productIcon = p => ({warning:'warning',radar:'radar',neerslag:'water',temp:'thermometer',wind:'wind',bewolking:'cloud',sat:'cloud',bliksem:'lightning',vierluik:'grid',pluim:'chart',pluim6:'chart',pluimtrend:'chart',meteogram:'chart',tekst:'text',wereld:'globe',studio:'tools',water:'water',records:'chart',tabel:'list',skewt:'chart',kansen:'chart'})[p.icon] || 'map';
   function readStorage(key,fallback){try{return JSON.parse(localStorage.getItem(key)) ?? fallback;}catch{return fallback;}}
   const previous=[];
   const defaultFavorites=site.defaultFavorites || (site.storagePrefix?['radar','significant','pluim-ens6']:[]);

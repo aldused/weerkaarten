@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wereldweer — Weerlab.nl</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+:root{
+  --navy:var(--wl-color-primary,#00205b);--navy2:var(--wl-color-primary-strong,#003366);
+  --cyan:var(--wl-color-accent,#2ec4e8);--bg:var(--wl-color-background,#f6f8fb);
+  --line:var(--wl-color-border,#e3e8ef);--ink:var(--wl-color-text,#0f172a);--muted:var(--wl-color-text-muted,#64748b);
+  --c-tropisch:#be185d;--c-storm:#0d9488;--c-onweer:#7c2d12;--c-neerslag:#1d4ed8;--c-overstroming:#1e40af;
+  --c-kust:#0891b2;--c-sneeuw:#7c8db5;--c-kou:#4338ca;--c-hagel:#0e7490;--c-hitte:#b45309;--c-droogte:#a16207;--c-brand:#9a3412;
+  --c-klimaat:#334155;--c-ijs:#0369a1;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 "DM Sans",system-ui,sans-serif}
+a{color:var(--navy2)}
+.top{background:var(--navy);color:#fff;border-bottom:3px solid var(--cyan);padding:14px max(20px,calc((100% - 1320px)/2));display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.top h1{font-size:20px;margin:0;font-weight:700}
+.top p{margin:2px 0 0;font-size:12px;color:#a8c4e8}
+.datumnav{margin-left:auto;display:flex;gap:6px;align-items:center}
+.datumnav button,.datumnav select{font:600 13px "DM Sans";border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:6px;padding:7px 11px;cursor:pointer}
+.datumnav select option{color:#000}
+.datumnav button:disabled{opacity:.35;cursor:default}
+main{max-width:1320px;margin:0 auto;padding:22px 20px 60px;display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;align-items:start}
+.ai{font-size:12px;color:var(--muted);background:#fff;border:1px solid var(--line);border-left:3px solid var(--cyan);border-radius:6px;padding:9px 13px;margin-bottom:14px}
+.inleiding{font-size:16px;line-height:1.6;margin:0 0 16px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font:600 12px "DM Sans";cursor:pointer;color:var(--ink);display:inline-flex;gap:6px;align-items:center}
+.chip i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.chip[aria-pressed=true]{background:var(--navy);border-color:var(--navy);color:#fff}
+.chip small{font:500 11px "DM Mono";opacity:.7}
+/* artikel */
+.art{background:#fff;border:1px solid var(--line);border-radius:8px;margin-bottom:18px;overflow:hidden;scroll-margin-top:12px}
+.art-kop{display:flex;gap:12px;padding:16px 20px 0;align-items:flex-start}
+.nr{flex:0 0 30px;height:30px;border-radius:50%;color:#fff;font:700 14px "DM Mono";display:grid;place-items:center}
+.meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:4px}
+.badge{font:700 10px "DM Sans";letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:4px;border:1px solid currentColor}
+.meldvak{background:#fff;border:1px solid var(--line);border-left:4px solid var(--wl-color-danger,#cc0000);border-radius:8px;margin-bottom:16px;overflow:hidden}
+.meldvak h3{margin:0;padding:9px 14px;font:700 13px "DM Sans";display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+.meldvak h3 .puls{width:8px;height:8px;border-radius:50%;background:var(--wl-color-danger,#cc0000);animation:puls 1.6s infinite}
+@keyframes puls{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.meldvak h3 .puls{animation:none}}
+.meldvak h3 small{margin-left:auto;font:500 11px "DM Mono";color:var(--muted)}
+.meldvak ol{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
+.meldvak li{display:grid;grid-template-columns:48px 10px 1fr;gap:8px;align-items:baseline;padding:8px 14px;border-bottom:1px solid var(--line);font-size:13px}
+.meldvak li:last-child{border:0}
+.meldvak li.vers{background:#fff7ed}
+.meldvak time{font:600 12px "DM Mono";color:var(--navy2)}
+.meldvak .blok{transform:translateY(0)}
+.meldvak a{color:var(--ink);text-decoration:none}
+.meldvak a:hover{text-decoration:underline;color:var(--navy2)}
+.meldvak .soort{font:700 10px "DM Sans";letter-spacing:.06em;text-transform:uppercase;color:var(--wl-color-danger,#cc0000);margin-right:4px}
+.art.flits{box-shadow:0 0 0 3px var(--cyan)}
+.bijgewerkt{font:600 11px "DM Mono";color:#fff;background:var(--navy2);border-radius:4px;padding:2px 7px}
+.updatebalk{font-size:12px;color:var(--muted);margin:-6px 0 14px;font-family:"DM Mono",monospace}
+.st-gebeurd{color:#334155}.st-verwacht{color:#6d28d9}.st-lopend{color:#b45309}.st-vervolg{color:#0f766e}.st-rapport{color:#1d4ed8}
+.cat{font-weight:700}
+.art h2{font-size:19px;line-height:1.3;margin:0}
+.art-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:18px;padding:12px 20px 16px}
+.art-body.zonder-kaart{grid-template-columns:minmax(0,1fr)}
+.lead{font-weight:600;margin:0 0 8px}
+.art-body p{margin:0 0 9px}
+.cijfers{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin:12px 0}
+.cijfer{background:var(--wl-color-surface-muted,#f8fafc);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
+.cijfer b{display:block;font:600 16px "DM Mono";color:var(--navy)}
+.cijfer span{font-size:11px;color:var(--muted);line-height:1.3;display:block}
+.duiding{background:#eff6ff;border-left:3px solid var(--cyan);border-radius:4px;padding:9px 12px;font-size:13px;margin:10px 0}
+.duiding strong{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--navy2);margin-bottom:2px}
+.beeld{margin:0}
+.beeld img{width:100%;display:block;border-radius:6px;border:1px solid var(--line);cursor:zoom-in;background:#eef3f8}
+.beeld figcaption{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.35}
+.locator{width:100%;border-radius:6px;border:1px solid var(--line);background:#eef3f8;display:block}
+.bronnen{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding:9px 20px;background:#fbfcfe}
+.bronnen a{margin-right:10px;white-space:nowrap}
+.grafiek{border:1px solid var(--line);border-radius:6px;background:#fff;padding:8px}
+/* zijbalk */
+aside{position:sticky;top:12px;display:grid;gap:14px}
+.paneel{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.paneel h3{margin:0;background:var(--navy2);color:#fff;font:600 13px "DM Sans";padding:9px 13px}
+.paneel .in{padding:10px 13px;font-size:13px}
+#wereld{display:block;width:100%;background:#e6eef6}
+#wereld .pin{cursor:pointer}
+#wereld .pin:hover circle{stroke:#000}
+.lijst{list-style:none;margin:0;padding:0}
+.lijst li{display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);align-items:baseline}
+.lijst li:last-child{border:0}
+.lijst .w{font:500 12px "DM Mono";margin-left:auto;white-space:nowrap;color:var(--muted)}
+.blok{width:10px;height:10px;border-radius:2px;flex:0 0 10px;transform:translateY(1px)}
+.inhoud a{display:flex;gap:8px;text-decoration:none;color:var(--ink);padding:4px 0;font-size:13px;line-height:1.35}
+.inhoud a:hover{color:var(--navy2);text-decoration:underline}
+.inhoud .nr{flex:0 0 20px;height:20px;font-size:11px}
+footer{grid-column:1/-1;font-size:11px;color:var(--muted);text-align:center}
+#lightbox{position:fixed;inset:0;background:rgba(15,23,42,.85);display:none;place-items:center;z-index:20;cursor:zoom-out;padding:16px}
+#lightbox img{max-width:100%;max-height:100%;border-radius:6px}
+#lightbox.open{display:grid}
+@media (max-width:1050px){main{grid-template-columns:1fr}aside{position:static}.inhoud{display:none}}
+@media (max-width:700px){
+  .top{padding:12px 16px}.datumnav{margin-left:0;width:100%}
+  main{padding:14px 16px 40px}
+  .art-body{grid-template-columns:1fr;padding:10px 14px 14px}
+  .art-kop{padding:14px 14px 0}.bronnen{padding:9px 14px}
+  .art h2{font-size:17px}
+  .art-body .beeld{order:-1}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Wereldweer</h1>
+    <p>Het belangrijkste weer- en klimaatnieuws van de afgelopen 24 uur, met eigen ECMWF- en satellietkaarten</p>
+  </div>
+  <nav class="datumnav" aria-label="Edities">
+    <button id="vorige" aria-label="Vorige editie">‹</button>
+    <select id="kies" aria-label="Kies editie"></select>
+    <button id="volgende" aria-label="Volgende editie">›</button>
+  </nav>
+</header>
+
+<main>
+  <section id="hoofd">
+    <section class="meldvak" id="meldvak" hidden aria-live="polite">
+      <h3><span class="puls" aria-hidden="true"></span>Tussentijds nieuws <small id="meldtijd"></small></h3>
+      <ol id="meldingen"></ol>
+    </section>
+    <div class="ai">Dit overzicht is automatisch samengesteld en vertaald met AI uit de bronnen die bij elk onderwerp staan, en gecontroleerd op getallen en eenheden. Kaarten: eigen bewerking van ECMWF- en EUMETSAT-data. Bij twijfel gaat de bron voor.</div>
+    <p class="inleiding" id="inleiding"></p>
+    <div class="updatebalk" id="updatebalk"></div>
+    <div class="chips" id="chips" role="group" aria-label="Filter op onderwerp"></div>
+    <div id="artikelen"></div>
+  </section>
+  <aside>
+    <div class="paneel">
+      <h3 id="kaartkop">Overzicht</h3>
+      <svg id="wereld" viewBox="0 0 720 300" role="img" aria-label="Wereldkaart met de onderwerpen van vandaag"></svg>
+    </div>
+    <div class="paneel">
+      <h3>Tropische cyclonen nu</h3>
+      <div class="in"><ul class="lijst" id="cyclonen"></ul></div>
+    </div>
+    <div class="paneel">
+      <h3>Meteoalarm Europa</h3>
+      <div class="in"><ul class="lijst" id="alarm"></ul></div>
+    </div>
+    <div class="paneel inhoud">
+      <h3>In deze editie</h3>
+      <div class="in" id="inhoud"></div>
+    </div>
+  </aside>
+  <footer id="voet"></footer>
+</main>
+<div id="lightbox" role="dialog" aria-label="Kaart vergroot"><img alt=""></div>
+
+<script>
+(function () {
+  "use strict";
+  // live: data en kaarten op R2 (elk uur bijgewerkt, buiten git); lokaal de eigen kopie
+  var LOKAAL = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  var DATA = LOKAAL ? "data/wereldweer/" : "https://data.weerlab.nl/wereldweer/";
+  function kaartUrl(png) { return DATA + png.replace(/^data\/wereldweer\//, ""); }
+  var CAT = {
+    tropisch: ["Tropische cycloon", "--c-tropisch"], storm: ["Storm", "--c-storm"], onweer: ["Onweer", "--c-onweer"], hagel: ["Hagel", "--c-hagel"],
+    neerslag: ["Neerslag", "--c-neerslag"], overstroming: ["Overstroming", "--c-overstroming"], kust: ["Kust en zee", "--c-kust"],
+    sneeuw: ["Sneeuw en ijzel", "--c-sneeuw"], kou: ["Kou", "--c-kou"], hitte: ["Hitte", "--c-hitte"], droogte: ["Droogte", "--c-droogte"],
+    brand: ["Natuurbrand", "--c-brand"], klimaat: ["Klimaat", "--c-klimaat"], ijs: ["IJs en gletsjers", "--c-ijs"]
+  };
+  var STATUS = { gebeurd: "Gebeurd", verwacht: "Verwacht", lopend: "Nu bezig", vervolg: "Vervolg", rapport: "Rapport" };
+  var MAANDEN = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+  var css = getComputedStyle(document.documentElement);
+  function kleur(cat) { return css.getPropertyValue((CAT[cat] || CAT.klimaat)[1]).trim(); }
+  function el(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    for (var k in attrs || {}) { if (k === "text") e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    (kids || []).forEach(function (c) { if (c) e.appendChild(c); });
+    return e;
+  }
+  function langeDatum(iso) { var d = iso.split("-"); return +d[2] + " " + MAANDEN[+d[1] - 1] + " " + d[0]; }
+  function json(url) { return fetch(url, { cache: "no-cache" }).then(function (r) { if (!r.ok) throw new Error(url + " " + r.status); return r.json(); }); }
+
+  // ---- wereldkaart (equirectangulair, lat 75N..-55S) ----
+  var land = null;
+  function proj(lon, lat, b) { return [(lon - b[0]) / (b[1] - b[0]) * b[4], (b[3] - lat) / (b[3] - b[2]) * b[5]]; }
+  function landPad(b) {
+    var d = "";
+    land.features.forEach(function (f) {
+      var polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+      polys.forEach(function (poly) {
+        poly.forEach(function (ring) {
+          var minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+          ring.forEach(function (p) { minx = Math.min(minx, p[0]); maxx = Math.max(maxx, p[0]); miny = Math.min(miny, p[1]); maxy = Math.max(maxy, p[1]); });
+          if (maxx < b[0] || minx > b[1] || maxy < b[2] || miny > b[3]) return;
+          var stap = Math.max(1, Math.floor(ring.length / 400));
+          ring.forEach(function (p, i) {
+            if (i % stap && i !== ring.length - 1) return;
+            var q = proj(p[0], p[1], b);
+            d += (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1);
+          });
+          d += "Z";
+        });
+      });
+    });
+    return d;
+  }
+  function svgEl(tag, attrs) { var e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  function tekenWereld(arts) {
+    var svg = document.getElementById("wereld"), b = [-180, 180, -55, 75, 720, 260];
+    svg.setAttribute("viewBox", "0 0 720 260");
+    svg.innerHTML = "";
+    svg.appendChild(svgEl("path", { d: landPad(b), fill: "#f6f4ee", stroke: "#94a3b8", "stroke-width": ".4" }));
+    arts.forEach(function (a, i) {
+      if (a.land === "Wereld") return;
+      var q = proj(a.lon, a.lat, b);
+      var g = svgEl("g", { "class": "pin", tabindex: "0", role: "link", "aria-label": (i + 1) + ". " + a.kop });
+      g.appendChild(svgEl("circle", { cx: q[0], cy: q[1], r: 9, fill: kleur(a.categorie), stroke: "#fff", "stroke-width": "1.5" }));
+      var t = svgEl("text", { x: q[0], y: q[1] + 3.6, "text-anchor": "middle", fill: "#fff", "font-size": "10", "font-weight": "700", "font-family": "DM Mono" });
+      t.textContent = i + 1; g.appendChild(t);
+      var ga = function () { document.getElementById("art-" + a.id).scrollIntoView({ behavior: "smooth" }); };
+      g.addEventListener("click", ga); g.addEventListener("keydown", function (e) { if (e.key === "Enter") ga(); });
+      svg.appendChild(g);
+    });
+  }
+  // kleine regiokaart voor artikelen zonder modelkaart
+  function locator(a) {
+    var w = 340, h = 200, dlon = 28, dlat = dlon * h / w / Math.max(Math.cos(a.lat * Math.PI / 180), .35);
+    var b = [a.lon - dlon / 2, a.lon + dlon / 2, a.lat - dlat / 2, a.lat + dlat / 2, w, h];
+    var svg = svgEl("svg", { viewBox: "0 0 " + w + " " + h, "class": "locator", role: "img", "aria-label": "Ligging: " + a.regio });
+    svg.appendChild(svgEl("path", { d: landPad(b), fill: "#f6f4ee", stroke: "#94a3b8", "stroke-width": ".6" }));
+    var q = proj(a.lon, a.lat, b);
+    svg.appendChild(svgEl("circle", { cx: q[0], cy: q[1], r: 16, fill: kleur(a.categorie), "fill-opacity": ".18" }));
+    svg.appendChild(svgEl("circle", { cx: q[0], cy: q[1], r: 5, fill: kleur(a.categorie), stroke: "#fff", "stroke-width": "1.5" }));
+    var t = svgEl("text", { x: 8, y: h - 8, "font-size": "11", fill: "#475569", "font-family": "DM Sans" });
+    t.textContent = a.regio; svg.appendChild(t);
+    return svg;
+  }
+  function co2Grafiek(reeks) {
+    var w = 340, h = 150, p = 30, x0 = reeks[0][0], x1 = reeks[reeks.length - 1][0], y0 = 370, y1 = 432;
+    var X = function (x) { return p + 10 + (x - x0) / (x1 - x0) * (w - p - 46); }, Y = function (y) { return h - 22 - (y - y0) / (y1 - y0) * (h - 40); };
+    var svg = svgEl("svg", { viewBox: "0 0 " + w + " " + h, "class": "grafiek", role: "img", "aria-label": "CO₂-concentratie" });
+    [380, 400, 420].forEach(function (v) {
+      svg.appendChild(svgEl("line", { x1: p, x2: w - 10, y1: Y(v), y2: Y(v), stroke: "#e3e8ef" }));
+      var t = svgEl("text", { x: p - 4, y: Y(v) + 4, "text-anchor": "end", "font-size": "10", fill: "#64748b", "font-family": "DM Mono" }); t.textContent = v; svg.appendChild(t);
+    });
+    var d = reeks.map(function (r, i) { return (i ? "L" : "M") + X(r[0]) + " " + Y(r[1]); }).join("");
+    svg.appendChild(svgEl("path", { d: d, fill: "none", stroke: "#1d4ed8", "stroke-width": "2.5" }));
+    reeks.forEach(function (r) {
+      svg.appendChild(svgEl("circle", { cx: X(r[0]), cy: Y(r[1]), r: 4, fill: "#1d4ed8" }));
+      var t = svgEl("text", { x: X(r[0]), y: h - 6, "text-anchor": "middle", "font-size": "10", fill: "#64748b", "font-family": "DM Mono" }); t.textContent = r[0]; svg.appendChild(t);
+      var v = svgEl("text", { x: X(r[0]), y: Y(r[1]) - 8, "text-anchor": "middle", "font-size": "11", "font-weight": "600", fill: "#0f172a", "font-family": "DM Mono" }); v.textContent = String(r[1]).replace(".", ","); svg.appendChild(v);
+    });
+    var t = svgEl("text", { x: p, y: 12, "font-size": "11", fill: "#475569", "font-family": "DM Sans" }); t.textContent = "CO₂ in ppm, wereldgemiddelde (WMO)"; svg.appendChild(t);
+    return svg;
+  }
+
+  var editieGemaakt = null;
+  function tijd(iso) { return new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }); }
+  // label alleen voor artikelen die na de hoofdeditie zijn toegevoegd of bijgewerkt
+  function bijgewerktLabel(a) {
+    if (!a.bijgewerkt || !editieGemaakt || new Date(a.bijgewerkt) - new Date(editieGemaakt) < 60000) return null;
+    return el("span", { "class": "bijgewerkt", text: "bijgewerkt " + tijd(a.bijgewerkt) });
+  }
+  function artikel(a, i) {
+    var c = kleur(a.categorie);
+    var meta = el("div", { "class": "meta" }, [
+      el("span", { "class": "cat", style: "color:" + c, text: (CAT[a.categorie] || CAT.klimaat)[0] }),
+      el("span", { text: "·" }), el("span", { text: a.land + (a.regio && a.land !== "Wereld" ? " — " + a.regio : a.land === "Wereld" ? " — " + a.regio : "") }),
+      el("span", { "class": "badge st-" + a.status, text: STATUS[a.status] || a.status }),
+      a.vervolg && a.status !== "vervolg" ? el("span", { "class": "badge st-vervolg", text: "Vervolg" }) : null,
+      bijgewerktLabel(a)
+    ]);
+    var kop = el("div", { "class": "art-kop" }, [
+      el("div", { "class": "nr", style: "background:" + c, text: String(i + 1) }),
+      el("div", {}, [meta, el("h2", { text: a.kop })])
+    ]);
+    var tekst = el("div", {}, [el("p", { "class": "lead", text: a.lead })]);
+    a.tekst.forEach(function (p) { tekst.appendChild(el("p", { text: p })); });
+    if (a.kerncijfers && a.kerncijfers.length) {
+      tekst.appendChild(el("div", { "class": "cijfers" }, a.kerncijfers.map(function (k) {
+        return el("div", { "class": "cijfer" }, [el("b", { text: k.waarde }), el("span", { text: k.label })]);
+      })));
+    }
+    if (a.duiding) tekst.appendChild(el("div", { "class": "duiding" }, [el("strong", { text: "Weerkundige duiding" }), document.createTextNode(a.duiding)]));
+    var beeld = null;
+    if (a.kaart && a.kaart.png) {
+      var img = el("img", { src: kaartUrl(a.kaart.png), alt: "Kaart bij: " + a.kop, loading: "lazy", width: "880" });
+      img.addEventListener("click", function () { var lb = document.getElementById("lightbox"); lb.querySelector("img").src = img.src; lb.classList.add("open"); });
+      var onder = a.kaart.veld === "satelliet" ? "Satellietbeeld EUMETSAT" : a.kaart.veld === "wind" ? "ECMWF-verwachting: wind en luchtdruk" : "ECMWF-verwachting: neerslagsom en luchtdruk";
+      beeld = el("figure", { "class": "beeld" }, [img, el("figcaption", { text: onder + " · klik om te vergroten" })]);
+    } else if (a.grafiek && a.grafiek.type === "co2") {
+      beeld = el("figure", { "class": "beeld" }, [co2Grafiek(a.grafiek.reeks)]);
+    } else if (a.land !== "Wereld" && land) {
+      beeld = el("figure", { "class": "beeld" }, [locator(a)]);
+    }
+    var body = el("div", { "class": "art-body" + (beeld ? "" : " zonder-kaart") }, [tekst, beeld]);
+    var bronnen = el("div", { "class": "bronnen" }, [document.createTextNode("Bronnen: ")].concat(a.bronnen.map(function (b) {
+      return el("a", { href: b.url, target: "_blank", rel: "noopener", text: b.naam });
+    })));
+    return el("article", { "class": "art", id: "art-" + a.id, "data-cat": a.categorie }, [kop, body, bronnen]);
+  }
+
+  var GROEPEN = [
+    ["alles", "Alles", null], ["tropisch", "Tropisch", ["tropisch"]], ["storm", "Storm, onweer, hagel", ["storm", "onweer", "hagel"]],
+    ["water", "Neerslag en overstroming", ["neerslag", "overstroming", "kust"]],
+    ["winter", "Sneeuw en kou", ["sneeuw", "kou"]],
+    ["hitte", "Hitte, droogte, brand", ["hitte", "droogte", "brand"]], ["klimaat", "Klimaat en ijs", ["klimaat", "ijs"]]
+  ];
+  function chips(arts) {
+    var box = document.getElementById("chips"); box.innerHTML = "";
+    GROEPEN.forEach(function (g) {
+      var n = g[2] ? arts.filter(function (a) { return g[2].indexOf(a.categorie) >= 0; }).length : arts.length;
+      if (!n) return;
+      var b = el("button", { "class": "chip", "aria-pressed": g[0] === "alles" ? "true" : "false" }, [
+        g[2] ? el("i", { style: "background:" + kleur(g[2][0]) }) : null, document.createTextNode(g[1] + " "), el("small", { text: String(n) })
+      ]);
+      b.addEventListener("click", function () {
+        box.querySelectorAll(".chip").forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+        b.setAttribute("aria-pressed", "true");
+        document.querySelectorAll(".art").forEach(function (art) { art.hidden = !!g[2] && g[2].indexOf(art.dataset.cat) < 0; });
+      });
+      box.appendChild(b);
+    });
+  }
+  function zijbalk(e) {
+    var cyc = document.getElementById("cyclonen"); cyc.innerHTML = "";
+    ((e.radar || {}).cyclonen || []).forEach(function (c) {
+      cyc.appendChild(el("li", {}, [el("span", { "class": "blok", style: "background:" + kleur("tropisch") }),
+        el("span", { text: c.naam + " · " + c.bekken + (c.opmerking ? " (" + c.opmerking + ")" : "") }),
+        el("span", { "class": "w", text: "max " + c.max_kmu + " km/u" })]));
+    });
+    var al = document.getElementById("alarm"); al.innerHTML = "";
+    var r = (e.radar || {}), rij = function (t, k) { al.appendChild(el("li", {}, [el("span", { "class": "blok", style: "background:" + k }), el("span", { text: t })])); };
+    (r.meteoalarm_rood || []).forEach(function (t) { rij(t, "var(--wl-color-danger,#cc0000)"); });
+    (r.meteoalarm_oranje || []).forEach(function (t) { rij(t, "var(--wl-color-warning-orange,#e07000)"); });
+    if (!al.children.length) rij("Geen oranje of rode waarschuwingen", "#1a7a1a");
+    var inh = document.getElementById("inhoud"); inh.innerHTML = "";
+    e.artikelen.forEach(function (a, i) {
+      inh.appendChild(el("a", { href: "#art-" + a.id }, [el("span", { "class": "nr", style: "background:" + kleur(a.categorie), text: String(i + 1) }), el("span", { text: a.kop })]));
+    });
+  }
+
+  // meldingen: nieuwste boven; wat sinds het vorige bezoek bijkwam krijgt een lichte achtergrond
+  var GEZIEN_KEY = "wereldweer-meldingen-gezien";
+  function leesGezien() { try { return localStorage.getItem(GEZIEN_KEY) || ""; } catch (e) { return ""; } }
+  function zetGezien(v) { try { localStorage.setItem(GEZIEN_KEY, v); } catch (e) { /* privévenster */ } }
+  function meldingen(e) {
+    var vak = document.getElementById("meldvak"), lijst = document.getElementById("meldingen");
+    var m = (e.meldingen || []).slice().sort(function (a, b) { return a.tijd < b.tijd ? 1 : -1; });
+    vak.hidden = !m.length;
+    if (!m.length) return;
+    var gezien = leesGezien();
+    lijst.innerHTML = "";
+    m.forEach(function (x) {
+      var a = el("a", { href: "#art-" + x.id }, [el("span", { "class": "soort", text: x.soort === "nieuw" ? "Nieuw" : "Update" }), document.createTextNode(x.tekst)]);
+      a.addEventListener("click", function (ev) {
+        var art = document.getElementById("art-" + x.id); if (!art) return;
+        ev.preventDefault(); art.hidden = false; art.scrollIntoView({ behavior: "smooth" });
+        art.classList.add("flits"); setTimeout(function () { art.classList.remove("flits"); }, 2000);
+      });
+      lijst.appendChild(el("li", { "class": x.tijd > gezien && gezien ? "vers" : "" }, [
+        el("time", { datetime: x.tijd, text: tijd(x.tijd) }), el("span", { "class": "blok", style: "background:" + kleur(x.categorie) }), a]));
+    });
+    document.getElementById("meldtijd").textContent = m.length + " melding" + (m.length === 1 ? "" : "en");
+    if (m[0].tijd > gezien) zetGezien(m[0].tijd);
+  }
+  var edities = [], huidig = null;
+  function vulKeuze() {
+    var kies = document.getElementById("kies"); kies.innerHTML = "";
+    edities.slice().reverse().forEach(function (d) { kies.appendChild(el("option", { value: d, text: langeDatum(d) })); });
+  }
+  function toon(datum) {
+    return json(DATA + "editie_" + datum + ".json").then(function (e) {
+      huidig = datum;
+      editieGemaakt = e.gemaakt;
+      var upd = e.updates ? " · " + e.updates + " update" + (e.updates === 1 ? "" : "s") + ", laatst " + tijd(e.bijgewerkt) : "";
+      document.getElementById("updatebalk").textContent = "Editie " + tijd(e.gemaakt) + upd;
+      document.title = "Wereldweer " + langeDatum(datum) + " — Weerlab.nl";
+      document.getElementById("kaartkop").textContent = "Overzicht · " + langeDatum(datum);
+      document.getElementById("inleiding").textContent = e.inleiding;
+      var box = document.getElementById("artikelen"); box.innerHTML = "";
+      e.artikelen.forEach(function (a, i) { box.appendChild(artikel(a, i)); });
+      chips(e.artikelen); zijbalk(e); meldingen(e);
+      if (land) tekenWereld(e.artikelen);
+      var run = e.ecmwf_run ? " · ECMWF-run " + e.ecmwf_run.slice(8, 10) + "/" + e.ecmwf_run.slice(5, 7) + " " + e.ecmwf_run.slice(11, 13) + " UTC" : "";
+      document.getElementById("voet").textContent = "Samengesteld " + new Date(e.gemaakt).toLocaleString("nl-NL", { dateStyle: "long", timeStyle: "short" }) + run + " · Weerlab.nl";
+      var i = edities.indexOf(datum);
+      document.getElementById("vorige").disabled = i <= 0;
+      document.getElementById("volgende").disabled = i < 0 || i >= edities.length - 1;
+      document.getElementById("kies").value = datum;
+      if (location.hash.slice(1) !== datum) history.replaceState(null, "", "#" + datum);
+      return e;
+    });
+  }
+  document.getElementById("vorige").onclick = function () { var i = edities.indexOf(huidig); if (i > 0) toon(edities[i - 1]); };
+  document.getElementById("volgende").onclick = function () { var i = edities.indexOf(huidig); if (i < edities.length - 1) toon(edities[i + 1]); };
+  document.getElementById("kies").onchange = function () { toon(this.value); };
+  // nieuwste editie elke 5 minuten opnieuw ophalen (updates overdag); scrollpositie en filter blijven staan
+  setInterval(function () {
+    if (huidig !== edities[edities.length - 1] || document.hidden) return;
+    json(DATA + "index.json").then(function (ix) {
+      edities = ix.edities.slice().sort();
+      vulKeuze();
+      var nieuwste = edities[edities.length - 1], y = window.scrollY;
+      var actief = document.querySelector('.chip[aria-pressed="true"]'), welke = actief ? actief.textContent : null;
+      return toon(nieuwste).then(function () {
+        if (welke) document.querySelectorAll(".chip").forEach(function (c) { if (c.textContent === welke) c.click(); });
+        window.scrollTo(0, y);
+      });
+    }).catch(function () { /* laatste geldige editie blijft staan */ });
+  }, 300000);
+  document.getElementById("lightbox").onclick = function () { this.classList.remove("open"); };
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") document.getElementById("lightbox").classList.remove("open"); });
+
+  Promise.all([json(DATA + "index.json"), json("basemap/wereld_land.json").catch(function () { return null; })]).then(function (res) {
+    edities = res[0].edities.slice().sort(); land = res[1];
+    vulKeuze();
+    var gevraagd = location.hash.slice(1);
+    return toon(edities.indexOf(gevraagd) >= 0 ? gevraagd : edities[edities.length - 1]);
+  }).catch(function (err) {
+    document.getElementById("artikelen").appendChild(el("div", { "class": "ai", text: "Editie kon niet worden geladen: " + err.message }));
+  });
+})();
+</script>
+</body>
+</html>
