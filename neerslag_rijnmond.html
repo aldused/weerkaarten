@@ -51,6 +51,8 @@ h1{font-size:clamp(26px,4vw,40px);font-weight:600;letter-spacing:-.8px;line-heig
 .top ol{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:4px}
 .top li{display:flex;justify-content:space-between;gap:12px;font-size:14px;border-bottom:1px solid var(--tint);padding:3px 0}
 .top li b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.schakel{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;min-height:40px}
+.schakel input{width:18px;height:18px;accent-color:var(--deep)}
 .acties{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
 .noot{font-size:13px;color:var(--soft);margin:0;line-height:1.5}
 .waarschuwing{background:#fff7e6;border:1px solid #f1d39a;color:#7a4b00;border-radius:10px;padding:10px 14px;font-size:14px}
@@ -105,7 +107,8 @@ h1{font-size:clamp(26px,4vw,40px);font-weight:600;letter-spacing:-.8px;line-heig
  <div class="onder">
   <section class="panel legenda"><h2>Neerslagsom (mm)</h2><div class="balk" id="balk"></div><div class="ticks" id="ticks"></div>
    <p class="noot">Beweeg over de kaart of tik erop voor de hoeveelheid op die plek.</p></section>
-  <section class="panel top"><h2>Natste plekken in Rijnmond</h2><ol id="top"></ol></section>
+  <section class="panel top"><h2>Natste plekken in Rijnmond</h2><ol id="top"></ol>
+   <label class="schakel"><input type="checkbox" id="toonNatst" checked> Natste plekken op de kaart tonen</label></section>
  </div>
  <div class="acties">
   <p class="noot">Bron: KNMI-neerslagradar, per etmaal bijgesteld met KNMI-regenmeters. Dagen ouder dan ongeveer twee weken gebruiken de definitieve KNMI-radarreeks. Een radarschatting; plaatselijk kan de werkelijke hoeveelheid afwijken.</p>
@@ -239,7 +242,7 @@ h1{font-size:clamp(26px,4vw,40px);font-weight:600;letter-spacing:-.8px;line-heig
       laag.removeChild(el); return false;     // past nergens: liever weglaten dan een losse stip
     }
     if (S.klant != null) zet(LOC.name + "  " + C.mm(S.klant, 1) + " mm", "klant", LOC.lon, LOC.lat);
-    S.top.forEach(function (m) { zet(C.mm(m.som, 0) + " mm", "max", m.lon, m.lat); });
+    if ($("toonNatst").checked) S.top.forEach(function (m) { zet(C.mm(m.som, 0) + " mm", "max", m.lon, m.lat); });
     KAARTNAMEN.forEach(function (p) { if (p[0] !== LOC.name) zet(p[0], "", p[1], p[2]); });
     S.geplaatst = lijst;
   }
@@ -409,6 +412,12 @@ h1{font-size:clamp(26px,4vw,40px);font-weight:600;letter-spacing:-.8px;line-heig
     var ga = grenzen(a), gb = grenzen(b);
     var lab = function (ms) { return C.nlTijd(ms + C.UUR, { zonderJaar: true }).replace(/ \d\d:\d\d$/, ""); };
     kies({ soort: "eigen", begin: ga[0], eind: gb[1], label: a === b ? lab(ga[0]) : lab(ga[0]) + " t/m " + lab(gb[0]) });
+  });
+  // natste plekken aan/uit; de keuze blijft bewaard in deze browser
+  try { if (localStorage.getItem("neerslag_rijnmond_natst") === "0") $("toonNatst").checked = false; } catch (e) { /* geen opslag */ }
+  $("toonNatst").addEventListener("change", function () {
+    try { localStorage.setItem("neerslag_rijnmond_natst", this.checked ? "1" : "0"); } catch (e) { /* geen opslag */ }
+    if (S.veld && G) plaatsLabels();
   });
   var rt; addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(function () { if (S.veld && G) plaatsLabels(); meldHoogte(); }, 120); });
 
