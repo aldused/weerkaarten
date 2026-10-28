@@ -46,6 +46,10 @@ try{ const s = JSON.parse(localStorage.getItem('weerlab-sneeuw') || '{}');
   if(MODELS[s.model]) state.model = s.model; if(S.REGIONS[s.region]) state.region = s.region; }catch{}
 if(MODELS[params.get('model')]) state.model = params.get('model');
 if(S.REGIONS[params.get('regio')]) state.region = params.get('regio');
+// Menu-ingangen: ?product= (en optioneel ?variant=), ?vergelijk=1.
+const WANT_PRODUCT = PRODUCTS[params.get('product')] ? params.get('product') : null;
+if(WANT_PRODUCT){ state.product = WANT_PRODUCT; if(params.get('variant')) state.variant[WANT_PRODUCT] = params.get('variant'); }
+if(params.get('vergelijk') === '1') state.compare = true;
 const save = () => { try{ localStorage.setItem('weerlab-sneeuw', JSON.stringify({model:state.model, product:state.product, variant:state.variant, region:state.region})); }catch{} };
 
 const DS = {};          // model -> {manifest, rasters, times}; ontbrekend model = fout-object
@@ -440,7 +444,11 @@ function wire(){
 async function start(){
   try{
     const [prov] = await Promise.all([fetch('nl_provincies.geojson').then(r => r.json()), loadDataset(state.model)]);
+    // Gevraagd product niet bij dit model: eerste model dat het wel heeft.
+    if(WANT_PRODUCT && !ds().manifest.products[WANT_PRODUCT])
+      for(const k of Object.keys(MODELS)){ const d = await ensure(k); if(d.manifest && d.manifest.products[WANT_PRODUCT]){ state.model = k; break; } }
     provinces = prov; buildBasemap(); wire(); adoptModel(null); buildVariants(); buildTimeline();
+    if(state.compare) openCompare(true);
     if(state.region !== 'nl') await loadPlaces().catch(() => {});
     render();
     // Andere modellen op de achtergrond, voor het puntpaneel en de vergelijking.
