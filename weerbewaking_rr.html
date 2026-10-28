@@ -3,7 +3,7 @@
 <head><script src="/weerlab-native-only.js?v=20261027-audit2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Weerbewaking W.M. — Weersverwachting Rijnmond</title>
+<title>Weerbericht Rijnmond</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="weerbewaking_store.js?v=20260712-mod1"></script>
 <script src="weerbewaking_document.js?v=20260712-mod1"></script>
@@ -125,7 +125,8 @@ body{--kop-scale:1}
 <script src="weerbewaking_document_ui.js?v=20260910-v1" defer></script>
 <link rel="stylesheet" href="weerbewaking_workspace.css?v=20260910-v1">
 <script src="weerbewaking_recent.js?v=20260910-v1"></script>
-<script src="weerbewaking_return.js?v=20260910-v2" defer></script>
+<script src="weerbewaking_wp.js?v=20260710"></script>
+<script src="weather24-table.js?v=20261022"></script>
 </head>
 <body class="wb-document-ui wb-document-rijnmond-kort">
 
@@ -133,7 +134,7 @@ body{--kop-scale:1}
 <div class="toolbar">
   <div class="toolbar-top">
     <div>
-      <div class="toolbar-title">Weersverwachting Rijnmond</div>
+      <div class="toolbar-title">Weerbericht Rijnmond</div>
       <div class="toolbar-sub"><span id="save-status"></span></div>
     </div>
     <div class="toolbar-actions">
@@ -141,7 +142,6 @@ body{--kop-scale:1}
       <button type="button" class="button-success" onclick="herlaadTabel()" title="Haal de vijfdaagse opnieuw op; eigen tabelaanpassingen worden overschreven">Tabel opnieuw instellen</button>
       <button type="button" onclick="exporteerPDF().catch(err=>alert('PDF-export is niet gelukt: '+(err?.message || err)))">PDF maken</button>
       <button type="button" class="btn-instellingen" onclick="toggleInstellingen()" title="Toon of verberg de documentopties">Opties</button>
-      <button type="button" class="button-back" onclick="gaTerug()">Overzicht</button>
     </div>
   </div>
 
@@ -196,22 +196,22 @@ body{--kop-scale:1}
 
   <div class="sectie" id="sec-vandaag">
     <h2 class="kop"><span data-prefix="VANDAAG" contenteditable="true" data-save="vandaag-prefix" title="Klik en typ bv. MIDDAG">VANDAAG</span>: <span class="dagnaam" data-offset="0">–</span></h2>
-    <div class="tekstvak" contenteditable="true" data-save="vandaag" data-placeholder="Beschrijf het weer voor vandaag...">De dag begint landinwaarts met bewolking maar al snel wordt het overal zonnig. Het blijft droog en het wordt 16 graden. Aan zee wordt het 14 graden.</div>
+    <div class="tekstvak" contenteditable="true" data-save="vandaag" data-placeholder="Beschrijf het weer voor vandaag..."></div>
   </div>
 
   <div class="sectie" id="sec-avond">
     <h2 class="kop">VANAVOND EN VANNACHT:</h2>
-    <div class="tekstvak" contenteditable="true" data-save="avond" data-placeholder="Beschrijf de avond en de nacht...">Vanavond eerst nog zon, vannacht brede opklaringen en droog. Het koelt landinwaarts af naar 3 graden.</div>
+    <div class="tekstvak" contenteditable="true" data-save="avond" data-placeholder="Beschrijf de avond en de nacht..."></div>
   </div>
 
   <div class="sectie" id="sec-morgen">
     <h2 class="kop"><span data-prefix="MORGEN">MORGEN</span>: <span class="dagnaam" data-offset="1">–</span></h2>
-    <div class="tekstvak" contenteditable="true" data-save="morgen" data-placeholder="Beschrijf het weer voor morgen...">Volop zon en droog. Middagtemperatuur 15 of 16 graden.</div>
+    <div class="tekstvak" contenteditable="true" data-save="morgen" data-placeholder="Beschrijf het weer voor morgen..."></div>
   </div>
 
   <div class="sectie" id="sec-komend">
     <h2 class="kop">KOMENDE DAGEN:</h2>
-    <div class="tekstvak" contenteditable="true" data-save="komend" data-placeholder="Beschrijf de komende dagen...">Veel bewolking met af en toe zon en droog. In de avond kan er wel een bui voorkomen. De maximumtemperatuur bedraagt 16 graden.</div>
+    <div class="tekstvak" contenteditable="true" data-save="komend" data-placeholder="Beschrijf de komende dagen..."></div>
   </div>
 
   <!-- 5-daagse vooruitblik (uit MOS/MIX Rotterdam Airport) -->
@@ -507,6 +507,8 @@ function saveDraft(){
 }
 function leegForm(){
   // Reset secties zichtbaar; teksten leegmaken zodat placeholders verschijnen
+  document.querySelectorAll('.tekstvak[data-save]').forEach(el=>{ el.innerHTML=''; });
+  document.querySelectorAll('[data-save][data-prefix]').forEach(el=>{ el.textContent=el.getAttribute('data-prefix'); });
   document.querySelectorAll('.sectie').forEach(s=>s.classList.remove('verborgen'));
   document.querySelectorAll('.sectie-toggle input[type=checkbox]').forEach(cb=>{cb.checked=true});
   document.getElementById('doc-tijd').value='';
@@ -715,48 +717,24 @@ function vulVijfdaagse(data){
   const tbody=document.getElementById('vijfdaagse-body');
   if(!tbody) return;
   const windCel=(deg)=>{
-    const letter=naarRichtingKort(deg);
-    const rot=deg!=null?deg:0;
-    return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
+    deg=deg!==null&&deg!==''&&Number.isFinite(Number(deg))?Number(deg):null;
+    return `<span class="windpijl" style="transform:rotate(${deg??0}deg);display:inline-block">↓</span> ${naarRichtingKort(deg)}`;
   };
-  const rij=(lbl,arr,fmt=(v=>v))=>`<tr><td class="rij-label">${lbl}</td>${arr.map(v=>`<td contenteditable="true">${fmt(v)}</td>`).join('')}</tr>`;
+  const vijf=arr=>Array.from({length:5},(_,i)=>arr?.[i]??'–');
+  const rij=(lbl,arr)=>`<tr><td class="rij-label">${lbl}</td>${vijf(arr).map(v=>`<td contenteditable="true">${v}</td>`).join('')}</tr>`;
   tbody.innerHTML=[
     rij('Max. temperatuur (°C)', data.tmax),
     rij('Min. temperatuur (°C)', data.tmin),
-    rij('Kans op neerslag (%)',  data.nsk),
+    rij('Zonuren',               data.zon),
+    rij('Neerslagkans (%)',      data.nsk),
+    rij('Neerslag (mm)',         data.nsm),
     rij('Windkracht (BFT)',      data.bft),
-    `<tr><td class="rij-label">Windrichting</td>${data.ri.map(d=>`<td contenteditable="true" class="wind-cel">${windCel(d)}</td>`).join('')}</tr>`
+    `<tr><td class="rij-label">Windrichting</td>${vijf(data.ri).map(d=>`<td contenteditable="true" class="wind-cel">${windCel(d==='–'?null:d)}</td>`).join('')}</tr>`
   ].join('');
 }
-/* KNMI-neerslagkans per dag (uit data.weerlab.nl/knmi_verwachting.json) */
-const KNMI_MND={januari:0,februari:1,maart:2,april:3,mei:4,juni:5,juli:6,augustus:7,september:8,oktober:9,november:10,december:11};
-function knmiDatumToDate(datumStr){
-  const m=(datumStr||'').trim().toLowerCase().match(/^(\d{1,2})\s+([a-zëï]+)/);
-  if(!m) return null;
-  const dag=parseInt(m[1]), mnd=KNMI_MND[m[2]];
-  if(mnd==null) return null;
-  const nu=new Date();
-  let d=new Date(nu.getFullYear(), mnd, dag, 12, 0, 0);
-  if((nu-d) > 180*24*3600*1000) d=new Date(nu.getFullYear()+1, mnd, dag, 12, 0, 0);
-  return d;
-}
-function popPerDagKnmi(knmiJ, dagDatums){
-  if(!knmiJ?.dagen) return dagDatums.map(()=>null);
-  return dagDatums.map(target=>{
-    const t=new Date(target); t.setHours(12,0,0,0);
-    for(const d of knmiJ.dagen){
-      const dd=knmiDatumToDate(d.datum);
-      if(dd && dd.toDateString()===t.toDateString()){
-        const m=(d.neerslagkans||'').match(/(\d+)/);
-        return m ? parseInt(m[1]) : null;
-      }
-    }
-    return null;
-  });
-}
-
 /* Tabel-persistentie (localStorage, per dag) */
 const TABEL_KEY_PREFIX='wb_rr_tabel_';
+const TABLE_SOURCES='mosmix-temp-weather24-v2';   // oudere opgeslagen tabellen (KNMI-kans, 5 rijen) worden opnieuw opgehaald
 function tabelSaveKey(){ return TABEL_KEY_PREFIX+huidigeDatumKey(); }
 function saveTabel(){
   const tbody=document.getElementById('vijfdaagse-body');
@@ -764,7 +742,7 @@ function saveTabel(){
   if(!tbody || !dagen || !tbody.innerHTML.trim()) return;
   try{
     localStorage.setItem(tabelSaveKey(), JSON.stringify({
-      __ts:Date.now(), headers:dagen.innerHTML, body:tbody.innerHTML
+      __ts:Date.now(), sources:TABLE_SOURCES, headers:dagen.innerHTML, body:tbody.innerHTML
     }));
   }catch(e){}
 }
@@ -773,47 +751,26 @@ function restoreTabel(){
     const j=localStorage.getItem(tabelSaveKey());
     if(!j) return false;
     const d=JSON.parse(j);
-    if(!d.headers || !d.body) return false;
+    if(!d.headers || !d.body || d.sources!==TABLE_SOURCES) return false;
     document.getElementById('vijfdaagse-dagen').innerHTML=d.headers;
     document.getElementById('vijfdaagse-body').innerHTML=d.body;
     return true;
   }catch(e){ return false; }
 }
 
+/* Temperatuur uit MOSMIX (Rotterdam Airport); zon, neerslag en wind uit de Weather24-dagwaarden voor Rotterdam. */
+function vijfdaagseDatumKeys(start){
+  return [0,1,2,3,4].map(i=>{const d=plusDag(start,i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`});
+}
 async function laadVijfdaagse(){
   const nu=new Date();
   bouwVijfdaagseDagKoppen(nu);
-  // Parallel: MOSMIX (temp/wind) + KNMI-verwachting (neerslagkans)
-  const [mosmixJ, knmiJ] = await Promise.all([
-    fetch('https://data.weerlab.nl/mosmix_nl.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
-    fetch('https://data.weerlab.nl/knmi_verwachting.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null)
+  const [mos,weather]=await Promise.allSettled([
+    fetch('https://data.weerlab.nl/mosmix_nl.json?_='+Date.now()).then(r=>{if(!r.ok)throw Error('MOSMIX niet beschikbaar');return r.json()}),
+    WeatherProSrc.feedCity('rotterdam').then(c=>{if(!c)throw Error('Geen Weather24-daggegevens voor Rotterdam');return c})
   ]);
-  // Neerslagkans per dag uit KNMI (5 dagen vanaf vandaag)
-  const dagDatums=[0,1,2,3,4].map(i=>plusDag(nu,i));
-  const popKnmi = popPerDagKnmi(knmiJ, dagDatums);
-
-  if(mosmixJ){
-    const dagen=Object.keys(mosmixJ.data).sort();
-    const vijf=dagen.slice(0,5);
-    const pick=(fld,dt)=>mosmixJ.data[dt]?.[fld]?.['Rotterdam Airport'];
-    const nsk = vijf.map((dt,i)=>{
-      if(popKnmi[i]!=null) return popKnmi[i]; // KNMI heeft prioriteit
-      return formatKansPct(pick('R101',dt));   // anders MOSMIX
-    });
-    vulVijfdaagse({
-      tmax: vijf.map(dt=>{const v=pick('TX',dt); return v==null?'–':Math.round(v)}),
-      tmin: vijf.map(dt=>{const v=pick('TN',dt); return v==null?'–':Math.round(v)}),
-      nsk,
-      bft:  vijf.map(dt=>naarBFT(pick('FF',dt))),
-      ri:   vijf.map(dt=>pick('DD',dt))
-    });
-  } else {
-    vulVijfdaagse({
-      tmax:Array(5).fill('–'), tmin:Array(5).fill('–'),
-      nsk: popKnmi.map(v=>v==null?'–':v),
-      bft:Array(5).fill('–'), ri:Array(5).fill(null)
-    });
-  }
+  const mosmix=mos.status==='fulfilled'?mos.value:null,city=weather.status==='fulfilled'?weather.value:null;
+  vulVijfdaagse(Weather24Table.mixed(mosmix,'Rotterdam Airport',vijfdaagseDatumKeys(nu),city));
   saveTabel();
 }
 
@@ -862,9 +819,21 @@ updateDagnamen();
 // Eerst proberen opgeslagen tabel te herstellen — anders eerst placeholders + verse fetch
 if(!restoreTabel()){
   bouwVijfdaagseDagKoppen(new Date());
-  vulVijfdaagse({tmax:Array(5).fill('–'),tmin:Array(5).fill('–'),nsk:Array(5).fill('–'),bft:Array(5).fill('–'),ri:Array(5).fill(null)});
+  vulVijfdaagse({});
   laadVijfdaagse();
 }
+/* Na middernacht een nieuw, leeg document: open pagina's schuiven mee naar de nieuwe dag. */
+let geopendOp=vandaagISO();
+setInterval(()=>{
+  const nu=vandaagISO(); if(nu===geopendOp) return;
+  const opVorigeDag=document.getElementById('doc-datum').value===geopendOp;
+  geopendOp=nu;
+  if(!opVorigeDag) return;              // bewust een andere datum gekozen: niet ingrijpen
+  saveDraftNow();
+  document.getElementById('doc-datum').value=nu;
+  updateOpgesteldKop(); updateDagnamen(); restoreDraft();
+  if(!restoreTabel()){ bouwVijfdaagseDagKoppen(new Date()); vulVijfdaagse({}); laadVijfdaagse(); }
+}, 60*1000);
 // Tijd-deel automatisch ververs elke minuut zodat "om HH:MM uur" actueel blijft
 setInterval(updateOpgesteldKop, 60*1000);
 restoreDraft();
