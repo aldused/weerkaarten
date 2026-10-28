@@ -179,7 +179,8 @@ def main(argv=None):
                 def submit(pool, job):
                     _, h, p = job
                     return pool.submit(direct.process_native_batch, args.source, run, run.hour, h, p, stations, grid, temp, int(args.max_temp_gib * 1024**3) // args.workers)
-                for number, result in direct.bounded_batch_results(pool, jobs, submit, args.workers):
+                for number, result in direct.bounded_batch_results(pool, jobs, submit, args.workers,
+                        on_error=lambda number, error: print(f"PROGRESSIVE_RETRY: batch {number}: {error}", flush=True)):
                     grid = direct.merge_native_batch(raw, index, grid, result)
                     metrics.grib_bytes += result['bytes']; metrics.download_seconds += result['download']; metrics.decode_seconds += result['decode']; metrics.batches += 1
                     metrics.peak_temp_bytes = max(metrics.peak_temp_bytes, result['peak'] * args.workers)

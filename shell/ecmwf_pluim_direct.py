@@ -114,6 +114,9 @@ def use_safe_multipart_chunk_size() -> None:
     request and byte ranges unchanged while avoiding that parser edge case.
     """
 
+    from ecmwf_multipart import install
+    install()
+
     current = ecmwf_client_module.download
     if not getattr(current, "_weerlab_small_chunks", False):
         def download_with_small_chunks(url, target, **kwargs):
@@ -740,7 +743,7 @@ def establish_grid_points(gid: int, stations: list[Station]) -> tuple[GridPoint,
     )
 
 
-def bounded_batch_results(pool,jobs,submit,workers):
+def bounded_batch_results(pool,jobs,submit,workers,on_error=None):
     """Keep only worker-count jobs in flight; failures cancel queued work."""
     queue=iter(jobs);pending={}
     def next_job():
@@ -753,7 +756,14 @@ def bounded_batch_results(pool,jobs,submit,workers):
             done,_=concurrent.futures.wait(pending,return_when=concurrent.futures.FIRST_COMPLETED)
             for future in done:
                 number=pending.pop(future)
-                yield number,future.result()
+                try:
+                    result = future.result()
+                except Exception as error:
+                    if on_error is None:
+                        raise
+                    on_error(number, error)
+                else:
+                    yield number,result
                 next_job()
     finally:
         for future in pending:future.cancel()

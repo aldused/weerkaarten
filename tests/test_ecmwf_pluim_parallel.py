@@ -26,3 +26,21 @@ class BoundedQueue(unittest.TestCase):
   it=d.bounded_batch_results(None,[(i,) for i in range(20)],submit,4)
   first=next(it);self.assertEqual(len(submitted),4)
   results=[first]+list(it);self.assertEqual(sorted(n for n,r in results),list(range(20)))
+
+class RetryableFailures(unittest.TestCase):
+ def test_progressive_keeps_successful_jobs_after_failure(self):
+  from concurrent.futures import Future
+  errors=[]
+  def submit(pool,job):
+   f=Future()
+   if job[0]==1:f.set_exception(RuntimeError('retry later'))
+   else:f.set_result(job[0])
+   return f
+  results=list(d.bounded_batch_results(None,[(i,) for i in range(6)],submit,2,on_error=lambda number,error:errors.append(number)))
+  self.assertEqual(sorted(n for n,r in results),[0,2,3,4,5])
+  self.assertEqual(errors,[1])
+ def test_default_producer_still_fails_closed(self):
+  from concurrent.futures import Future
+  def submit(pool,job):
+   f=Future();f.set_exception(RuntimeError('bad batch'));return f
+  with self.assertRaises(RuntimeError):list(d.bounded_batch_results(None,[(0,)],submit,1))
