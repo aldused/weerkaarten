@@ -32,15 +32,26 @@
     {min:50,  color:'#8c2470', label:'≥ 50 cm'}
   ];
 
+  // Neerslagsoort (categorieën uit criteria.PTYPE_CLASSES); 0 = geen/weinig kans op neerslag (transparant).
+  const CAT_SCALE = [
+    {code:1, color:'#6aa6dc', label:'Regen'},
+    {code:3, color:'#5fbfae', label:'Regen en sneeuw'},
+    {code:2, color:'#a99be0', label:'Natte sneeuw'},
+    {code:4, color:'#6b35a8', label:'Sneeuw'},
+    {code:5, color:'#e0902f', label:'IJskorrels'},
+    {code:6, color:'#c62d42', label:'IJzel'}
+  ];
+
   /** Code (uint8) -> fysieke waarde; null = ontbrekend. */
   function decode(code, encoding){
     if(code === MISSING) return null;
     return encoding === 'cm_x2' ? code / 2 : code;
   }
-  function scaleFor(encoding){ return encoding === 'cm_x2' ? CM_SCALE : PCT_SCALE; }
+  function scaleFor(encoding){ return encoding === 'cm_x2' ? CM_SCALE : encoding === 'categorie' ? CAT_SCALE : PCT_SCALE; }
   /** Kleur bij waarde, of null (transparant) onder de laagste klasse. */
   function colorFor(value, encoding){
     if(value === null) return null;
+    if(encoding === 'categorie'){ const k = CAT_SCALE.find(k => k.code === value); return k ? k.color : null; }
     const s = scaleFor(encoding); let c = null;
     for(const k of s) if(value >= k.min) c = k.color;
     return c;
@@ -88,7 +99,7 @@
     return h > maxHours ? `Let op: deze run is ${Math.round(h)} uur oud; een nieuwere is nog niet verwerkt.` : '';
   }
 
-  const api = {MISSING, MAP, lonToX, latToY, xToLon, yToLat, PCT_SCALE, CM_SCALE, decode, scaleFor, colorFor, hexRGB,
+  const api = {MISSING, MAP, lonToX, latToY, xToLon, yToLat, PCT_SCALE, CM_SCALE, CAT_SCALE, decode, scaleFor, colorFor, hexRGB,
     parseRaster, isGzip, cellAt, dayKey, dayLabel, hourLabel, fullLabel, windowLabel, staleWarning};
   if(typeof module === 'object' && module.exports) module.exports = api; else root.SneeuwCore = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -14,16 +14,25 @@ const PRODUCTS = {
     label: v => ({p10:'P10', p50:'Mediaan', mean:'Gemiddeld', p90:'P90', max:'Maximum'})[v],
     definition: (m, v, t) => ({p10:'P10: 9 van de 10 leden hebben minstens deze hoogte.', p50:'Mediaan: de middelste van de geldige leden.',
       mean:'Gemiddelde over de geldige leden.', p90:'P90: slechts 1 van de 10 leden heeft meer.', max:'Maximum: het hoogste lid — het natste scenario, niet de verwachting.'})[v]
-      + ' Modelsneeuwhoogte op ' + S.fullLabel(t) + '.'}
+      + ' Modelsneeuwhoogte op ' + S.fullLabel(t) + '.'},
+  neerslagsoort: {title:'Neerslagsoort', variantLabel:'Weergave',
+    label: v => ({dominant:'Meest waarschijnlijk', neerslag:'Kans op neerslag', sneeuw:'Sneeuw', natte_sneeuw:'Natte sneeuw',
+      regen_sneeuw:'Regen en sneeuw', ijzel:'IJzel', ijskorrels:'IJskorrels', regen:'Regen'})[v],
+    definition: (m, v, t) => v === 'dominant'
+      ? `Meest waarschijnlijke neerslagsoort op ${S.fullLabel(t)} (momentopname), alleen waar minstens ${m.criteria.ptype_min_precip_pct} % van de leden neerslag heeft.`
+      : v === 'neerslag' ? `Kans dat er op ${S.fullLabel(t)} neerslag valt (welke soort dan ook).`
+      : `Kans dat de neerslag op ${S.fullLabel(t)} valt als ${PRODUCTS.neerslagsoort.label(v).toLowerCase()} (aandeel van alle leden, momentopname).`}
 };
+const MODELS = {icond2eps:{staleHours:9}, ecmwfens:{staleHours:22}};
 const PLACES = [['Den Helder',52.96,4.76],['Leeuwarden',53.20,5.79],['Groningen',53.22,6.57],['Assen',52.99,6.56],['Zwolle',52.51,6.09],
   ['Lelystad',52.52,5.47],['Amsterdam',52.37,4.90],['Den Haag',52.08,4.30],['Rotterdam',51.92,4.48],['Utrecht',52.09,5.12],['Arnhem',51.98,5.91],
   ['Enschede',52.22,6.89],['Middelburg',51.50,3.61],["'s-Hertogenbosch",51.69,5.30],['Eindhoven',51.44,5.48],['Breda',51.59,4.78],['Maastricht',50.85,5.69]];
 
-let state = {model:'icond2eps', product:'sneeuwval_kans', variant:{sneeuwval_kans:'6', sneeuwdek_kans:'1', sneeuwhoogte:'p50'}, t:0, cell:-1};
+let state = {model:'icond2eps', product:'sneeuwval_kans', variant:{sneeuwval_kans:'6', sneeuwdek_kans:'1', sneeuwhoogte:'p50', neerslagsoort:'dominant'}, t:0, cell:-1};
 try{ const s = JSON.parse(localStorage.getItem('weerlab-sneeuw') || '{}');
-  if(PRODUCTS[s.product]) state.product = s.product; if(s.variant) Object.assign(state.variant, s.variant); }catch{}
-const save = () => { try{ localStorage.setItem('weerlab-sneeuw', JSON.stringify({product:state.product, variant:state.variant})); }catch{} };
+  if(PRODUCTS[s.product]) state.product = s.product; if(s.variant) Object.assign(state.variant, s.variant); if(MODELS[s.model]) state.model = s.model; }catch{}
+if(MODELS[params.get('model')]) state.model = params.get('model');
+const save = () => { try{ localStorage.setItem('weerlab-sneeuw', JSON.stringify({model:state.model, product:state.product, variant:state.variant})); }catch{} };
 
 let manifest = null, rasters = {}, times = [], provinces = null, landPath = null, provPath = null, outlinePath = null, timer = null, hatch = null;
 
@@ -43,6 +52,9 @@ async function loadModel(keepTime){
   for(const [, r] of entries) if(r.nx !== m.grid.nx || r.ny !== m.grid.ny || r.nt !== m.valid_utc.length) throw Error('Rasterafmetingen kloppen niet met het manifest.');
   const prevMs = times[state.t];
   manifest = m; rasters = Object.fromEntries(entries); times = m.valid_utc.map(Date.parse);
+  if(!m.products[state.product]) state.product = 'sneeuwval_kans';
+  for(const [p, def] of Object.entries(m.products))
+    if(!def.variants.includes(state.variant[p])) state.variant[p] = def.variants.includes('6') ? '6' : def.variants[0];
   if(keepTime && prevMs) { const i = times.indexOf(prevMs); state.t = i >= 0 ? i : 0; }
   else { const now = Date.now(); const i = times.findIndex(t => t >= now - 1800000); state.t = i >= 0 ? i : 0; }
   $('error').hidden = true;
@@ -90,7 +102,8 @@ function hatchPattern(ctx){
 
 /* ---------- veld tekenen (scherm en export delen deze functie) ---------- */
 function currentKey(){ return state.product + '/' + state.variant[state.product]; }
-function currentEncoding(){ return manifest.products[state.product].encoding; }
+function encodingOf(product, variant){ const d = manifest.products[product]; return (d.variant_encoding && d.variant_encoding[variant]) || d.encoding; }
+function currentEncoding(){ return encodingOf(state.product, state.variant[state.product]); }
 function fieldImages(){
   const g = manifest.grid, frame = rasters[currentKey()].frame(state.t), enc = currentEncoding();
   const color = document.createElement('canvas'), miss = document.createElement('canvas');
@@ -111,7 +124,8 @@ function fieldImages(){
 /** Tekent het veld in kaartcoördinaten (800x1100) op ctx; ctx-transform bepaalt schaal/positie. */
 function drawField(ctx, imgs){
   ctx.save(); ctx.clip(landPath, 'evenodd');
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  // Categorieën niet mengen; kansen en hoeveelheden wel vloeiend tekenen.
+  ctx.imageSmoothingEnabled = currentEncoding() !== 'categorie'; ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(imgs.color, 0, 0, S.MAP.w, S.MAP.h);
   if(imgs.anyMissing){
     const tmp = document.createElement('canvas'); tmp.width = S.MAP.w; tmp.height = S.MAP.h;
@@ -170,10 +184,12 @@ function render(){
   $('product-title').textContent = p.title;
   for(const b of document.querySelectorAll('.products button')) b.setAttribute('aria-pressed', String(b.dataset.product === state.product));
   $('hdr-model').textContent = `${manifest.model} · ${p.title}`;
-  $('hdr-run').textContent = `Modelrun ${S.fullLabel(Date.parse(manifest.run_utc))} · +${state.t} u`;
+  for(const b of document.querySelectorAll('.products button')) b.disabled = !manifest.products[b.dataset.product];
+  $('model').value = state.model;
+  $('hdr-run').textContent = `Modelrun ${S.fullLabel(Date.parse(manifest.run_utc))} · +${Math.round((t - Date.parse(manifest.run_utc)) / 3600000)} u`;
   $('hdr-valid').textContent = 'Geldig ' + S.fullLabel(t);
   $('hdr-update').textContent = 'Laatste update ' + fmtUpdate(manifest.updated_utc);
-  const stale = S.staleWarning(Date.parse(manifest.run_utc)); $('stale').hidden = !stale; $('stale').textContent = stale;
+  const stale = S.staleWarning(Date.parse(manifest.run_utc), Date.now(), MODELS[state.model].staleHours); $('stale').hidden = !stale; $('stale').textContent = stale;
   $('legend').innerHTML = legendHTML();
   $('definition').textContent = p.definition(manifest, v, t);
   $('slider').value = state.t;
@@ -184,9 +200,10 @@ function render(){
 
 function value(key, cell, t){
   const r = rasters[key]; if(!r) return null;
-  return S.decode(r.frame(t)[cell], manifest.products[key.split('/')[0]].encoding);
+  const [p, v] = key.split('/'); return S.decode(r.frame(t)[cell], encodingOf(p, v));
 }
 const pct = v => v === null ? 'n.b.' : v + ' %';
+const catLabel = v => v === null ? 'n.b.' : v === 0 ? 'geen of weinig kans op neerslag' : (S.CAT_SCALE.find(k => k.code === v) || {label:'?'}).label;
 const cm = v => v === null ? 'n.b.' : v.toFixed(1).replace('.', ',') + ' cm';
 function renderPoint(){
   const body = $('point-body');
@@ -201,7 +218,9 @@ function renderPoint(){
     + rows('Kans op sneeuwdek', P.sneeuwdek_kans.variants.map(v => [`≥ ${v} cm`, pct(value('sneeuwdek_kans/' + v, state.cell, t))]))
     + rows('Sneeuwhoogte', [['Ligt nu (run +0 u, mediaan)', cm(value('sneeuwhoogte/p50', state.cell, 0))],
         ...P.sneeuwhoogte.variants.map(v => [PRODUCTS.sneeuwhoogte.label(v), cm(value('sneeuwhoogte/' + v, state.cell, t))])])
-    + `</table><p class="note">Waarden van de dichtstbijzijnde roostercel (~2 km), zonder interpolatie. Bron: ${manifest.source}, run ${S.fullLabel(Date.parse(manifest.run_utc))}.</p>`;
+    + (P.neerslagsoort ? rows('Neerslagsoort (momentopname)', [['Meest waarschijnlijk', catLabel(value('neerslagsoort/dominant', state.cell, t))],
+        ...P.neerslagsoort.variants.filter(v => v !== 'dominant').map(v => [PRODUCTS.neerslagsoort.label(v), pct(value('neerslagsoort/' + v, state.cell, t))])]) : '')
+    + `</table><p class="note">Waarden van de dichtstbijzijnde kaartcel (~2 km) zonder interpolatie; het modelrooster zelf is ${String(manifest.native_resolution_km).replace('.', ',')} km. Bron: ${manifest.source}, run ${S.fullLabel(Date.parse(manifest.run_utc))}.</p>`;
 }
 
 /* ---------- export (direct uit de data, geen schermafdruk) ---------- */
@@ -262,6 +281,13 @@ function wire(){
   $('speed').onchange = () => { if(timer){ togglePlay(); togglePlay(); } };
   $('now').onclick = () => { const i = times.findIndex(t => t >= Date.now() - 1800000); setT(i >= 0 ? i : 0); };
   $('export').onclick = exportPNG;
+  $('model').onchange = async e => {
+    const prev = times[state.t], prevModel = state.model; state.model = e.target.value;
+    try{ await loadModel(false); save(); if(prev){ let best = 0; times.forEach((t, i) => { if(Math.abs(t - prev) < Math.abs(times[best] - prev)) best = i; }); state.t = best; }
+      buildVariants(); buildTimeline(); $('hours').dataset.day = ''; render(); }
+    catch(err){ state.model = prevModel; e.target.value = prevModel;
+      $('error').hidden = false; $('error').textContent = 'Dit model is nu niet beschikbaar: ' + err.message; }
+  };
   document.addEventListener('keydown', e => {
     if(e.target.closest && e.target.closest('select,input:not([type=range])')) return;
     if(e.key === 'ArrowRight'){ setT(state.t + 1); e.preventDefault(); }
