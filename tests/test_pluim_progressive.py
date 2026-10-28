@@ -44,3 +44,11 @@ class Progressive(unittest.TestCase):
    self.assertEqual(probe.call_count,3)
 
 if __name__=='__main__':unittest.main()
+
+class Availability(unittest.TestCase):
+ def test_parallel_probes_never_skip_missing_interval(self):
+  with patch.object(p,'step_ready',side_effect=lambda client,run,step:step!=6):
+   self.assertEqual(p.available_steps(None,None,(0,3,6,9,12)),(0,3))
+ def test_parallel_probes_keep_order(self):
+  with patch.object(p,'step_ready',return_value=True):
+   self.assertEqual(p.available_steps(None,None,(0,3,6,9,12)),(0,3,6,9,12))

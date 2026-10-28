@@ -40,10 +40,15 @@ def step_ready(client, run, step):
 def available_steps(client, run, steps):
     # Inspect each native step: never assume that files arrive in order.
     result = []
-    for step in steps:
-        if not step_ready(client, run, step):
-            break
-        result.append(step)
+    # Bound source probes to four simultaneous requests; preserve native order.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as probes:
+        for start in range(0, len(steps), 4):
+            batch = steps[start:start + 4]
+            ready = probes.map(lambda step: step_ready(client, run, step), batch)
+            for step, exists in zip(batch, ready):
+                if not exists:
+                    return tuple(result)
+                result.append(step)
     return tuple(result)
 
 
