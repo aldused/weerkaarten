@@ -19,6 +19,17 @@ const PRODUCTS = {
     definition: (m, v, t) => `Kans dat er op ${S.fullLabel(t)} een sneeuwdek ligt met minstens ${v} mm water-equivalent. HarmonEPS geeft geen sneeuwhoogte; hoeveel centimeter dit is, hangt van de sneeuwdichtheid af.`},
   swe: {title:'Sneeuwdek in water-equivalent', variantLabel:'Statistiek', label: v => ({p50:'Mediaan', p90:'P90', max:'Maximum'})[v],
     definition: (m, v, t) => ({p50:'Mediaan', p90:'P90 (1 op de 10 leden meer)', max:'Hoogste lid (natste scenario)'})[v] + ` van het sneeuwdek in mm water-equivalent op ${S.fullLabel(t)}; géén centimeters.`},
+  sneeuwtoename_kans: {title:'Kans op toename sneeuwdek', variantLabel:'Minimaal · venster',
+    label: v => { const [x, w] = v.split('_'); return `≥ ${x} cm · ${w} u`; },
+    definition: (m, v, t) => { const [x, w] = v.split('_');
+      return `Kans dat de modelsneeuwhoogte in ${w} uur (${S.windowLabel(t, +w)}) met minstens ${x} cm toeneemt, per lid berekend. `
+        + 'Netto toename: smelten en inklinken tijdens het venster tellen mee, dus bij dooi of zware natte sneeuw is de verse sneeuw meer dan dit.'; }},
+  spreiding: {title:'Onzekerheid en spreiding', variantLabel:'Grootheid',
+    label: v => ({sneeuwval_6:'Sneeuwval 6 u', sneeuwval_24:'Sneeuwval 24 u', sneeuwdek_1:'Sneeuwdek ≥ 1 cm', hoogte_p90p10:'Spreiding hoogte (P90−P10)'})[v],
+    definition: (m, v, t) => v === 'hoogte_p90p10'
+      ? `Verschil tussen het natste en droogste tiende deel van de leden (P90 − P10) in de sneeuwhoogte op ${S.fullLabel(t)}. Groot verschil = leden zijn het oneens over hoeveel sneeuw er ligt.`
+      : `Hoe eensgezind de leden zijn over ${({sneeuwval_6:'sneeuwval in 6 uur', sneeuwval_24:'sneeuwval in 24 uur', sneeuwdek_1:'een sneeuwdek van minstens 1 cm'})[v]} (${S.fullLabel(t)}). `
+        + 'Vaste grenzen op de kans: < 10 % en ≥ 90 % = lage onzekerheid, 10–30 % en 70–90 % = gemiddelde onzekerheid, 30–70 % = hoge onzekerheid. Dit is een andere weergave van dezelfde kans, geen extra informatie.'},
   nieuwe_sneeuw: {title:'Nieuwe sneeuw', variantLabel:'Venster',
     label: v => { const [k, w] = v.split('_'); return `${w} u · ${k === 'we' ? 'mm' : 'dek'}`; },
     definition: (m, v, t) => { const [k, w] = v.split('_');
@@ -39,7 +50,7 @@ const PLACES = [['Den Helder',52.96,4.76],['Leeuwarden',53.20,5.79],['Groningen'
   ['Lelystad',52.52,5.47],['Amsterdam',52.37,4.90],['Den Haag',52.08,4.30],['Rotterdam',51.92,4.48],['Utrecht',52.09,5.12],['Arnhem',51.98,5.91],
   ['Enschede',52.22,6.89],['Middelburg',51.50,3.61],["'s-Hertogenbosch",51.69,5.30],['Eindhoven',51.44,5.48],['Breda',51.59,4.78],['Maastricht',50.85,5.69]];
 
-let state = {model:'icond2eps', product:'sneeuwval_kans', variant:{sneeuwval_kans:'6', sneeuwdek_kans:'1', sneeuwhoogte:'p50', swe_kans:'1', swe:'p50', nieuwe_sneeuw:'we_6', neerslagsoort:'dominant'},
+let state = {model:'icond2eps', product:'sneeuwval_kans', variant:{sneeuwval_kans:'6', sneeuwdek_kans:'1', sneeuwhoogte:'p50', swe_kans:'1', swe:'p50', sneeuwtoename_kans:'5_12', spreiding:'sneeuwval_24', nieuwe_sneeuw:'we_6', neerslagsoort:'dominant'},
   t:0, cell:-1, region:'nl', compare:false};
 try{ const s = JSON.parse(localStorage.getItem('weerlab-sneeuw') || '{}');
   if(PRODUCTS[s.product]) state.product = s.product; if(s.variant) Object.assign(state.variant, s.variant);
@@ -164,7 +175,7 @@ function fieldImages(d, key, t){
   }
   color.getContext('2d').putImageData(ci, 0, 0); miss.getContext('2d').putImageData(mi, 0, 0);
   // Vloeiend alleen landelijk en niet bij categorieën; ingezoomd toont elk blokje één kaartcel.
-  return {color, miss, anyMissing, smooth: state.region === 'nl' && enc !== 'categorie'};
+  return {color, miss, anyMissing, smooth: state.region === 'nl' && enc !== 'categorie' && enc !== 'eensgezindheid'};
 }
 /** Tekent het veld in kaartcoördinaten (800x1100) op ctx; de transform op ctx bepaalt uitsnede en schaal. */
 function drawField(ctx, imgs){
@@ -238,9 +249,15 @@ function buildHours(){
 }
 function setT(i){ state.t = Math.max(0, Math.min(ds().times.length - 1, i)); render(); }
 
-function legendHTML(d, enc, product){
+/** Legenda-items [kleur|null, tekst]; null = transparant (ondergrond zichtbaar). */
+function legendItems(d, enc, product){
   const classes = d.manifest.products[product].classes;
-  return S.scaleFor(enc).filter(k => !classes || classes.includes(k.code)).map(k => `<span><i style="background:${k.color}"></i>${k.label}</span>`).join('')
+  const items = S.scaleFor(enc).filter(k => !classes || classes.includes(k.code)).map(k => [k.color, k.label]);
+  if(enc === 'eensgezindheid') items.unshift(['transparent', 'Vrijwel geen leden (< 10 %) · lage onzekerheid']);
+  return items;
+}
+function legendHTML(d, enc, product){
+  return legendItems(d, enc, product).map(([c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')
     + `<span><i class="nb"></i>n.b. (${d.manifest.deterministic ? 'geen modelwaarde' : 'te weinig leden'} of venster vóór runstart)</span>`;
 }
 function render(){
@@ -274,6 +291,7 @@ const cm = v => v === null ? 'n.b.' : v.toFixed(1).replace('.', ',') + ' cm';
 const catLabel = (d, v) => v === null ? 'n.b.' : v === 0 ? (d.manifest.deterministic ? 'geen neerslag' : 'geen of weinig kans op neerslag') : (S.CAT_SCALE.find(k => k.code === v) || {label:'?'}).label;
 function fmtValue(d, key, cell, t){
   const x = value(d, key, cell, t), e = encodingOf(d, key);
+  if(e === 'eensgezindheid') return x === null ? 'n.b.' : x === 0 ? 'vrijwel geen leden (< 10 %)' : S.AGREE_SCALE.find(k => k.code === x).label;
   return e === 'categorie' ? catLabel(d, x) : x === null ? 'n.b.' : e === 'cm_x2' ? cm(x) : e === 'mm_x4' ? x.toFixed(2).replace('.', ',') + ' mm' : x + ' %';
 }
 function renderPoint(){
@@ -284,7 +302,7 @@ function renderPoint(){
   const mk = $('marker'); mk.setAttribute('cx', S.lonToX(lon)); mk.setAttribute('cy', S.latToY(lat));
   const rows = (label, list) => `<tr><th colspan="2">${label}</th></tr>` + list.map(([a, b]) => `<tr><td>${a}</td><td class="v">${b}</td></tr>`).join('');
   const P = d.manifest.products, now = P.sneeuwhoogte && (P.sneeuwhoogte.variants.includes('p50') ? 'p50' : P.sneeuwhoogte.variants[0]);
-  const TITLES = {sneeuwval_kans:'Kans op sneeuwval (venster tot nu)', sneeuwdek_kans:'Kans op sneeuwdek', sneeuwhoogte:'Sneeuwhoogte', swe_kans:'Kans op sneeuwdek (water-equivalent)', swe:'Sneeuwdek (water-equivalent)',
+  const TITLES = {sneeuwval_kans:'Kans op sneeuwval (venster tot nu)', sneeuwdek_kans:'Kans op sneeuwdek', sneeuwhoogte:'Sneeuwhoogte', sneeuwtoename_kans:'Kans op toename sneeuwdek (venster tot nu)', spreiding:'Onzekerheid', swe_kans:'Kans op sneeuwdek (water-equivalent)', swe:'Sneeuwdek (water-equivalent)',
     nieuwe_sneeuw:'Nieuwe sneeuw (venster tot nu)', neerslagsoort: P.neerslagsoort && P.neerslagsoort.period === 'uur' ? 'Neerslagsoort (afgelopen uur)' : 'Neerslagsoort (momentopname)'};
   let html = '';
   for(const p of Object.keys(PRODUCTS)) if(P[p]) html += rows(TITLES[p], [
@@ -390,9 +408,8 @@ function exportPNG(){
   line(`Geldig ${S.fullLabel(t)}${state.region === 'nl' ? '' : ' · ' + S.REGIONS[state.region].label}`, base, 600, '#1e293b');
   line(`${m.model} · run ${S.fullLabel(Date.parse(m.run_utc))}`, base * .8, 500, '#475569', 1.6);
   if(!wide) ty = H - foot + pad * .4;
-  const classes = m.products[state.product].classes;
-  const scale = S.scaleFor(currentEncoding()).filter(k => !classes || classes.includes(k.code)), sw = base * .9; x.font = `500 ${Math.round(base * .72)}px "DM Sans",sans-serif`;
-  let lx = tx; const items = [...scale.map(k => [k.color, k.label]), [null, 'n.b.']];
+  const sw = base * .9; x.font = `500 ${Math.round(base * .72)}px "DM Sans",sans-serif`;
+  let lx = tx; const items = [...legendItems(d, currentEncoding(), state.product), [null, 'n.b.']];
   for(const [col, lab] of items){ const w = sw + 6 + x.measureText(lab).width + base * .8;
     if(lx + w > tx + tw){ lx = tx; ty += sw * 1.6; }
     x.fillStyle = col || hatchPattern(x); x.fillRect(lx, ty - sw * .8, sw, sw);

@@ -42,6 +42,13 @@
     {code:6, color:'#c62d42', label:'IJzel'},
     {code:7, color:'#c9a227', label:'Korrelhagel'}
   ];
+  // Eensgezindheid (kaart 7): klassen op vaste kansgrenzen 10/30/70/90 %; 0 (< 10 %) transparant.
+  const AGREE_SCALE = [
+    {code:1, color:'#cfe3f3', label:'Enkele leden (10–30 %) · gemiddelde onzekerheid'},
+    {code:2, color:'#eea53f', label:'Verdeeld (30–70 %) · hoge onzekerheid'},
+    {code:3, color:'#6f8fd0', label:'Meeste leden (70–90 %) · gemiddelde onzekerheid'},
+    {code:4, color:'#3d2a7d', label:'Vrijwel alle leden (≥ 90 %) · lage onzekerheid'}
+  ];
   // Sneeuwval in mm water-equivalent (kaart 4), eigen schaal: geen cm.
   const MM_SCALE = [
     {min:0.25, color:'#eef3fa', label:'0,25–0,5 mm'},
@@ -58,11 +65,11 @@
     if(code === MISSING) return null;
     return encoding === 'cm_x2' ? code / 2 : encoding === 'mm_x4' ? code / 4 : code;
   }
-  function scaleFor(encoding){ return encoding === 'cm_x2' ? CM_SCALE : encoding === 'mm_x4' ? MM_SCALE : encoding === 'categorie' ? CAT_SCALE : PCT_SCALE; }
+  function scaleFor(encoding){ return encoding === 'cm_x2' ? CM_SCALE : encoding === 'mm_x4' ? MM_SCALE : encoding === 'categorie' ? CAT_SCALE : encoding === 'eensgezindheid' ? AGREE_SCALE : PCT_SCALE; }
   /** Kleur bij waarde, of null (transparant) onder de laagste klasse. */
   function colorFor(value, encoding){
     if(value === null) return null;
-    if(encoding === 'categorie'){ const k = CAT_SCALE.find(k => k.code === value); return k ? k.color : null; }
+    if(encoding === 'categorie' || encoding === 'eensgezindheid'){ const k = scaleFor(encoding).find(k => k.code === value); return k ? k.color : null; }
     const s = scaleFor(encoding); let c = null;
     for(const k of s) if(value >= k.min) c = k.color;
     return c;
@@ -153,7 +160,7 @@
     return hits.slice(0, n).map(h => h[2]);
   }
 
-  const api = {REGIONS, regionView, comparableKey, exactIndex, searchPlaces, fold, MISSING, MAP, lonToX, latToY, xToLon, yToLat, PCT_SCALE, CM_SCALE, CAT_SCALE, MM_SCALE, decode, scaleFor, colorFor, hexRGB,
+  const api = {REGIONS, regionView, comparableKey, exactIndex, searchPlaces, fold, MISSING, MAP, lonToX, latToY, xToLon, yToLat, PCT_SCALE, CM_SCALE, CAT_SCALE, MM_SCALE, AGREE_SCALE, decode, scaleFor, colorFor, hexRGB,
     parseRaster, isGzip, cellAt, dayKey, dayLabel, hourLabel, fullLabel, windowLabel, staleWarning};
   if(typeof module === 'object' && module.exports) module.exports = api; else root.SneeuwCore = api;
 })(typeof self !== 'undefined' ? self : this);
