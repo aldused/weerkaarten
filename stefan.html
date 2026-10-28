@@ -39,12 +39,18 @@ body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--tex
 
 /* ── Iframe (weerbericht) ── */
 #frame{
-  position:fixed;inset:0;width:100%;height:100vh;border:none;
+  position:fixed;left:0;right:0;bottom:0;top:44px;width:100%;height:calc(100vh - 44px);border:none;
   display:none;background:#f2f2f2;
 }
 #frame.zichtbaar{display:block}
 
 /* ── Top-knop voor uitloggen ── */
+/* ── Balk: weerbericht of neerslagkaart ── */
+#balk{position:fixed;top:0;left:0;right:0;height:44px;z-index:999;display:none;align-items:center;gap:6px;padding:0 120px 0 10px;
+  background:#102f3a;font-family:Inter,system-ui,sans-serif}
+#balk.zichtbaar{display:flex}
+#balk button{font:600 .8rem Inter,system-ui,sans-serif;padding:6px 12px;border-radius:6px;border:1px solid #2c5566;background:transparent;color:#cfe3ea;cursor:pointer;white-space:nowrap}
+#balk button[aria-pressed="true"]{background:#d8eef0;border-color:#d8eef0;color:#102f3a}
 #uit{
   position:fixed;top:8px;right:10px;z-index:1000;
   font-family:Inter,sans-serif;font-size:.72rem;font-weight:600;
@@ -69,6 +75,10 @@ body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--tex
   <div class="fout" id="fout"></div>
 </div>
 
+<nav id="balk" aria-label="Onderdeel">
+  <button type="button" data-src="weerbewaking_rr.html" aria-pressed="true">Weerbericht</button>
+  <button type="button" data-src="neerslag_rijnmond.html" aria-pressed="false">Neerslag gevallen</button>
+</nav>
 <button id="uit" onclick="vergrendel()">🔒 Uitloggen</button>
 <iframe id="frame" title="Rijnmond Weerbericht"></iframe>
 
@@ -169,8 +179,9 @@ function ontgrendel(){
   sessionStorage.setItem('wb_unlocked', '1');
   document.getElementById('login').classList.add('verborgen');
   const f = document.getElementById('frame');
-  f.src = 'weerbewaking_rr.html?_=' + Date.now();
+  toonOnderdeel(location.hash === '#neerslag' ? 'neerslag_rijnmond.html' : 'weerbewaking_rr.html');
   f.classList.add('zichtbaar');
+  document.getElementById('balk').classList.add('zichtbaar');
   document.getElementById('uit').classList.add('zichtbaar');
 }
 
@@ -184,9 +195,18 @@ function vergrendel(){
   document.getElementById('frame').classList.remove('zichtbaar');
   document.getElementById('frame').src = 'about:blank';
   document.getElementById('uit').classList.remove('zichtbaar');
+  document.getElementById('balk').classList.remove('zichtbaar');
   document.getElementById('pwd').value = '';
   document.getElementById('pwd').focus();
 }
+
+/* Wissel tussen weerbericht en neerslagkaart; #neerslag opent direct de kaart. */
+function toonOnderdeel(src){
+  document.getElementById('frame').src = src + '?_=' + Date.now();
+  document.querySelectorAll('#balk button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.src === src)));
+  history.replaceState(null, '', location.pathname + location.search + (src === 'neerslag_rijnmond.html' ? '#neerslag' : ''));
+}
+document.querySelectorAll('#balk button').forEach(b => b.addEventListener('click', () => toonOnderdeel(b.dataset.src)));
 
 async function sha256(s){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
