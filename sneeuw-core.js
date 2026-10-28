@@ -110,7 +110,50 @@
     return h > maxHours ? `Let op: deze run is ${Math.round(h)} uur oud; een nieuwere is nog niet verwerkt.` : '';
   }
 
-  const api = {MISSING, MAP, lonToX, latToY, xToLon, yToLat, PCT_SCALE, CM_SCALE, CAT_SCALE, MM_SCALE, decode, scaleFor, colorFor, hexRGB,
+  // Regio's: [lonMin, lonMax, latMin, latMax]; provincies volgen de provinciekaart (afgerond).
+  const REGIONS = {
+    nl: {label:'Nederland', box:null},
+    rijnmond: {label:'Rijnmond', box:[3.98, 4.68, 51.78, 52.02]},
+    zuidholland: {label:'Zuid-Holland', box:[3.84, 5.03, 51.66, 52.33]},
+    zeeland: {label:'Zeeland', box:[3.36, 4.28, 51.20, 51.76]},
+    utrecht: {label:'Utrecht', box:[4.79, 5.63, 51.86, 52.30]},
+    noordbrabant: {label:'Noord-Brabant', box:[4.19, 6.04, 51.22, 51.83]}
+  };
+  /** viewBox [x, y, w, h] in kaarteenheden: regio + 6 % marge, aangevuld tot de vaste 800:1100-verhouding. */
+  function regionView(key){
+    const r = REGIONS[key]; if(!r || !r.box) return [0, 0, MAP.w, MAP.h];
+    const [lo0, lo1, la0, la1] = r.box;
+    let x0 = lonToX(lo0), x1 = lonToX(lo1), y0 = latToY(la1), y1 = latToY(la0);
+    const mx = (x1 - x0) * .06, my = (y1 - y0) * .06; x0 -= mx; x1 += mx; y0 -= my; y1 += my;
+    let w = x1 - x0, h = y1 - y0; const ratio = MAP.w / MAP.h;
+    if(w / h > ratio){ const nh = w / ratio; y0 -= (nh - h) / 2; h = nh; } else { const nw = h * ratio; x0 -= (nw - w) / 2; w = nw; }
+    return [x0, y0, w, h];
+  }
+  /** Welke rastersleutel van een ander model vergelijkbaar is met (product, variant); null = niet vergelijkbaar. */
+  function comparableKey(products, product, variant){
+    const p = products[product];
+    if(p && p.variants.includes(variant)) return {key: product + '/' + variant, note: ''};
+    const h = products.sneeuwhoogte;
+    if(product === 'sneeuwhoogte' && h){
+      if(variant === 'p50' && h.variants.includes('model')) return {key:'sneeuwhoogte/model', note:'deterministisch: modelwaarde i.p.v. mediaan'};
+      if(variant === 'model' && h.variants.includes('p50')) return {key:'sneeuwhoogte/p50', note:'ensemble: mediaan i.p.v. modelwaarde'};
+    }
+    return null;
+  }
+  /** Index van exact dit geldigheidstijdstip, of -1 (nooit het dichtstbijzijnde: dat is een ander tijdstip). */
+  const exactIndex = (times, ms) => times.indexOf(ms);
+  /** Zoeken in plaatsnamen: accent- en hoofdletterongevoelig, begin van een woord eerst, dan grootte. */
+  const fold = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  function searchPlaces(list, q, n = 8){
+    const f = fold(q.trim()); if(f.length < 2) return [];
+    const hits = [];
+    for(const p of list){ const name = fold(p.naam), i = name.indexOf(f);
+      if(i < 0) continue; const word = i === 0 ? 0 : /[\s'-]/.test(name[i - 1]) ? 1 : 2; hits.push([word, -(p.pop || 0), p]); }
+    hits.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    return hits.slice(0, n).map(h => h[2]);
+  }
+
+  const api = {REGIONS, regionView, comparableKey, exactIndex, searchPlaces, fold, MISSING, MAP, lonToX, latToY, xToLon, yToLat, PCT_SCALE, CM_SCALE, CAT_SCALE, MM_SCALE, decode, scaleFor, colorFor, hexRGB,
     parseRaster, isGzip, cellAt, dayKey, dayLabel, hourLabel, fullLabel, windowLabel, staleWarning};
   if(typeof module === 'object' && module.exports) module.exports = api; else root.SneeuwCore = api;
 })(typeof self !== 'undefined' ? self : this);
