@@ -39,9 +39,9 @@ class Progressive(unittest.TestCase):
    with self.assertRaises(RuntimeError):p.publish_snapshot((manifest,{'debilt':{'runs':[]}}),root,ROOT,fail)
    self.assertEqual(json.loads(meta.read_text()),{'old':True})
  def test_readiness_stops_at_gap(self):
-  with patch.object(p,'step_ready',side_effect=[True,True,False]) as probe:
+  with patch.object(p,'step_ready',side_effect=lambda client,run,step: step < 6) as probe:
    self.assertEqual(p.available_steps(None,None,(0,3,6,9)),(0,3))
-   self.assertEqual(probe.call_count,3)
+   self.assertEqual(probe.call_count,4)
 
 if __name__=='__main__':unittest.main()
 
