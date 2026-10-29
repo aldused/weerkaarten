@@ -55,6 +55,25 @@ main{max-width:1320px;margin:0 auto;padding:22px 20px 60px;display:grid;grid-tem
 .meldvak a:hover{text-decoration:underline;color:var(--navy2)}
 .meldvak .soort{font:700 10px "DM Sans";letter-spacing:.06em;text-transform:uppercase;color:var(--wl-color-danger,#cc0000);margin-right:4px}
 .art.flits{box-shadow:0 0 0 3px var(--cyan)}
+.sociaal{margin-top:8px}
+.sociaal h2{font-size:17px;margin:0 0 4px}
+.sociaal .uitleg{font-size:12px;color:var(--muted);margin:0 0 12px}
+.posts{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.post{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:7px;font-size:13px}
+.post-kop{display:flex;align-items:center;gap:8px;min-width:0}
+.platform{font:700 10px "DM Sans";letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:2px 6px;color:#fff;flex:0 0 auto}
+.platform.bluesky{background:#1185fe}.platform.x{background:#0f172a}
+.post-naam{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.post-naam small{font-weight:400;color:var(--muted)}
+.post p{margin:0}
+.post .samenvatting{font-weight:600;line-height:1.45}
+.post .origineel{color:var(--muted);font-size:12px;border-left:2px solid var(--line);padding-left:8px;overflow-wrap:anywhere}
+.post img{width:100%;max-height:180px;object-fit:cover;border-radius:6px;border:1px solid var(--line);background:#eef3f8}
+.post-voet{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);margin-top:auto}
+.post-voet .teller{font-family:"DM Mono",monospace}
+.post-voet a{white-space:nowrap}
+.art-sociaal{font-size:12px;color:var(--muted);padding:0 20px 9px;background:#fbfcfe}
+.art-sociaal a{margin-right:10px}
 .bijgewerkt{font:600 11px "DM Mono";color:#fff;background:var(--navy2);border-radius:4px;padding:2px 7px}
 .updatebalk{font-size:12px;color:var(--muted);margin:-6px 0 14px;font-family:"DM Mono",monospace}
 .st-gebeurd{color:#334155}.st-verwacht{color:#6d28d9}.st-lopend{color:#b45309}.st-vervolg{color:#0f766e}.st-rapport{color:#1d4ed8}
@@ -132,6 +151,11 @@ footer{grid-column:1/-1;font-size:11px;color:var(--muted);text-align:center}
     <div class="updatebalk" id="updatebalk"></div>
     <div class="chips" id="chips" role="group" aria-label="Filter op onderwerp"></div>
     <div id="artikelen"></div>
+    <section class="sociaal" id="sociaal" hidden>
+      <h2>Opvallend op sociale media</h2>
+      <p class="uitleg">Berichten die er vandaag uitspringen, gekozen en samengevat met AI. Bluesky op basis van likes en reposts; X-berichten zoals nieuwsmedia ze aanhaalden. De samenvatting is een vertaling; het origineel gaat voor.</p>
+      <div class="posts" id="posts"></div>
+    </section>
   </section>
   <aside>
     <div class="paneel">
@@ -262,6 +286,31 @@ footer{grid-column:1/-1;font-size:11px;color:var(--muted);text-align:center}
     if (!a.bijgewerkt || !editieGemaakt || new Date(a.bijgewerkt) - new Date(editieGemaakt) < 60000) return null;
     return el("span", { "class": "bijgewerkt", text: "bijgewerkt " + tijd(a.bijgewerkt) });
   }
+  var postsPerArtikel = {};
+  var PLATFORM = { bluesky: "Bluesky", x: "X" };
+  function aantal(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace(".", ",") + "k" : String(n); }
+  function sociaalBlok(e) {
+    var vak = document.getElementById("sociaal"), box = document.getElementById("posts");
+    var posts = e.sociaal || [], ids = {};
+    e.artikelen.forEach(function (a) { ids[a.id] = true; });
+    postsPerArtikel = {};
+    posts.forEach(function (p) { if (p.artikel_id) (postsPerArtikel[p.artikel_id] = postsPerArtikel[p.artikel_id] || []).push(p); });
+    vak.hidden = !posts.length; box.innerHTML = "";
+    posts.forEach(function (p) {
+      var voet = [];
+      if (p.likes != null) voet.push(el("span", { "class": "teller", text: "♥ " + aantal(p.likes) + " · ⟲ " + aantal(p.reposts) }));
+      if (p.tijd) voet.push(el("span", { text: tijd(p.tijd) }));
+      voet.push(el("a", { href: p.url, target: "_blank", rel: "noopener", text: "Bekijk op " + PLATFORM[p.platform] + " ↗" }));
+      if (p.artikel_id && ids[p.artikel_id]) voet.push(el("a", { href: "#art-" + p.artikel_id, text: "→ artikel" }));
+      box.appendChild(el("article", { "class": "post" }, [
+        el("div", { "class": "post-kop" }, [el("span", { "class": "platform " + p.platform, text: PLATFORM[p.platform] }),
+          el("span", { "class": "post-naam" }, [document.createTextNode((p.naam || p.handle) + " "), el("small", { text: "@" + p.handle })])]),
+        el("p", { "class": "samenvatting", text: p.samenvatting }),
+        p.beeld ? el("img", { src: p.beeld, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }) : null,
+        p.origineel ? el("p", { "class": "origineel", lang: "", text: "“" + p.origineel + (p.origineel.length >= 280 ? "…" : "") + "”" }) : null,
+        el("div", { "class": "post-voet" }, voet)]));
+    });
+  }
   function artikel(a, i) {
     var c = kleur(a.categorie);
     var meta = el("div", { "class": "meta" }, [
@@ -298,7 +347,9 @@ footer{grid-column:1/-1;font-size:11px;color:var(--muted);text-align:center}
     var bronnen = el("div", { "class": "bronnen" }, [document.createTextNode("Bronnen: ")].concat(a.bronnen.map(function (b) {
       return el("a", { href: b.url, target: "_blank", rel: "noopener", text: b.naam });
     })));
-    return el("article", { "class": "art", id: "art-" + a.id, "data-cat": a.categorie }, [kop, body, bronnen]);
+    var opSociaal = (postsPerArtikel[a.id] || []).length ? el("div", { "class": "art-sociaal" }, [document.createTextNode("Op sociale media: ")].concat(
+      postsPerArtikel[a.id].map(function (p) { return el("a", { href: p.url, target: "_blank", rel: "noopener", text: (p.naam || p.handle) + " (" + PLATFORM[p.platform] + ")" }); }))) : null;
+    return el("article", { "class": "art", id: "art-" + a.id, "data-cat": a.categorie }, [kop, body, bronnen, opSociaal]);
   }
 
   var GROEPEN = [
@@ -375,10 +426,13 @@ footer{grid-column:1/-1;font-size:11px;color:var(--muted);text-align:center}
       huidig = datum;
       editieGemaakt = e.gemaakt;
       var upd = e.updates ? " · " + e.updates + " update" + (e.updates === 1 ? "" : "s") + ", laatst " + tijd(e.bijgewerkt) : "";
-      document.getElementById("updatebalk").textContent = "Editie " + tijd(e.gemaakt) + upd;
+      var balk = document.getElementById("updatebalk");
+      balk.textContent = "Editie " + tijd(e.gemaakt) + upd;
+      if ((e.sociaal || []).length) { balk.appendChild(document.createTextNode(" · ")); balk.appendChild(el("a", { href: "#sociaal", text: e.sociaal.length + " opvallende berichten op sociale media ↓" })); }
       document.title = "Wereldweer " + langeDatum(datum) + " — Weerlab.nl";
       document.getElementById("kaartkop").textContent = "Overzicht · " + langeDatum(datum);
       document.getElementById("inleiding").textContent = e.inleiding;
+      sociaalBlok(e);  // vóór de artikelen: die tonen per artikel hun eigen berichten
       var box = document.getElementById("artikelen"); box.innerHTML = "";
       e.artikelen.forEach(function (a, i) { box.appendChild(artikel(a, i)); });
       chips(e.artikelen); zijbalk(e); meldingen(e);
