@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ECMWF Overview · Weerlab</title>
+<meta name="description" content="ECMWF IFS HRES weerkaart Europa: neerslag, bewolking, temperatuur en luchtdruk, +0 t/m +360 uur.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- webfont niet render-blokkerend: eerst systeemfont, DM Sans wisselt in zodra binnen -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&family=DM+Sans:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
+<script>
+// Bootstrap: runoverzicht + manifest al ophalen terwijl de modules laden
+// (zelfde basis-URL-logica als js/config.js).
+(function () {
+  var q = new URLSearchParams(location.search);
+  var loc = q.has('localData') || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  var b = new URL(q.get('data') || (loc ? '../data' : 'https://data.weerlab.nl/ecmwf-overview'), location.href).href.replace(/\/$/, '') + '/ecmwf';
+  var j = function (u) { return fetch(u, { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }); };
+  var runs = j(b + '/runs.json');
+  var man = runs.then(function (i) {
+    var h = new URLSearchParams(location.hash.slice(1)).get('run');
+    var id = h && i.runs.some(function (r) { return r.run === h; }) ? h : i.default;
+    return id ? j(b + '/' + id + '/manifest.json') : null;
+  });
+  runs.catch(function () {}); man.catch(function () {});
+  window.__boot = { base: b, runs: runs, manifest: man };
+})();
+</script>
+<link rel="stylesheet" href="style.css?v=10">
+<link rel="modulepreload" href="js/app.js?v=14">
+</head>
+<body>
+<div id="app">
+  <header class="bar" role="toolbar" aria-label="Kaartinstellingen">
+    <div class="brand">weerlab<span>Overview</span></div>
+    <label class="fld"><span>Model</span>
+      <select id="model" aria-label="Model"><option value="ecmwf">ECMWF HRES</option></select></label>
+    <div class="fld"><span>Run</span>
+      <div class="seg" id="cycle" role="group" aria-label="Run 00, 06, 12 of 18 UTC">
+        <button type="button" data-cycle="0">00</button><button type="button" data-cycle="6">06</button><button type="button" data-cycle="12">12</button><button type="button" data-cycle="18">18</button>
+      </div>
+      <select id="run" aria-label="Run kiezen"></select>
+    </div>
+    <label class="fld"><span>Kaart</span>
+      <select id="chart" aria-label="Kaarttype"><option>Overview</option></select></label>
+    <label class="fld"><span>Regio</span><select id="region" aria-label="Regio"></select></label>
+    <label class="fld"><span>Stijl</span><select id="look" aria-label="Kaartstijl"></select></label>
+    <div class="layers" id="layers" role="group" aria-label="Lagen"></div>
+    <div class="status" id="status" aria-live="polite">
+      <span class="ring" id="ring"></span><span id="statusText">laden…</span>
+    </div>
+  </header>
+
+  <div id="notice" class="notice" hidden></div>
+
+  <main class="map" id="map" aria-label="Weerkaart">
+    <canvas id="gl"></canvas>
+    <canvas id="ov"></canvas>
+    <div class="title" id="title"><b id="t1">ECMWF IFS HRES</b><span id="t2"></span><em id="t3"></em><span class="wip">In ontwikkeling · er komen meer kaartelementen bij</span></div>
+    <div class="ctrl" role="group" aria-label="Kaartbediening">
+      <button type="button" id="zin" title="Inzoomen (+)" aria-label="Inzoomen">+</button>
+      <button type="button" id="zout" title="Uitzoomen (−)" aria-label="Uitzoomen">−</button>
+      <button type="button" id="home" title="Regio opnieuw passend" aria-label="Home">⌂</button>
+      <button type="button" id="qnl" class="txt" title="Nederland">NL</button>
+      <button type="button" id="qbx" class="txt" title="Benelux">BX</button>
+      <button type="button" id="fs" title="Volledig scherm" aria-label="Volledig scherm">⛶</button>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="readout" id="readout" hidden></div>
+    <div class="attr">© ECMWF Open Data (CC BY 4.0) · bewerking Weerlab · kaart Natural Earth</div>
+    <div class="err" id="err" hidden></div>
+  </main>
+
+  <footer class="tl" aria-label="Tijdlijn">
+    <div class="tl-ctl">
+      <button type="button" id="prev10" title="10 stappen terug (Alt+←)" aria-label="10 stappen terug">«</button>
+      <button type="button" id="prev" title="Vorige stap (←)" aria-label="Vorige stap">‹</button>
+      <button type="button" id="play" class="play" title="Afspelen/pauze (spatie)" aria-label="Afspelen">▶</button>
+      <button type="button" id="next" title="Volgende stap (→)" aria-label="Volgende stap">›</button>
+      <button type="button" id="next10" title="10 stappen vooruit (Alt+→)" aria-label="10 stappen vooruit">»</button>
+      <select id="speed" aria-label="Snelheid"></select>
+      <button type="button" id="hover" class="tog" title="Tijd volgt de muis langs de schuif, zonder klikken" aria-pressed="false">hover-scrub</button>
+      <button type="button" class="live" id="live" hidden><i></i><span id="liveText"></span></button>
+      <div class="now" id="now"><b id="nowStep">+0 u</b><span id="nowTime"></span></div>
+    </div>
+    <div class="slider" id="slider" tabindex="0" role="slider" aria-label="Verwachtingstijd"
+         aria-valuemin="0" aria-valuemax="360" aria-valuenow="0">
+      <div class="sl-bubble" id="slbubble" hidden></div>
+      <div class="sl-rail"><div class="sl-buf" id="slbuf"></div><div class="sl-edge" id="sledge" hidden></div><div class="sl-thumb"></div></div>
+      <div class="sl-days" id="sldays"></div>
+    </div>
+  </footer>
+</div>
+<script type="module" src="js/app.js?v=14"></script>
+</body>
+</html>

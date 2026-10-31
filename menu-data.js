@@ -1248,8 +1248,23 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
+    "id": "weerkaart",
+    "name": "Weerkaart",
+    "description": "ECMWF 0,1° · neerslag, bewolking, temperatuur en luchtdruk · 15 uitsneden, tot 15 dagen vooruit",
+    "category": "verwachting",
+    "type": "kaarten",
+    "section": "Analyse",
+    "icon": "map",
+    "href": "index.html#weerkaart",
+    "src": "ecmwf_overview/",
+    "thumbnail": null,
+    "facets": {},
+    "keywords": "Weerkaart Overview ECMWF HRES 0,1 neerslag bewolking temperatuur luchtdruk isobaren Europa Benelux Nederland run",
+    "restricted": false
+  },
+  {
     "id": "weerkaart-europa",
-    "name": "Weerkaart Europa",
+    "name": "Weerkaart Europa · HARMONIE",
     "description": "ECMWF · KNMI en DMI HARMONIE Europa · HARMONIE 43 en 46 Benelux",
     "category": "verwachting",
     "type": "kaarten",
