@@ -76,6 +76,10 @@
   pageActions.append($('#product-permalink'));
   if(personal)pageActions.insertAdjacentHTML('afterbegin','<a id="page-personal-back" class="mw-back" href="#menu/favorieten" hidden>← Mijn Weerlab</a>');
   pageActions.insertAdjacentHTML('beforeend',`<button type="button" id="page-copy">Kopieer URL</button><button type="button" id="page-save" aria-pressed="false">☆ Bewaar deze pagina</button><details class="bookmark-help"><summary>Bladwijzer</summary><p>Bewaar deze pagina in je browser met <kbd>${/Mac|iPhone|iPad/.test(navigator.platform)?'⌘D':'Ctrl+D'}</kbd>. Op je telefoon: open het browsermenu en kies ‘Bladwijzer toevoegen’ of ‘Favorieten’.</p></details><input id="page-url" type="url" readonly hidden aria-label="Directe URL van deze pagina">`);
+  // Terug, titel en beeldvullend staan in dezelfde regel: dat scheelt een hele kopregel boven de kaart.
+  pageActions.prepend($('#product-back'),$('#product-title'));
+  pageActions.querySelector('.bookmark-help').after($('#product-expand'));
+  document.querySelector('.product-heading').remove();
   main.before(pageActions);
   function favoriteCount(){return favorites.length+savedPages.length;}
   function currentPageLink(){
