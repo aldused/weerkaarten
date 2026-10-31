@@ -1264,7 +1264,7 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "weerkaart-europa",
-    "name": "Weerkaart Europa · HARMONIE",
+    "name": "Weerkaart Europa · ECMWF",
     "description": "ECMWF · KNMI en DMI HARMONIE Europa · HARMONIE 43 en 46 Benelux",
     "category": "verwachting",
     "type": "kaarten",
