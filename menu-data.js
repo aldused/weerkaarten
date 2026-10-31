@@ -1116,6 +1116,7 @@ const MENU_PRODUCTS = [
     "keywords": "Archief waarnemingen historische dagkaarten windstoten km/u ",
     "restricted": false
   },
+  {id:'klimatologie',name:'Klimatologie · temperatuur & neerslag',description:'Ontdek de jaarcyclus, maandgrafieken en de snelste afkoeling met klimaatdata 1991–2020.',category:'terugkijken',type:'klimaat',section:'Zon & seizoenen',icon:'tabel',href:'index.html#klimatologie',src:'klimatologie.html?v=20261031',thumbnail:null,facets:{},keywords:'klimatologie klimaat normaal temperatuurtrend november opwarming afkoeling decade maand jaar neerslag 1991 2020',restricted:false},
   {id:'klimaatarchief',name:'Klimaatarchief',description:'Vergelijk maanden, seizoenen en jaren met historische metingen.',category:'terugkijken',type:'klimaat',section:'Archief',icon:'tabel',href:'index.html#klimaatarchief',src:'demo_winterstatistieken.html?v=20261015-1',thumbnail:null,facets:{},keywords:'klimaatarchief maand seizoen jaar winter statistieken temperatuur neerslag zon',restricted:false},
   {
     "id": "records",

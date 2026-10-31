@@ -44,6 +44,11 @@ if [ -d beta-wegdek ]; then
   cp -R beta-wegdek "$STAGE/beta-wegdek"
 fi
 
+# Klimatologie: compacte stationnormalen.
+if [ -d klimatologie-data ]; then
+  cp -R klimatologie-data "$STAGE/klimatologie-data"
+fi
+
 # Pas vervangen wanneer de volledige staging-build geslaagd is. Hiermee
 # verdwijnen ook oude bestanden die niet meer in de bronroot bestaan.
 rm -rf "$OUTPUT"
