@@ -77,16 +77,16 @@ canvas{display:block}
 #bericht-inhoud a{color:#66bbff}
 </style>
 </head>
-<body><div role="status" style="padding:14px;background:#fff1d6;color:#573600;font:600 15px/1.5 system-ui">Zeetemperatuur wordt tijdelijk niet ververst; een nieuwe rechtstreekse bron is nog niet aangesloten.</div>
+<body>
 
 <div class="header">
   <div>
     <h1>Zeewatertemperatuur Europa</h1>
-    <p>Open-Meteo Marine API &middot; Statische kaart</p>
+    <p>NOAA OISST v2.1 &middot; Dagelijkse zeewateranalyse · rooster 0,25°</p>
   </div>
   <div class="header-acties">
     <span id="klok" style="font-size:.75rem;color:#8aaccc"></span>
-    <button class="btn btn-secundair" id="btn-bericht" onclick="toonBericht()">&#127754; Golfhoogte en temp Hollandse Kust</button>
+    <button class="btn btn-secundair" id="btn-bericht" disabled title="De eerdere golfbron is uitgeschakeld; een rechtstreekse vervanger is nog niet beschikbaar.">Golven tijdelijk niet beschikbaar</button>
     <button class="btn" id="btn-laden" onclick="laadData()">&#8635; Vernieuwen</button>
   </div>
 </div>
@@ -103,7 +103,7 @@ canvas{display:block}
   <span>0 °C</span>
   <canvas class="legenda-gradient" id="legenda" width="200" height="12"></canvas>
   <span>28 °C</span>
-  <span style="margin-left:16px;color:#667788">© Ed Aldus WM | weerlab.nl | Data: Open-Meteo Marine API</span>
+  <span style="margin-left:16px;color:#667788">© Ed Aldus WM | weerlab.nl | Data: NOAA NCEI OISST v2.1 · nabijgelegen zeeroosterpunt (max. 56 km), geen strandmeting</span>
 </div>
 
 <div id="tooltip">
@@ -481,34 +481,25 @@ function roundRect(ctx, x, y, w, h, r){
 
 // ── Data ophalen ────────────────────────────────────────────────────────────
 async function laadData(){
-  const btn = document.getElementById('btn-laden');
-  btn.disabled = true; btn.textContent = 'Ophalen...';
-  setStatus('<span class="spinner"></span> Zeewatertemperaturen ophalen...');
-
-  const nu = new Date();
-  const beloftes = STATIONS.map(([naam,lat,lon]) =>
-    fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=sea_surface_temperature&timezone=Europe%2FAmsterdam&forecast_days=1&past_days=1`)
-      .then(r=>r.json())
-      .then(d=>{
-        const times = d?.hourly?.time || [];
-        const temps = d?.hourly?.sea_surface_temperature || [];
-        // Meest recente uur dat <= nu is en een geldige waarde heeft
-        let t = null;
-        for(let i=times.length-1;i>=0;i--){
-          if(temps[i]!=null && new Date(times[i])<=nu){ t=temps[i]; break; }
-        }
-        return {naam, lat, lon, t};
-      })
-      .catch(()=>({naam, lat, lon, t:null}))
-  );
-
-  const res = await Promise.all(beloftes);
-  stationData = res.filter(r=>r.t!=null).map(r=>({...r, x:0, y:0}));
-
-  const nuTxt = nu.toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-  setStatus(`${stationData.length} meetpunten geladen · ${nuTxt}`);
-  btn.disabled = false; btn.textContent = '\u21BB Vernieuwen';
-  teken();
+  const btn=document.getElementById('btn-laden');btn.disabled=true;btn.textContent='Ophalen…';
+  setStatus('NOAA-zeewatertemperaturen ophalen…');
+  try {
+    const response=await fetch('zeetemp_noaa.json?v='+Math.floor(Date.now()/3600000),{cache:'no-cache'});
+    if(!response.ok)throw Error('Bronbestand niet beschikbaar');
+    const d=await response.json(),valid=new Date(d.valid);
+    if(!Array.isArray(d.points)||!Number.isFinite(valid.getTime()))throw Error('Ongeldig bronbestand');
+    stationData=STATIONS.flatMap(([naam,lat,lon])=>{
+      let best=null,distance=Infinity;
+      for(const p of d.points){if(!p.every(Number.isFinite))continue;const dist=(p[0]-lat)**2+((p[1]-lon)*Math.cos(lat*Math.PI/180))**2;if(dist<distance){distance=dist;best=p}}
+      return best&&distance<0.5**2?[{naam,lat,lon,t:best[2],gridLat:best[0],gridLon:best[1],x:0,y:0}]:[];
+    });
+    if(!stationData.length)throw Error('Geen geldige zeepunten');
+    const stamp=valid.toLocaleDateString('nl-NL',{timeZone:'UTC',day:'numeric',month:'long',year:'numeric'});
+    const old=(Date.now()-valid.getTime())/86400000>5;
+    setStatus(`${old?'Let op: oudere analyse · ':''}${stationData.length} kustlocaties · NOAA OISST · daganalyse ${stamp}${d.preliminary?' (voorlopig)':''} · geen live kustmetingen`);
+    document.getElementById('kaart').dataset.valid=d.valid;
+  }catch(e){stationData=[];setStatus('Zeewatertemperatuur niet beschikbaar: '+e.message)}
+  finally{btn.disabled=false;btn.textContent='↻ Vernieuwen';teken()}
 }
 
 function setStatus(html){document.getElementById('status-tekst').innerHTML=html;}
