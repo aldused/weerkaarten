@@ -1,7 +1,7 @@
 """Install the provider-specific browser fence in the deployment artifact, not source pages."""
 from pathlib import Path
 import re
-TAG='<script src="/weerlab-native-only.js?v=20261027-audit2"></script>'
+TAG='<script src="/weerlab-native-only.js?v=20261101-free-pluim"></script>'
 def apply(root):
  count=0
  for p in Path(root).rglob('*.html'):
