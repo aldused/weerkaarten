@@ -2,7 +2,7 @@
 import argparse
 import json
 import sys
-import urllib.request
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -28,9 +28,10 @@ def main():
     parser.add_argument('--published-state', type=Path, required=True)
     parser.add_argument('--archive-url', default='https://data.weerlab.nl/pluim_archive_meta.json')
     args = parser.parse_args()
-    request = urllib.request.Request(args.archive_url, headers={'Cache-Control': 'no-cache'})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        archive = json.load(response)
+    response = subprocess.run(['/usr/bin/curl', '--fail', '--silent', '--show-error',
+        '--connect-timeout', '10', '--max-time', '30', '-H', 'Cache-Control: no-cache',
+        args.archive_url], check=True, capture_output=True, text=True)
+    archive = json.loads(response.stdout)
     if archive.get('complete') is not True or archive.get('station_count') != 39:
         raise RuntimeError('Cannot choose recovery run from invalid published archive')
     selected, archive_only = choose_run(datetime.now(timezone.utc), archive, json.loads(args.published_state.read_text()))
