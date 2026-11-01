@@ -253,6 +253,13 @@
       if(file===page || (page==='normalen_vergelijk.html' && file==='normalen.html'))a.setAttribute('aria-current','page');nav.append(a);
     }
     nav.append(element('a',{class:'record-nav-all',href:'index.html#menu/terugkijken'},'Alle onderdelen →'));
+    // Menu routes belong to the outer app, never to a nested product frame.
+    if(window!==window.top){
+      for(const a of [...nav.querySelectorAll('a[href]'),...document.querySelectorAll('a[href]')]){
+        const url=new URL(a.getAttribute('href'),location.href);
+        if(url.origin===location.origin&&url.pathname.endsWith('/index.html')&&url.hash)a.target='_top';
+      }
+    }
     const heading=document.querySelector('.climate-heading');heading.after(nav);
     document.querySelectorAll('.rtab,.ptab,.param-tab').forEach(el=>{
       el.setAttribute('role','button');el.tabIndex=0;

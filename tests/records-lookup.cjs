@@ -5,7 +5,7 @@ const read=name=>fs.readFileSync(path.join(root,name),'utf8');
 for(const name of ['records_debilt','dagrecords_jaar','dagrecords_6dagen','extremen','neerslag_records','p13_records','hittegolven','stationsanalyse','feestdagen_weer','normalen','normalen_vergelijk','beta_landelijk_maand','maandoverzicht','zomerstatistieken','droogtemonitor','historisch']){
  const html=read(name+'.html');
  for(const [,attrs,body]of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))if(!/\bsrc=|application\/ld\+json/.test(attrs))new vm.Script(body,{filename:name+'.html'});
- assert(html.includes('records-ui.css?v=20260914-1')&&html.includes('records-ui.js?v=20260914-1'));
+ assert(html.includes('records-ui.css?v=20260914-1')&&html.includes('records-ui.js?v=20261101-navigation'));
 }
 const helper=read('records-ui.js');new vm.Script(helper);
 const sorter=helper.slice(helper.indexOf('  function sortValue('),helper.indexOf('  const enhanced='));
