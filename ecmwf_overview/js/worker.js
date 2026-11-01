@@ -37,7 +37,7 @@ function fail(id, err) {
 function post(id, kind, out, raw, tNet = 0, tAll = 0, xfer = -1) {
   const transfer = [];
   if (kind === 'png') transfer.push(out.data.buffer);
-  else [...out.lines, ...out.thk].forEach((l) => transfer.push(l.pts.buffer));
+  else [...out.lines, ...out.thk, ...out.z500, ...out.z300].forEach((l) => transfer.push(l.pts.buffer));
   if (raw) transfer.push(raw);
   self.postMessage({ id, out, raw, tNet, tAll, xfer }, transfer);
 }
@@ -59,7 +59,7 @@ function decodeIso(j) {
     }
     return { p: l.p, pts, b: [x0, y0, x1, y1] };
   });
-  return { lines: decLines(j.lines), hl: j.hl, thk: decLines(j.thk || []) };
+  return { lines: decLines(j.lines || []), hl: j.hl || [], thk: decLines(j.thk || []), z500: decLines(j.z500 || []), z300: decLines(j.z300 || []) };
 }
 
 async function inflate(u8) {
