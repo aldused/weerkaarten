@@ -170,6 +170,8 @@
     const incoming=location.hash.slice(1) || site.defaultRoute || '';
     if(/^weerbewaking(?:-|$)/.test(incoming)){location.replace('https://meteobewaking.nl/cms/weerbewaking/weerbewaking.html');return {page:'start',type:'',filters:{},q:''};}
     let raw=site.routeAliases?.[incoming] ?? incoming;
+    // Sneeuwverwachting blijft voorlopig uitsluitend binnen BETA.
+    if(/^sneeuw-(kans|dek|hoogte|nieuw|soort|toename|onzekerheid|vergelijk)$/.test(raw.split('?')[0]))raw='beta?tab=sneeuw';
     if(raw.split('?')[0]==='weerkaarten-hres10' || (raw.split('?')[0]==='beta' && new URLSearchParams(raw.split('?')[1]||'').get('tab')==='hres10')){history.replaceState(null,'','#menu/verwachting?type=kaarten');return {page:'verwachting',type:'kaarten',filters:{},q:''};}
     if(raw.split('?')[0]==='beta' && new URLSearchParams(raw.split('?')[1]||'').get('tab')==='stormdagen')raw='stormen-windstoten';
     const isMenu=!raw || raw.startsWith('menu/') || ['start','home','nu','terugkijken','favorieten','professioneel','zoeken',...(site.navItems || [])].includes(raw.split('?')[0]);
