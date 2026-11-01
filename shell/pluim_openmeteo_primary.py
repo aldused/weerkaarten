@@ -19,7 +19,8 @@ class FreeFetch:
         cost=1.
         if u.path=='/v1/ensemble':
             locations=len(q['latitude'][0].split(','));variables=len(q['hourly'][0].split(','))
-            cost=max(1,locations*variables*51/10*max(1,int(q['forecast_days'][0])/14))
+            days=int(q['forecast_days'][0]) if 'forecast_days' in q else math.ceil((datetime.fromisoformat(q['end_hour'][0])-datetime.fromisoformat(q['start_hour'][0])).total_seconds()/86400)+1
+            cost=max(1,locations*variables*51/10*max(1,days/14))
         now=time.time();day=datetime.now(timezone.utc).strftime('%Y-%m-%d')
         if self.state.get('day')!=day:self.state={'day':day,'credits':0,'recent':[]}
         recent=[r for r in self.state.get('recent',[]) if now-r[0]<61]
@@ -62,6 +63,10 @@ def build_documents(fetch,out,chosen):
     for start in range(0,len(trend.STATIONS),3):
         stations=trend.STATIONS[start:start+3]
         params=dict(latitude=','.join(str(s[2]) for s in stations),longitude=','.join(str(s[3]) for s in stations),hourly=','.join(early.EARLY_FIELDS),models=model,run=cycle.strftime('%Y-%m-%dT%H:%M'),forecast_days='16' if cycle.hour in (0,12) else '7',timezone='GMT',wind_speed_unit='kmh',precipitation_unit='mm',cell_selection='nearest',elevation=','.join('nan' for s in stations))
+        if not native:
+            params.pop('run',None)  # Standard exposes latest only; verify metadata again below.
+            params.pop('forecast_days',None)
+            params.update(start_hour=cycle.strftime('%Y-%m-%dT%H:%M'),end_hour=times[-1].strftime('%Y-%m-%dT%H:%M'))
         raw=fetch(early.EARLY_API_URL+'?'+urlencode(params));responses=raw if isinstance(raw,list) else [raw]
         if len(responses)!=len(stations):raise RuntimeError('Missing station response')
         for (name,slug,lat,lon),response in zip(stations,responses):

@@ -92,7 +92,7 @@ function renderClouds(results,place,start,days){
    s+=panel(data,field,[start,end],[0,100],38+col*760,130+row*296,row*2+col);
   }
  }
- return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF · NOAA rechtstreeks · DWD rechtstreeks · alle assen 0–100% bedekkingsgraad</text><text x="38" y="1061" font-size="11" fill="#617789">Hoge bewolking omvat sluierbewolking. De wolkenlagen rechts horen uitsluitend bij ECMWF.</text></svg>';
+ return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF via Open-Meteo · NOAA rechtstreeks · DWD rechtstreeks · alle assen 0–100% bedekkingsgraad</text><text x="38" y="1061" font-size="11" fill="#617789">Hoge bewolking omvat sluierbewolking. De wolkenlagen rechts horen uitsluitend bij ECMWF.</text></svg>';
 }
 function renderAifs(results,place,start,days){
  const end=start+days*DAY,fields=['temperature_2m','precipitation','wind_speed_10m'];
@@ -127,12 +127,12 @@ let place={name:'De Bilt',lat:52.101,lon:5.178},generation=0,controller,svg='',s
 try{const p=JSON.parse(sessionStorage.getItem('weerlab-modelpluim-plaats'));if(p&&finite(p.lat)&&finite(p.lon)&&typeof p.name==='string')place=p;}catch{}
 const sharedParams=new URLSearchParams(location.search);if(sharedParams.has('lat')&&sharedParams.has('lon')){const lat=Number(sharedParams.get('lat')),lon=Number(sharedParams.get('lon'));if(finite(lat)&&lat>=-90&&lat<=90&&finite(lon)&&lon>=-180&&lon<=180)place={lat,lon,name:(sharedParams.get('station')||sharedParams.get('naam')||'Gekozen locatie').slice(0,100)};}
 function syncPlace(){let o=[...$('station').options].find(o=>o.textContent===place.name&&o.value===`${place.lat},${place.lon}`);if(!o){o=new Option(place.name,`${place.lat},${place.lon}`);$('station').add(o);}$('station').value=o.value;}
-async function json(url,signal){const r=await fetch(url,{signal,cache:'no-store'});if(!r.ok)throw new Error('Bron tijdelijk niet bereikbaar');const d=await r.json();if(d.error)throw new Error('Bron levert deze gegevens niet');return d;}
+async function json(url,signal){const r=await fetch(url,{signal,cache:'no-store'});const d=await r.json();if(!r.ok||d.error)throw new Error(d.reason||'Bron tijdelijk niet bereikbaar');return d;}
 async function modelMetadata(m,signal){
  if(m.id==='icon_global'){const d=await json('https://data.weerlab.nl/icon_global_eps_manifest.json',signal);if(!d.complete||d.member_count!==40)throw Error('Eigen ICON Global-run onvolledig');return [{label:'DWD ICON Global EPS',domain:'dwd_icon_global_direct',meta:{last_run_initialisation_time:Date.parse(d.run_utc)/1000,data_end_time:Date.parse(d.run_utc)/1000+(d.steps-1)*3600}}];}
  if(m.id==='gfs_seamless'){const d=await json('https://data.weerlab.nl/gefs_manifest.json',signal);if(!d.complete||d.member_count!==31)throw Error('Eigen GEFS-run onvolledig');return [{label:'NOAA GEFS',domain:'noaa_gefs',meta:{last_run_initialisation_time:Date.parse(d.run_utc)/1000,data_end_time:Date.parse(d.run_utc)/1000+384*3600}}];}
  return Promise.all(m.sources.map(async ([label,domain])=>{
-  const meta=await json('https://ensemble-api.open-meteo.com/data/'+domain+'/static/meta.json?_weerlab_meta='+Date.now(),signal);
+  const meta=await json('https://ensemble-api.open-meteo.com/data/'+domain+'/static/meta.json?_weerlab_full_ecmwf='+(view==='wolken'?'1':'0')+'&_weerlab_meta='+Date.now(),signal);
   if(!Number.isFinite(meta.last_run_initialisation_time)||meta.last_run_initialisation_time<=0||!Number.isFinite(meta.data_end_time)||meta.data_end_time<=meta.last_run_initialisation_time)throw new Error('Runmetadata ontbreekt');
   return {label,domain,meta};
  }));
@@ -143,6 +143,7 @@ async function modelData(m,base,fields,days,signal){
  for(let attempt=0;attempt<2;attempt++){
   const before=await modelMetadata(m,signal).catch(()=>null);
   const q=new URLSearchParams({latitude:place.lat,longitude:place.lon,models:m.id,hourly:fields,forecast_days:view==='winter'?Math.min(16,days+1):days,wind_speed_unit:'kmh',timezone:'GMT',temporal_resolution:view==='winter'?'hourly':'native',_weerlab_request:String(Date.now())});
+  if(m.id==='ecmwf_ifs025'&&before?.[0]?.meta?.last_run_initialisation_time)q.set('run',new Date(before[0].meta.last_run_initialisation_time*1000).toISOString().slice(0,16));
   const data=await json(base+'?'+q,signal);if(!data.hourly?.time?.length)throw new Error('Geen gegevens ontvangen');
   const after=before?await modelMetadata(m,signal).catch(()=>null):null;
   if(before&&after&&metaSignature(before)!==metaSignature(after))continue;
@@ -165,8 +166,8 @@ async function load(){
   const sourceRuns=results.flatMap(r=>(r.sourceRuns||[]).map(source=>({name:r.name+(r.sourceRuns.length>1?' '+source.label:''),time:source.meta.last_run_initialisation_time*1000})));
   root.dispatchEvent(new CustomEvent('weerlab:plume-source-runs',{detail:{label:view==='winter'?'ECMWF-run':'Modelruns',runs:sourceRuns,note:'Laatst beschikbare run per model'}}));
   svg=view==='winter'?root.WinterPlume.render(results[0],place.name,start,days):render(results,view,place.name,start,days,cloudMode);$('chart').innerHTML=svg;
-  const missing=results.filter(r=>r.error).map(r=>r.name),loaded=results.filter(r=>r.data&&r.available!==false).length;
-  $('status').textContent=`${place.name} · ${loaded}/${view==='aifs'?2:view==='winter'?1:3} modellen geladen · opgehaald ${new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})} · ${results.filter(r=>r.data).map(r=>r.name+': '+r.runLabel).join(' | ')}${missing.length?' · Niet beschikbaar: '+missing.join(', ')+(view==='wolken'?'. Geen wolkenlaaggegevens ontvangen.':'. Probeer Vernieuw.'):''}`;
+  const missing=results.filter(r=>r.error).map(r=>r.name+': '+r.error),loaded=results.filter(r=>r.data&&r.available!==false).length;
+  $('status').textContent=`${place.name} · ${loaded}/${view==='aifs'?2:view==='winter'?1:3} modellen geladen · opgehaald ${new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})} · ${results.filter(r=>r.data).map(r=>r.name+': '+r.runLabel).join(' | ')}${missing.length?' · Niet beschikbaar: '+missing.join(', ')+'. Probeer Vernieuw.':''}`;
   $('download').disabled=!loaded;
  }finally{clearTimeout(timeout);if(id===generation)document.querySelector('.comparison-card').setAttribute('aria-busy','false');}
 }

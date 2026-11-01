@@ -12,3 +12,17 @@ for(const [lat,lon]of [[52.16,4.497],[52.0168,4.7087]]){
  const n=calls.length;await ctx.fetch(url);assert.equal(calls.length,n,'same point query uses cache');
 }
 assert(!calls.some(u=>u.hostname.includes('customer')));console.log('Leiden and Gouda keep exact coordinates; latest early run selected; free endpoint only; point queries cached.');
+
+// Layer requests must use complete standard ECMWF metadata, even when early 9 km is newer.
+const full=await (await ctx.fetch('https://ensemble-api.open-meteo.com/data/ecmwf_ifs025_ensemble/static/meta.json?_weerlab_full_ecmwf=1')).json();
+assert.equal(full.last_run_initialisation_time,Date.parse('2026-10-31T18:00Z')/1000);
+await ctx.fetch('https://ensemble-api.open-meteo.com/v1/ensemble?latitude=52.101&longitude=5.178&models=ecmwf_ifs025&hourly=cloud_cover,cloud_cover_high,cloud_cover_mid,cloud_cover_low&run=2026-10-31T18:00');
+const layerCall=calls.findLast(u=>u.pathname==='/v1/ensemble');
+assert.equal(layerCall.searchParams.get('models'),'ecmwf_ifs025');
+assert.equal(layerCall.searchParams.get('hourly'),'cloud_cover,cloud_cover_high,cloud_cover_mid,cloud_cover_low');
+assert(!layerCall.searchParams.has('run'),'standard ECMWF endpoint does not support pinned runs');
+assert(!layerCall.searchParams.has('forecast_days'));
+assert.equal(layerCall.searchParams.get('start_hour'),'2026-10-31T18:00');
+assert.equal(layerCall.searchParams.get('end_hour'),'2026-11-06T18:00');
+await assert.rejects(ctx.fetch('https://ensemble-api.open-meteo.com/v1/ensemble?latitude=52.101&longitude=5.178&models=ecmwf_ifs025&hourly=cloud_cover_low&run=2026-10-30T18:00'),/historische ECMWF-run/);
+console.log('Cloud layers use full standard model and matching run metadata; unsupported historical requests fail explicitly.');
