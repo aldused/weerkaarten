@@ -20,7 +20,7 @@ function probabilities(data,start,days){
     const values=Array.from({length:24},(_,i)=>h[key][index.get(t+(i+(c.kind==='sum'?1:0))*H)]);
     if(!values.every(valid))continue;
     let value=c.kind==='sum'?values.reduce((a,b)=>a+b,0):Math.max(...values);
-    if(c.kind.startsWith('daily')){const field=c.kind==='dailyMax'?'temperature_2m_max':'temperature_2m_min';value=daily[field+key.slice(c.field.length)]?.[di];if(!valid(value))continue;}
+    if(c.kind.startsWith('daily')){const field=c.kind==='dailyMax'?'temperature_2m_max':'temperature_2m_min';const dailyValue=daily[field+key.slice(c.field.length)]?.[di];value=valid(dailyValue)?dailyValue:(c.kind==='dailyMax'?Math.max(...values):Math.min(...values));}
     count++;if(c.test(value))hits++;
    }
    return {time:t,count,hits,chance:count?100*hits/count:null};
@@ -48,7 +48,7 @@ function render(result,place,start,days){
   const counts=c.points.map(p=>p.count).filter(n=>n>0);const coverage=counts.length?`${Math.min(...counts)}–${Math.max(...counts)} geldige leden per etmaal`:'Geen volledige ensemblegegevens';
   s+=`<rect x="${left}" y="${top}" width="${pw}" height="${ph}" fill="none" stroke="#444" stroke-width=".8"/><text x="15" y="263" font-size="10" fill="#667">${esc(result.error||coverage)} · ontbrekende dagen blijven leeg</text></g>`;
  });
- return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF ensemble · dagelijkse minimum- en maximumtemperatuur uit de bron</text><text x="38" y="1061" font-size="11" fill="#617789">Sneeuw: etmaalsom. Sneeuwdek: hoogste uurwaarde. Alleen leden met een compleet etmaal tellen mee. Ruwe modelkansen, niet gekalibreerd.</text></svg>';
+ return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF ensemble · vorstkansen uit dagextremen; bij ontbreken uit volledige uurreeksen</text><text x="38" y="1061" font-size="11" fill="#617789">Sneeuw: etmaalsom. Sneeuwdek: hoogste uurwaarde. Alleen leden met een compleet etmaal tellen mee. Ruwe modelkansen, niet gekalibreerd.</text></svg>';
 }
 const api={probabilities,render};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.WinterPlume=api;
 })(typeof window==='undefined'?globalThis:window);

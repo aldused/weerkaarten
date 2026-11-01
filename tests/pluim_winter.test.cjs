@@ -12,3 +12,12 @@ const a=p.series({hourly:{time:time.slice(0,2),wind_speed_10m:[12.1,12.9]}},'win
 console.log('PASS winterkansen, ontbrekende leden, dagelijkse min/max, verschillende bronruns en ongeronde wind');
 assert(w.render({data,runLabel:'Run 00 UTC'},'De Bilt',start,2).includes('&lt; 0 °C'));
 console.log('PASS XML-veilige temperatuurgrenzen voor PNG-export');
+
+// Free ECMWF sends hourly temperatures without a daily block.
+const hourlyOnly=w.probabilities({hourly:h},start,2);
+assert.deepEqual(hourlyOnly.slice(2).map(r=>r.points[0].chance),[50,50,50,0]);
+const incomplete={...h,temperature_2m:h.temperature_2m.slice()};incomplete.temperature_2m[4]=null;
+const partial=w.probabilities({hourly:incomplete},start,1);
+assert.equal(partial[3].points[0].count,1);assert.equal(partial[3].points[0].chance,0);
+assert.equal(w.probabilities({hourly:{time,temperature_2m:Array(49).fill(null)}},start,1)[3].points[0].chance,null);
+console.log('PASS hourly-only frost probabilities; incomplete members excluded; missing temperatures stay empty');
