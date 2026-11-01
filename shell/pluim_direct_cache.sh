@@ -38,12 +38,6 @@ if [[ -n "${PLUIM_DIRECT_CYCLE:-}" ]]; then
   fi
 fi
 
-# Four daily cycles, explicitly selected after the normal public-data delay.
-if ((${#CYCLE_ARGS[@]} == 0)); then
-  read -r cycle_date cycle_hour < <("$PY" -c 'from datetime import datetime,timedelta,timezone; n=datetime.now(timezone.utc)-timedelta(hours=6, minutes=30); print(n.strftime("%Y%m%d"),n.hour//6*6)')
-  CYCLE_ARGS=(--date "$cycle_date" --cycle "$cycle_hour")
-fi
-
 acquire_lock() {
   local directory="$1" label="$2" existing_pid=""
   if mkdir "$directory" 2>/dev/null; then
@@ -162,6 +156,15 @@ CHECK
 
 cd "$REPO_DIR"
 seed_publish_state
+# Check the published archive: newest due run first, then missed runs from the
+# past 24 hours. Older catch-up runs must never replace the latest-run pointer.
+if ((${#CYCLE_ARGS[@]} == 0)); then
+  read -r cycle_date cycle_hour archive_only < <("$PY" "$REPO_DIR/shell/pluim_run_queue.py" --published-state "$PUBLISH_STATE")
+  CYCLE_ARGS=(--date "$cycle_date" --cycle "$cycle_hour")
+  if [[ "$archive_only" == "1" ]]; then
+    export PLUIM_DIRECT_ARCHIVE_ONLY=1
+  fi
+fi
 echo "[$(date -u +%FT%TZ)] pluim_direct_cache start (velden: $FIELDS)"
 
 producer_command=(
