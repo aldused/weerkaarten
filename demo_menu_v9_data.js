@@ -302,39 +302,6 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
-    "id": "hres10",
-    "name": "Weerkaarten Europa",
-    "description": "De verwachting voor heel Europa",
-    "category": "verwachting",
-    "type": "kaarten",
-    "section": "",
-    "icon": "druk",
-    "href": "index.html#weerkaarten-hres10",
-    "thumbnail": null,
-    "facets": {
-      "veld": [
-        "overzicht",
-        "temp",
-        "neerslag",
-        "wind",
-        "hoogte",
-        "onweer"
-      ],
-      "model": [
-        "ecmwf",
-        "gfs"
-      ],
-      "gebied": [
-        "eu"
-      ],
-      "weergave": [
-        "1"
-      ]
-    },
-    "keywords": "Modelkaarten Europa tot +384 u Overzicht Temperatuur Neerslag Wind Hoogtevelden Onweer / CAPE ECMWF HRES GFS Europa 1 kaart ECMWF HRES GFS",
-    "restricted": false
-  },
-  {
     "id": "drukkaarten",
     "name": "Luchtdruk · 9 dagen",
     "description": "Negen dagen naast elkaar in beeld",

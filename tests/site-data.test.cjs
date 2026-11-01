@@ -1,15 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const read=name=>fs.readFileSync(__dirname+'/../'+name,'utf8');
-test('European map metadata uses the data server and flags stale or unknown model times',()=>{
- const source=read('weerkaarten_europa.html');
- const code=source.match(/function runAgeWarning\([^\n]+/)[0];
- const ctx=vm.createContext({Date});vm.runInContext(code,ctx);
- const now=Date.parse('2026-09-14T13:00:00Z');
- assert.equal(ctx.runAgeWarning({run_utc:'2026-09-14T00:00:00Z'},now),'');
- assert.match(ctx.runAgeWarning({run_utc:'2026-08-31T00:00:00Z'},now),/Verouderde/);
- assert.match(ctx.runAgeWarning({},now),/onbekend/);
- assert.match(source,/https:\/\/data.weerlab.nl\/wxbeta_meta.json/);
-});
 test('Catalogue distinguishes forecasts, place comparison and protected maps',()=>{
  const ctx=vm.createContext({window:{}});vm.runInContext(read('menu-data.js')+';globalThis.products=MENU_PRODUCTS;globalThis.labels=MENU_LABELS;',ctx);
  const get=id=>ctx.products.find(p=>p.id===id);

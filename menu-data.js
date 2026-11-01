@@ -337,39 +337,6 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
-    "id": "hres10",
-    "name": "Weerkaarten Europa",
-    "description": "ECMWF en GFS, met straalstroom en eigen CAMS-kaarten voor Saharastof",
-    "category": "verwachting",
-    "type": "kaarten",
-    "section": "",
-    "icon": "druk",
-    "href": "index.html#weerkaarten-hres10",
-    "thumbnail": null,
-    "facets": {
-      "veld": [
-        "overzicht",
-        "temp",
-        "neerslag",
-        "wind",
-        "hoogte",
-        "onweer"
-      ],
-      "model": [
-        "ecmwf",
-        "gfs"
-      ],
-      "gebied": [
-        "eu"
-      ],
-      "weergave": [
-        "1"
-      ]
-    },
-    "keywords": "Modelkaarten Europa tot +384 u Overzicht Temperatuur Neerslag Wind Straalstroom Jetstream 300 hPa Saharastof CAMS aerosol AOD stof Sahara Hoogtevelden Onweer / CAPE ECMWF HRES GFS Europa 1 kaart ECMWF HRES GFS",
-    "restricted": false
-  },
-  {
     "id": "drukkaarten",
     "name": "Luchtdruk · 9 dagen",
     "description": "Negen dagen naast elkaar in beeld",
@@ -1426,7 +1393,7 @@ const MENU_PRODUCTS = [
     "section": "Experimenten",
     "icon": "studio",
     "href": "index.html#beta",
-    "src": "beta.html?v=20261025-native-ecmwf",
+    "src": "beta.html?v=20261101-europa-verwijderd",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",
