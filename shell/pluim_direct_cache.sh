@@ -56,11 +56,7 @@ acquire_lock() {
 }
 
 acquire_lock "$LOCK_DIR" "directe pluim" || exit 0
-if ! acquire_lock "$WRITER_LOCK_DIR" "pluimarchief-schrijver"; then
-  rm -f "$LOCK_DIR/pid"
-  rmdir "$LOCK_DIR" 2>/dev/null || true
-  exit 0
-fi
+writer_locked=0
 RUN_LOG=$(mktemp /tmp/nl.edaldus.pluim-direct-output.XXXXXX)
 active_pid=""
 state_tmp=""
@@ -69,8 +65,10 @@ cleanup() {
   rm -f "$RUN_LOG"
   [[ -z "$state_tmp" ]] || rm -f "$state_tmp"
   [[ -z "$archive_stamp_tmp" ]] || rm -f "$archive_stamp_tmp"
-  rm -f "$WRITER_LOCK_DIR/pid"
-  rmdir "$WRITER_LOCK_DIR" 2>/dev/null || true
+  if [[ "$writer_locked" == "1" ]]; then
+    rm -f "$WRITER_LOCK_DIR/pid"
+    rmdir "$WRITER_LOCK_DIR" 2>/dev/null || true
+  fi
   rm -f "$LOCK_DIR/pid"
   rmdir "$LOCK_DIR" 2>/dev/null || true
 }
@@ -203,6 +201,10 @@ if ! /usr/bin/grep -q '^PROGRESSIVE_FULL:' "$RUN_LOG"; then
 fi
 
 fi
+
+# Progressive downloads use immutable files and do not own the archive writer lock.
+acquire_lock "$WRITER_LOCK_DIR" "pluimarchief-schrijver" || exit 0
+writer_locked=1
 
 set +e
 "${producer_command[@]}" > "$RUN_LOG" &

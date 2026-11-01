@@ -235,7 +235,7 @@
   }
 
   function isEarlyArchiveRun(run) {
-    return !!run && run.source && run.source.access === 'ecmwf_prescheduled_point_api';
+    return !!run && run.source && ['ecmwf_prescheduled_point_api','open_meteo_free_point_api'].includes(run.source.access);
   }
 
   function archiveManifestEntryForMs(runMs) {
@@ -785,6 +785,7 @@
       if (directResult.status === 'fulfilled') state.directMeta = directResult.value;
       if (archiveResult.status === 'fulfilled') state.archiveManifest = archiveResult.value;
       if (typeof progressResult !== 'undefined' && progressResult.status === 'fulfilled') state.progressMeta = progressResult.value;
+      if(state.archiveManifest?.runs?.some(r=>r.complete===true&&r.run===state.progressMeta?.run))state.progressMeta=null;
       if (!state.liveMeta && !state.directMeta) {
         throw liveResult.reason || directResult.reason || new Error('geen runmetadata beschikbaar');
       }
@@ -937,6 +938,7 @@
       if (directResult.status === 'fulfilled') state.directMeta = directResult.value;
       if (archiveResult.status === 'fulfilled') state.archiveManifest = archiveResult.value;
       if (typeof progressResult !== 'undefined' && progressResult.status === 'fulfilled') state.progressMeta = progressResult.value;
+      if(state.archiveManifest?.runs?.some(r=>r.complete===true&&r.run===state.progressMeta?.run))state.progressMeta=null;
       const archiveChanged = archiveManifestTag() !== previousArchive;
       if (archiveChanged) {
         archiveCache.clear();
