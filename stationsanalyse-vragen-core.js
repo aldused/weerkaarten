@@ -20,7 +20,7 @@ function md(value){if(!/^\d{2}-\d{2}$/.test(value)||day('2000'+value.replace('-'
 function boundary(y,s){md(s);let m=+s.slice(0,2),d=+s.slice(3);if(m===2&&d===29&&new Date(Date.UTC(y,2,0)).getUTCDate()===28)d=28;return Date.UTC(y,m-1,d);}
 // A leap-year template containing February in every period; 1 March keeps the same position in all years.
 function calendarAxis(start){const y=start>'02-29'?1999:2000;return {year:y,start:boundary(y,start)};}
-function position(t,start){const a=calendarAxis(start),d=new Date(t),m=String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');return (boundary(a.year+(m<start?1:0),m)-a.start)/DAY;}
+function position(t,start,periodYear){const a=calendarAxis(start),d=new Date(t),m=String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');return (boundary(a.year+(periodYear===undefined?(m<start?1:0):d.getUTCFullYear()-periodYear),m)-a.start)/DAY;}
 function meanDate(offset,start){return offset===null?null:new Date(calendarAxis(start).start+Math.round(offset)*DAY).toISOString().slice(5,10);}
 function decode(raw,variable){if(raw===null||raw===undefined||String(raw).trim()===''||!Number.isFinite(Number(raw))||Number(raw)===-9999)return null;const n=Number(raw);if(variable.trace&&n===-1)return {value:null,trace:true};if(!['TX','TN','TG','T10N'].some(k=>variables[k]===variable)&&n<0)return null;return {value:n/variable.factor,trace:false};}
 function match(v,op,threshold){if(!v)return null;if(!v.trace)return ops[op](v.value,threshold);const lo=0,hi=.05;
@@ -45,7 +45,7 @@ function analyze(json,options){
   const a=boundary(year,start),b=boundary(year+(cross?1:0),end);if(a>today)continue;
   const expected=(b-a)/DAY+1,running=b>=today;let valid=0,missing=0,uncertain=0,hits=0,streak=0,longest=0,firstHit=null,lastHit=null,streakStart=null,longestStart=null,longestEnd=null,longestRuns=[];
   for(let t=a;t<=Math.min(b,today-DAY);t+=DAY){const v=byDate.get(t),yes=match(v,op,threshold);if(!v){missing++;streak=0;continue;}if(yes===null){uncertain++;streak=0;continue;}valid++;
-   if(yes){const hit={time:t,value:v.value,trace:v.trace,position:position(t,start)};firstHit ||= hit;lastHit=hit;hits++;if(!streak)streakStart=t;streak++;if(streak>longest){longest=streak;longestStart=streakStart;longestEnd=t;longestRuns=[{start:streakStart,end:t}];}else if(streak===longest)longestRuns.push({start:streakStart,end:t});}
+   if(yes){const hit={time:t,value:v.value,trace:v.trace,position:position(t,start,year)};firstHit ||= hit;lastHit=hit;hits++;if(!streak)streakStart=t;streak++;if(streak>longest){longest=streak;longestStart=streakStart;longestEnd=t;longestRuns=[{start:streakStart,end:t}];}else if(streak===longest)longestRuns.push({start:streakStart,end:t});}
    else streak=0;
   }
   const complete=!running&&valid===expected,status=running?'lopend':complete?'volledig':valid?'onvolledig':'geen gegevens';

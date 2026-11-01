@@ -56,3 +56,8 @@ test('ties at the tenth place and multiple equally long runs within a year remai
  a=analyze(series('2020-01-01','2020-12-31',{'2020-01-01':-1,'2020-01-02':-1,'2020-03-01':-1,'2020-03-02':-1}),{from:2020,to:2020,start:'01-01',end:'12-31'});
  assert.equal(a.periods[0].longestRuns.length,2);assert.equal(a.periods[0].longest,2);
 });
+
+test('a custom period starting 29 February correctly anchors the clamped 28 February in ordinary years',()=>{
+ const j=series('2021-02-28','2021-02-28',{},'TN',-1),a=analyze(j,{from:2021,to:2021,start:'02-29',end:'02-29'});
+ assert.equal(a.completeCount,1);assert.equal(a.meanFirst,'02-28');assert.equal(a.rank('first')[0].first.position,-1);
+});
