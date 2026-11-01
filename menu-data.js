@@ -1145,16 +1145,17 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "eerstelaatste",
-    "name": "Eerste en laatste warme of koude dag",
-    "description": "Wanneer begon of eindigde de periode met vorst, zomerse of tropische dagen?",
+    "name": "Eerste & laatste weergrenzen",
+    "description": "Eerste en laatste overschrijdingen, gemiddelde datums, datumranglijsten en reeksen voor temperatuur, neerslag, windstoten en zon.",
     "category": "terugkijken",
     "type": "klimaat",
     "section": "Seizoenen & bijzondere dagen",
     "icon": "tabel",
     "href": "index.html#eerstelaatste",
+    "src": "stationsanalyse.html?v=20261101-vragen",
     "thumbnail": null,
     "facets": {},
-    "keywords": "Eerste & laatste Vorst, ijsdag, tropisch ",
+    "keywords": "Eerste laatste vorst ijsdag warm zomers tropisch neerslag windstoot zon gemiddelde datum ranglijst seizoen reeks",
     "restricted": false
   },
   {
