@@ -37,7 +37,7 @@ function fail(id, err) {
 function post(id, kind, out, raw, tNet = 0, tAll = 0, xfer = -1) {
   const transfer = [];
   if (kind === 'png') transfer.push(out.data.buffer);
-  else out.lines.forEach((l) => transfer.push(l.pts.buffer));
+  else [...out.lines, ...out.thk].forEach((l) => transfer.push(l.pts.buffer));
   if (raw) transfer.push(raw);
   self.postMessage({ id, out, raw, tNet, tAll, xfer }, transfer);
 }
@@ -48,7 +48,7 @@ async function decode(kind, buf) {
 }
 
 function decodeIso(j) {
-  const lines = j.lines.map((l) => {
+  const decLines = (ls) => ls.map((l) => {
     const d = l.d, n = d.length / 2, pts = new Float32Array(d.length);
     let x = 0, y = 0, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (let i = 0; i < n; i++) {
@@ -59,7 +59,7 @@ function decodeIso(j) {
     }
     return { p: l.p, pts, b: [x0, y0, x1, y1] };
   });
-  return { lines, hl: j.hl };
+  return { lines: decLines(j.lines), hl: j.hl, thk: decLines(j.thk || []) };
 }
 
 async function inflate(u8) {
