@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="nl">
-<head><script src="/weerlab-native-only.js?v=20261027-audit2"></script>
+<head><script src="/weerlab-native-only.js?v=20261101-cloud-source"></script>
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -197,7 +197,7 @@ body {
   </div>
   <div class="legend" id="legend"></div>
 </div>
-<div class="footer">Opers-Multi · Weerlab.nl · modellen via Open-Meteo · MOSMIX via DWD · gemeten temperatuur via KNMI 10-minutenwaarnemingen</div>
+<div class="footer">Opers-Multi · Weerlab.nl · modellen uit eigen rechtstreekse bronnen · MOSMIX via DWD · gemeten temperatuur via KNMI 10-minutenwaarnemingen</div>
 
 <script>
 // ── Modellen (Open-Meteo deterministische slugs) ──────────────────────────
@@ -339,30 +339,33 @@ async function fetchJSON(url, vers = false) {
   return r.json();
 }
 
-// Batch modellen in één multi-model request (responsevelden krijgen een model-suffix).
-// Scheelt 15 losse requests → minder kans op rate-limit. Eén kapotte batch
-// dropt alleen z'n eigen modellen (.catch() → []).
-const BATCH_SIZE = 8;
+// Each native source is requested separately; one unavailable model must not hide the rest.
+// The European HARMONIE alias currently points at the same NL grid, so do not label it as a second model.
+const SOURCE_MODELS = {
+  knmi_harmonie_arome_netherlands:'knmi_harmonie_arome_netherlands',
+  dwd_icon:'icon_global', dwd_icon_d2:'icon_d2', gfs_seamless:'gfs_seamless',
+  ecmwf_ifs025:'ecmwf_ifs025', ecmwf_aifs025_single:'ecmwf_aifs_single',
+};
+const BATCH_SIZE = 3;
 async function haalBatch(batch, lat, lon) {
-  const slugs = batch.map(m => m.slug).join(',');
-  const url = `${API}?latitude=${lat}&longitude=${lon}`
-            + `&hourly=temperature_2m,precipitation,wind_speed_10m&models=${slugs}`
-            + `&wind_speed_unit=kmh&precipitation_unit=mm`
-            + `&timezone=Europe%2FAmsterdam&forecast_days=${FORECAST_DAYS}`;
-  try {
-    // Open-Meteo kiest per slug de nieuwste beschikbare operationele run.
-    // Cache-busting voorkomt dat een oudere browser/CDN-response blijft hangen.
-    const j = await fetchJSON(url, true);
-    const t = j?.hourly?.time;
-    if (!t) return [];
-    return batch.map(m => {
-      const temp = j.hourly['temperature_2m_' + m.slug];
-      const precip = j.hourly['precipitation_' + m.slug];
-      const wind = j.hourly['wind_speed_10m_' + m.slug];
-      if (![temp, precip, wind].some(v => v?.some(x => x != null))) return null;
-      return { ...m, time: t, temp, precip, wind };
-    }).filter(Boolean);
-  } catch (e) { return []; }
+  return (await Promise.all(batch.map(async m => {
+    const source = SOURCE_MODELS[m.slug];
+    if (!source) return null;
+    const q = new URLSearchParams({latitude:lat,longitude:lon,models:source,
+      hourly:'temperature_2m,precipitation,wind_speed_10m',wind_speed_unit:'kmh',
+      precipitation_unit:'mm',timezone:'UTC',forecast_days:FORECAST_DAYS});
+    try {
+      const j = await fetchJSON('https://om.weerlab.nl/om/forecast?'+q, true);
+      if (j.error || !Array.isArray(j.hourly?.time)) return null;
+      const h=j.hourly, start=new Date(); start.setHours(0,0,0,0);
+      const end=new Date(start); end.setDate(end.getDate()+FORECAST_DAYS);
+      const ix=h.time.map((t,i)=>i).filter(i=>Date.parse(h.time[i])>=+start&&Date.parse(h.time[i])<+end);
+      const take=field=>ix.map(i=>Number.isFinite(h[field]?.[i])?h[field][i]:null);
+      const temp=take('temperature_2m'),precip=take('precipitation'),wind=take('wind_speed_10m');
+      if (![temp,precip,wind].some(a=>a.some(Number.isFinite))) return null;
+      return {...m,time:ix.map(i=>h.time[i]),temp,precip,wind,run:j.run_utc,source:j.source};
+    } catch (e) { return null; }
+  }))).filter(Boolean);
 }
 
 async function laad(lat, lon, naam) {
@@ -390,9 +393,9 @@ async function laad(lat, lon, naam) {
   const obs = await obsP;
   if (mijnVolgnummer !== laadVolgnummer) return;
 
-  if (sun?.daily?.sunrise) {
-    document.getElementById('sunrise').textContent = fmtClock(new Date(sun.daily.sunrise[0]));
-    document.getElementById('sunset').textContent  = fmtClock(new Date(sun.daily.sunset[0]));
+  for (const field of ['sunrise','sunset']) {
+    const value=sun?.daily?.[field]?.[0];
+    document.getElementById(field).textContent=typeof value==='string'&&Number.isFinite(Date.parse(value))?fmtClock(new Date(value)):'–';
   }
 
   const ok = results.filter(Boolean);
@@ -504,11 +507,11 @@ function toonParameter(param) {
     });
   }
 
-  const gemist = MODELS.length - beschikbaar.length;
+  const gemist = MODELS.filter(m=>!beschikbaar.some(r=>r.slug===m.slug)).map(m=>m.label);
   const verversd = laatsteOphaalTijd ? fmtClock(laatsteOphaalTijd) : '–';
   document.getElementById('runInfo').textContent =
     `${beschikbaar.length} modellen · ${cfg.label.toLowerCase()}`
-    + (gemist ? ` · ${gemist} niet beschikbaar` : '')
+    + (gemist.length ? ` · niet beschikbaar: ${gemist.join(', ')}` : '')
     + (param === 'temp'
         ? (obs ? ` · gemeten: ${obs.station} (${obs.km < 1 ? '<1' : Math.round(obs.km)} km)` : ' · geen KNMI-meting')
         : '')
