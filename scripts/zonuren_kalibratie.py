@@ -237,6 +237,11 @@ def main() -> int:
         print(f"  {slug:34s} n={r['n']:5d} δ={delta:2d}  ongekalibreerd {r['raw_bias']:+5.1f}/{r['raw_abs']:4.1f}  "
               f"gekalibreerd {r['kal_bias']:+5.1f}/{r['kal_abs']:4.1f}  rmse {r['kal_rmse']:4.1f}")
 
+    # Geen enkel model (Open-Meteo uit of over quotum): niets wegschrijven, anders wist dit de bestaande curves.
+    if not curves:
+        print("geen modeldata; bestaande curves blijven staan")
+        return 1
+
     pool = {}
     for groep, lijst in per_groep.items():
         if lijst:
@@ -247,6 +252,12 @@ def main() -> int:
         R = np.vstack(per_groep["hires"] + per_groep["globaal"])
         xs, ys = curve(R[:, 0], R[:, 1])
         pool["alle"] = {"x": xs, "y": ys}
+
+    # Model zonder nieuwe data houdt zijn vorige curve
+    oud = json.loads(UIT.read_text()) if UIT.exists() else {}
+    curves = {**oud.get("curves", {}), **curves}
+    pool = {**oud.get("pool", {}), **pool}
+    rapport = {**oud.get("toets", {}), **rapport}
 
     uit = {
         "bijgewerkt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),

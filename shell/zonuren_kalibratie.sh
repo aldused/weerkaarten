@@ -11,6 +11,7 @@ cd /Users/aldus/KNMI_Project/weerlab
 {
   echo "$(date): === zonuren-kalibratie ==="
   python3 scripts/zonuren_kalibratie.py --dagen 14
-  echo "$(date): klaar (exit $?)"
+  rc=$?
+  echo "$(date): klaar (exit $rc)"
 } >> "$LOG" 2>&1
 tail -2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
