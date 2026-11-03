@@ -9,12 +9,34 @@
     return pending;
   }
   function normalize(source, id, registry) {
-    if (id === 'nl_extreme') return source;
+    if (id === 'nl_extreme') return indexHistoricalYears(source);
     const entry = Object.entries(registry.stations).find(([,s]) => s.source === String(id));
     if (!entry) throw new Error('Onbekende recordbron: ' + id);
     const [name,station] = entry;
     if (source.station !== name && !(station.aliases || []).includes(source.station)) throw new Error('Stationsnaam past niet bij bron ' + id);
     source.station = name;
+    return source;
+  }
+  // Curated observations are sparse daily extremes, never period averages.
+  function indexHistoricalYears(source) {
+    source.jaar ||= {};
+    const add = (key, row) => {
+      if (!Number.isFinite(row[0]) || !/^\d{4}-\d{2}-\d{2}$/.test(row[1])) return;
+      const year = source.jaar[row[1].slice(0,4)] ||= {};
+      const rows = year[key] ||= [];
+      if (!rows.some(r => r[1] === row[1] && (r[2] || source.station) === (row[2] || source.station))) rows.push(row.slice());
+    };
+    for (const observation of source.waarnemingen || []) {
+      const key = {TX:'tx_hoog',TN:'tn_laag'}[observation.parameter];
+      if (key) add(key, [observation.waarde,observation.datum,observation.station]);
+    }
+    // Compatibility with older exports without complete observations.
+    for (const month of Object.values(source.dag || {}))
+      for (const day of Object.values(month))
+        for (const [key,rows] of Object.entries(day))
+          for (const row of rows) add(key,row);
+    for (const year of Object.values(source.jaar))
+      for (const [key,rows] of Object.entries(year)) rows.sort((a,b)=>key.endsWith('_laag')?a[0]-b[0]:b[0]-a[0]);
     return source;
   }
   function historical(registry) {

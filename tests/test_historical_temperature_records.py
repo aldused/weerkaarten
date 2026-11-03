@@ -19,12 +19,22 @@ class HistoricalTemperatures(unittest.TestCase):
             self.assertCountEqual(actual, expected)
             self.assertIn(('TX', '1921-10-10', 'Sittard', 30.1), actual)
 
+    def test_year_rankings_include_all_known_historical_days(self):
+        data = builder.build()
+        for row in data['waarnemingen']:
+            key = {'TX': 'tx_hoog', 'TN': 'tn_laag'}[row['parameter']]
+            self.assertIn([row['waarde'], row['datum'], row['station']],
+                          data['jaar'][row['datum'][:4]][key])
+        for station in ['Warnsveld', 'De Bilt']:
+            self.assertIn([-15.9, '1921-12-05', station], data['jaar']['1921']['tn_laag'])
+
     def test_observations_are_not_truncated_by_rankings(self):
         original = builder.WARM_RAW
         try:
             builder.WARM_RAW = '\n'.join(f'10 oktober 1921: Station{chr(65+i)} 30,1°C' for i in range(26))
             data = builder.build()
             self.assertEqual(len(data['dag']['10']['10']['tx_hoog']), 25)
+            self.assertEqual(len(data['jaar']['1921']['tx_hoog']), 26)
             self.assertEqual(len([r for r in data['waarnemingen'] if r['parameter'] == 'TX']), 26)
         finally:
             builder.WARM_RAW = original

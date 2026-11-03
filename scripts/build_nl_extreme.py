@@ -887,6 +887,19 @@ def build() -> dict:
     merge_maps(seizoen_map, warm_seizoen)
     merge_maps(seizoen_map, cold_seizoen)
 
+    # Keep every known daily observation per year, including tied stations.
+    # Do not truncate before filtering a historical station or date range.
+    jaar_map: dict = {}
+    for key, parsed in (("tx_hoog", warm), ("tn_laag", cold)):
+        for _, _, iso, temperature, station in parsed:
+            rows = jaar_map.setdefault(iso[:4], {}).setdefault(key, [])
+            row = [temperature, iso, station]
+            if row not in rows:
+                rows.append(row)
+    for year in jaar_map.values():
+        for key, rows in year.items():
+            rows.sort(key=lambda row: row[0], reverse=key.endswith("_hoog"))
+
     nu = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     return {
@@ -906,7 +919,7 @@ def build() -> dict:
         "decade": decade_map,
         "maand": maand_map,
         "seizoen": seizoen_map,
-        "jaar": {},
+        "jaar": jaar_map,
         "alltime": {
             "tx_hoog": warm_all,
             "tn_laag": cold_all,
