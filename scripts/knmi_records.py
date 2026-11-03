@@ -10,6 +10,7 @@ import argparse, os, json, requests, calendar
 from pathlib import Path
 from datetime import date, datetime, timedelta
 from collections import defaultdict
+from observation_corrections import apply_corrections
 
 # ── Verwachte aantal dagen per periode (strikt: alleen complete periodes ranken)
 def dagen_in_decade(jaar, maand, dec):
@@ -394,10 +395,12 @@ for STATION, STATION_NAAM in STATIONS:
 
     # Sluit het ZIP-gat: vul aan tot en met vandaag (lopend) via EDR
     data = vul_lopende_dagen(STATION, data)
+    local_corrections = apply_corrections(STATION, data)
     lopend_datum = next((r["datum"] for r in reversed(data) if r.get("lopend")), None)
 
     records = {
         "station":    STATION_NAAM,
+        "weerlab_corrections": local_corrections,
         "station_nr": STATION,
         "van":        data[0]["datum"],
         "tm":         data[-1]["datum"],
