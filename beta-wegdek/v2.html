@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="nl"><head>
+<script src="/weerlab-native-only.js?v=20261027-audit2"></script>
+<script>try{if(localStorage.getItem("beta_master")!=="1"&&!/^(localhost|127\.0\.0\.1)$/.test(location.hostname))location.replace("../beta.html#wegdek")}catch(e){}</script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wegdektemperaturen live — Weerlab</title>
+<link rel="stylesheet" href="../weerlab_design_tokens.css">
+<link rel="stylesheet" href="assets/leaflet.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--wl-color-background);color:var(--wl-color-text);font:var(--wl-text-body-md)}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:var(--wl-content-max);margin:0 auto;padding:var(--wl-space-md)}
+h1{font:var(--wl-text-headline-lg);margin:0;color:var(--wl-color-primary)}
+h2{font:var(--wl-text-headline-md);margin:0 0 4px;color:var(--wl-color-primary)}
+.muted{color:var(--wl-color-text-muted)}.small{font:var(--wl-text-body-sm)}
+.mono{font-family:var(--wl-font-mono)}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;margin-bottom:12px}
+.top .title{flex:1 1 320px}
+.live{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--wl-radius-full);background:var(--wl-color-surface);border:1px solid var(--wl-color-border);font:var(--wl-text-label-md)}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--wl-color-success)}
+.live.stale i{background:var(--wl-color-warning-orange)}.live.dead i{background:var(--wl-color-danger)}
+select,input[type=search]{border:1px solid var(--wl-color-border-strong);background:var(--wl-color-surface);border-radius:var(--wl-radius-md);padding:7px 10px;min-height:36px}
+.seg{display:inline-flex;background:var(--wl-color-background-soft);border-radius:var(--wl-radius-md);padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;padding:6px 12px;border-radius:6px;font:var(--wl-text-label-md);cursor:pointer;min-height:32px;color:var(--wl-color-text-muted)}
+.seg button[aria-pressed=true]{background:var(--wl-color-surface);color:var(--wl-color-primary);box-shadow:var(--wl-shadow-1)}
+.card{background:var(--wl-color-surface);border:1px solid var(--wl-color-border);border-radius:var(--wl-radius-lg);box-shadow:var(--wl-shadow-1);padding:var(--wl-space-md)}
+.banner{display:flex;gap:12px;align-items:flex-start;border-left:5px solid var(--wl-color-success);margin-bottom:12px}
+.banner.l1{border-left-color:var(--wl-color-warning-yellow)}.banner.l2{border-left-color:var(--wl-color-warning-orange)}.banner.l3{border-left-color:var(--wl-color-danger)}
+.banner b{font:var(--wl-text-headline-md)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
+.kpi{padding:12px 14px}.kpi .v{font:700 24px/1.1 var(--wl-font-sans);margin:2px 0}.kpi .l{font:var(--wl-text-label-md);color:var(--wl-color-text-muted)}
+.kpi .s{font:var(--wl-text-body-sm);color:var(--wl-color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi button{all:unset;cursor:pointer}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:12px;align-items:start}
+.mapcard{padding:0;overflow:hidden}
+.maphead{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--wl-color-border)}
+#map{height:min(68vh,640px);background:#e9eef3}
+.scrub{padding:10px 12px;border-top:1px solid var(--wl-color-border);display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}
+.scrub button.play{width:40px;height:40px;border-radius:50%;border:1px solid var(--wl-color-border-strong);background:var(--wl-color-surface);cursor:pointer;font-size:15px}
+.track{position:relative}
+.track input{width:100%;margin:0;accent-color:var(--wl-color-primary)}
+.track .fc{position:absolute;top:-4px;height:6px;border-radius:3px;background:repeating-linear-gradient(90deg,var(--wl-color-probability-purple) 0 4px,transparent 4px 7px);opacity:.7;pointer-events:none}
+.ticks{display:flex;justify-content:space-between;font:var(--wl-text-data-sm);color:var(--wl-color-text-soft);margin-top:2px}
+.when{font:var(--wl-text-label-md);min-width:150px;text-align:right}
+.when .fc{color:var(--wl-color-probability-purple)}
+.legend{display:flex;align-items:center;gap:8px;padding:0 12px 10px;font:var(--wl-text-data-sm);color:var(--wl-color-text-muted);flex-wrap:wrap}
+.legend .bar{height:10px;flex:1 1 220px;border-radius:5px;min-width:160px}
+.legend .ends{display:flex;justify-content:space-between}
+.pin{display:flex;align-items:center;justify-content:center;border-radius:50%;border:1.5px solid rgba(255,255,255,.95);box-shadow:0 0 0 1px rgba(15,23,42,.35);font:700 10px/1 var(--wl-font-sans);color:#0f172a;transition:background .15s}
+.pin.lab{border-radius:9px;padding:0 4px;min-width:30px;height:18px !important;width:auto !important;position:absolute;left:50%;top:0;transform:translateX(-50%);white-space:nowrap}
+.pin.r3{box-shadow:0 0 0 2px var(--wl-color-danger)}.pin.r2{box-shadow:0 0 0 2px var(--wl-color-warning-orange)}
+.pin.sel{box-shadow:0 0 0 3px var(--wl-color-primary)}
+.pin.na{background:#cbd5e1 !important;color:#64748b}
+.side{display:flex;flex-direction:column;gap:12px}
+.list{max-height:420px;overflow:auto;margin:6px -6px 0}
+.row{display:grid;grid-template-columns:8px 1fr 90px 52px;gap:8px;align-items:center;padding:6px;border-radius:var(--wl-radius-md);cursor:pointer;border:0;background:none;width:100%;text-align:left}
+.row:hover,.row.on{background:var(--wl-color-primary-soft)}
+.row .dot{width:8px;height:28px;border-radius:4px}
+.row .n{font:var(--wl-text-label-md);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.row .n small{display:block;font:var(--wl-text-body-sm);color:var(--wl-color-text-muted)}
+.row .t{font:700 15px/1 var(--wl-font-mono);text-align:right}.row .t small{display:block;font:var(--wl-text-data-sm);color:var(--wl-color-text-muted);margin-top:3px}
+.tag{display:inline-block;padding:1px 6px;border-radius:var(--wl-radius-full);font:600 11px/1.5 var(--wl-font-sans);margin-left:4px;vertical-align:1px}
+.tag.r3{background:#fde2e2;color:#991b1b}.tag.r2{background:#ffedd5;color:#9a3412}.tag.r1{background:#fef9c3;color:#854d0e}.tag.rijp{background:#ede9fe;color:#5b21b6}
+.detail .hd{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.detail .x{border:0;background:none;font-size:20px;cursor:pointer;color:var(--wl-color-text-muted);min-width:36px;min-height:36px}
+.facts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}
+.facts div{background:var(--wl-color-surface-muted);border-radius:var(--wl-radius-md);padding:6px 8px}
+.facts b{display:block;font:700 15px/1.2 var(--wl-font-mono)}.facts span{font:var(--wl-text-body-sm);color:var(--wl-color-text-muted)}
+svg text{font:11px var(--wl-font-sans);fill:var(--wl-color-text-muted)}
+.keys{display:flex;flex-wrap:wrap;gap:4px 12px;font:var(--wl-text-body-sm);color:var(--wl-color-text-muted);margin-top:4px}
+.keys i{display:inline-block;width:16px;height:0;border-top:2.5px solid;vertical-align:middle;margin-right:4px}
+.full{margin-top:12px}
+.tablehead{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+.tscroll{overflow:auto;max-height:560px}
+table{border-collapse:collapse;width:100%;font:var(--wl-text-body-sm)}
+th{position:sticky;top:0;background:var(--wl-color-surface);text-align:left;font:var(--wl-text-label-md);color:var(--wl-color-text-muted);border-bottom:1px solid var(--wl-color-border-strong);padding:6px 8px;white-space:nowrap}
+th button{all:unset;cursor:pointer}
+td{padding:5px 8px;border-bottom:1px solid var(--wl-color-border);white-space:nowrap}
+td.num{text-align:right;font-family:var(--wl-font-mono)}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--wl-color-primary-soft)}
+.chip{display:inline-block;min-width:44px;text-align:center;border-radius:6px;padding:1px 5px;font:700 12px/1.6 var(--wl-font-mono)}
+details.method{margin-top:12px}details.method summary{cursor:pointer;font:var(--wl-text-label-md);color:var(--wl-color-primary)}
+details.method ul{margin:8px 0 0;padding-left:18px}
+footer{margin:16px 0 8px;font:var(--wl-text-body-sm);color:var(--wl-color-text-muted)}
+footer a{color:inherit}
+.err{display:none;margin-bottom:12px;border-left:5px solid var(--wl-color-danger)}
+@media (max-width:1100px){.grid{grid-template-columns:1fr}}
+@media (max-width:640px){.wrap{padding:10px}.kpi:nth-child(5){display:none}.top{gap:8px}.top .title{flex-basis:100%}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi .v{font-size:20px}#map{height:58vh}.facts{grid-template-columns:repeat(2,1fr)}.when{min-width:0}.scrub{grid-template-columns:auto 1fr}.scrub .when{grid-column:1/-1;text-align:left}.hide-s{display:none}}
+</style></head>
+<body><div class="wrap">
+
+<div class="top">
+  <div class="title"><h1>Wegdektemperaturen</h1>
+    <div class="small muted">Rijkswaterstaat-meetpunten · elke 5 minuten · met RWS-verwachting en dauwpunt</div></div>
+  <span class="live" id="live"><i></i><span id="liveTxt">laden…</span></span>
+  <select id="area" aria-label="Gebied"><option value="">Heel Nederland</option></select>
+</div>
+
+<div class="card err" id="err"></div>
+<div class="card banner" id="banner"><div><b id="bannerTitle">Gegevens laden…</b><div class="small muted" id="bannerTxt"></div></div></div>
+<div class="kpis" id="kpis"></div>
+
+<div class="grid">
+  <section class="card mapcard">
+    <div class="maphead">
+      <div class="seg" role="group" aria-label="Kaartlaag">
+        <button data-layer="t" aria-pressed="true">Wegdek °C</button>
+        <button data-layer="d1" aria-pressed="false">Verandering 1 u</button>
+        <button data-layer="dp" aria-pressed="false">Wegdek − dauwpunt</button>
+        <button data-layer="mn" aria-pressed="false">Min. 24 u</button>
+      </div>
+      <label class="small muted"><input type="checkbox" id="roads"> Rijkswegen</label>
+    </div>
+    <div id="map" aria-label="Kaart met meetpunten"></div>
+    <div class="scrub">
+      <button class="play" id="play" aria-label="Afspelen">▶</button>
+      <div class="track"><div class="fc" id="fcBar"></div><input type="range" id="slider" min="0" max="0" value="0" aria-label="Tijdstip"><div class="ticks" id="ticks"></div></div>
+      <div class="when" id="when">—</div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <aside class="side">
+    <section class="card detail" id="detail" hidden></section>
+    <section class="card">
+      <h2>Aandachtslijst</h2>
+      <div class="small muted">Op risico, dan koudste eerst · balk = afgelopen 24 u + verwachting</div>
+      <div class="list" id="list"></div>
+    </section>
+  </aside>
+</div>
+
+<section class="card full">
+  <h2>Verloop alle meetpunten</h2>
+  <div class="small muted" id="natNote">Laagste, 10 %, mediaan en hoogste wegdektemperatuur · paars = RWS-verwachting</div>
+  <div id="natChart"></div>
+</section>
+
+<section class="card full">
+  <div class="tablehead"><div><h2>Alle meetpunten</h2><div class="small muted" id="count"></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><input type="search" id="q" placeholder="Zoek station, weg of plaats" aria-label="Zoeken"><button class="seg" id="csv" style="border:1px solid var(--wl-color-border-strong);padding:6px 12px;border-radius:8px;cursor:pointer;background:var(--wl-color-surface)">CSV</button></div></div>
+  <div class="tscroll"><table><thead><tr>
+    <th><button data-k="id">Station</button></th><th><button data-k="road">Weg</button></th><th class="hide-s"><button data-k="place">Plaats</button></th><th class="hide-s"><button data-k="prov">Provincie</button></th>
+    <th><button data-k="t">Nu ↑</button></th><th><button data-k="d1">1 u</button></th><th><button data-k="mn">Min 24 u</button></th><th><button data-k="g">RWS +2 u</button></th><th class="hide-s"><button data-k="dp">− dauwpt</button></th><th class="hide-s">24 u</th>
+  </tr></thead><tbody id="rows"></tbody></table></div>
+</section>
+
+<details class="method card full"><summary>Hoe lees je dit? Bronnen en drempels</summary>
+<ul class="small">
+<li><b>Metingen</b>: Rijkswaterstaat wegdeksensoren (rijkswaterstaatstrooit.nl), elke 5 minuten, hier per 10 minuten (laatste meting in dat vak). Ontbrekende metingen blijven leeg en worden nooit ingevuld.</li>
+<li><b>RWS-verwachting</b> (paars, stippel): de eigen GMS-verwachting van Rijkswaterstaat voor ruim 2 uur vooruit, per kwartier.</li>
+<li><b>RoadSurf</b> (oranje, alleen Rijnmond-meetpunten): Weerlab/Meteobewaking-berekening met FMI RoadSurf, RUC → HARMONIE, radar-vochtstart. Experimenteel.</li>
+<li><b>Lucht en dauwpunt</b>: dichtstbijzijnde KNMI-station (10-minutenwaarden). Wegdek − dauwpunt ≤ 0 betekent condensatie op het wegdek; samen met wegdek ≤ 0 °C geeft dat kans op rijp.</li>
+<li><b>Risico</b>: <span class="tag r3">vorst</span> wegdek ≤ 0 °C · <span class="tag r2">kritiek</span> ≤ 1 °C of RWS-verwachting ≤ 0 °C · <span class="tag r1">let op</span> ≤ 3 °C of verwachting ≤ 1 °C · <span class="tag rijp">rijp</span> wegdek ≤ 0,5 °C en onder het dauwpunt. Indicatief; strooiacties en zout zijn niet bekend.</li>
+</ul></details>
+
+<footer>Bron: <a href="https://www.rijkswaterstaatstrooit.nl/" target="_blank" rel="noopener">Rijkswaterstaat</a> · KNMI · Kaart: Kadaster/PDOK · Wegen: NWB/PDOK · <a href="index.html">vorige versie</a></footer>
+</div>
+
+<script src="assets/leaflet.js"></script>
+<script>
+'use strict';
+const P=new URLSearchParams(location.search);
+const LOCAL=P.has('localData')||/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const R2='https://data.weerlab.nl/wegdek/live.json';
+const SHIFT=P.get('scenario')==='vorst'?-9:0; // demo: alles 9 °C kouder om de risicoweergave te zien
+const $=s=>document.querySelector(s);
+const fmt=(v,d=1)=>v==null||isNaN(v)?'–':v.toFixed(d).replace('.',',').replace('-','−');
+const sgn=v=>v==null?'–':(v>0?'+':'')+fmt(v);
+const TZ='Europe/Amsterdam';
+const hm=t=>new Date(t).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',timeZone:TZ});
+const dhm=t=>new Date(t).toLocaleString('nl-NL',{weekday:'short',hour:'2-digit',minute:'2-digit',timeZone:TZ});
+
+// ---- kleurschalen ----
+const TSCALE=[[-8,'#4a1d7a'],[-4,'#7b3fb5'],[-2,'#3b5bdb'],[0,'#2f8fe0'],[1,'#7cc8ee'],[3,'#b9e3c6'],[6,'#e8ec9c'],[10,'#f6cf72'],[15,'#f0a050'],[22,'#d9583a'],[35,'#9b1c1c']];
+const DSCALE=[[-3,'#1d4ed8'],[-1,'#93c5fd'],[0,'#f1f5f9'],[1,'#fca5a5'],[3,'#b91c1c']];
+const MSCALE=[[-2,'#7c3aed'],[0,'#c4b5fd'],[1,'#e2e8f0'],[3,'#e2e8f0'],[8,'#f8fafc']];
+function ramp(scale,v){if(v==null)return null;if(v<=scale[0][0])return scale[0][1];for(let i=1;i<scale.length;i++){if(v<=scale[i][0]){const[a,ca]=scale[i-1],[b,cb]=scale[i],f=(v-a)/(b-a);return mix(ca,cb,f)}}return scale[scale.length-1][1]}
+function mix(a,b,f){const p=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));const A=p(a),B=p(b);return'#'+A.map((x,i)=>Math.round(x+(B[i]-x)*f).toString(16).padStart(2,'0')).join('')}
+const LAYERS={
+  t:{name:'Wegdektemperatuur',unit:'°C',scale:TSCALE,lo:-8,hi:22,ticks:[-8,-4,0,3,10,22]},
+  d1:{name:'Verandering t.o.v. 1 uur eerder',unit:'°C',scale:DSCALE,lo:-3,hi:3,ticks:[-3,-1,0,1,3]},
+  dp:{name:'Wegdek min dauwpunt (≤ 0 = condensatie)',unit:'°C',scale:MSCALE,lo:-2,hi:8,ticks:[-2,0,1,3,8]},
+  mn:{name:'Laagste wegdektemperatuur afgelopen 24 uur',unit:'°C',scale:TSCALE,lo:-8,hi:22,ticks:[-8,-4,0,3,10,22]},
+};
+
+// ---- state ----
+let D=null,IDS=[],T=[],NOBS=0,step=0,layer='t',area='',sel=null,sortK='t',sortDir=1,timer=null,map,markers={},roadsLayer=null,fitted=false;
+
+async function load(){
+  const urls=LOCAL?['data/live.json',R2]:[R2,'data/live.json'];
+  let lastErr;
+  for(const u of urls){
+    try{const r=await fetch(u+'?_='+Math.floor(Date.now()/60000),{cache:'no-cache'});if(!r.ok)throw new Error(u+': HTTP '+r.status);return await r.json()}
+    catch(e){lastErr=e}
+  }
+  throw lastErr;
+}
+
+function prepare(d){
+  const n=d.n;T=[];for(let i=0;i<n;i++)T.push((d.t0+i*d.dt)*60000);
+  NOBS=n;
+  // laatste tijdstap met metingen
+  let last=-1;for(const id in d.obs){const a=d.obs[id];for(let i=n-1;i>last;i--)if(a[i]!=null){last=i;break}}
+  NOBS=last+1;T=T.slice(0,NOBS);
+  const g=d.gms;const gT=g?g.t.map(s=>Date.parse(s)).filter(t=>t>T[NOBS-1]):[];
+  const gOff=g?g.t.length-gT.length:0;
+  T=T.concat(gT);
+  const S={};
+  for(const id in d.st){
+    const [lon,lat,road,place,prov,ki]=d.st[id];
+    const o=d.obs[id].slice(0,NOBS).map(v=>v==null?null:v/10+SHIFT);
+    const gv=g&&g.v[id]?g.v[id].slice(gOff).map(v=>v==null?null:v/10+SHIFT):gT.map(()=>null);
+    const k=ki!=null?d.knmi.st[ki]:null;
+    const td=ki!=null?d.knmi.td[ki].slice(0,NOBS).map(v=>v==null?null:v/10+SHIFT):null;
+    const ta=ki!=null?d.knmi.ta[ki].slice(0,NOBS).map(v=>v==null?null:v/10+SHIFT):null;
+    let rs=null;
+    if(d.rs&&d.rs.v[id]){const t0=Date.parse(d.rs.t0);rs=d.rs.v[id].map((v,i)=>[t0+i*3600e3,v==null?null:v/10+SHIFT]).filter(p=>p[0]<=T[NOBS-1]+24*3600e3)}
+    S[id]={id,lon,lat,road,place,prov,k,ser:o.concat(gv),td,ta,rs};
+  }
+  d.S=S;IDS=Object.keys(S);
+  return d;
+}
+
+// waarden per station op tijdstap i
+function valAt(s,i){return s.ser[i]}
+function lastObs(s,i){i=Math.min(i,NOBS-1);for(let j=i;j>=Math.max(0,i-3);j--)if(s.ser[j]!=null)return[s.ser[j],j];return[null,-1]}
+function tdAt(s,i){if(!s.td)return null;i=Math.min(i,NOBS-1);for(let j=i;j>=Math.max(0,i-3);j--)if(s.td[j]!=null)return s.td[j];return null}
+function d1At(s,i){const v=s.ser[i];if(v==null)return null;for(const j of[i-6,i-5,i-7])if(j>=0&&s.ser[j]!=null)return(v-s.ser[j])*6/(i-j);return null}
+function min24(s){let m=null;for(let i=0;i<NOBS;i++){const v=s.ser[i];if(v!=null&&(m==null||v<m))m=v}return m}
+function gmsMin(s){let m=null;for(let i=NOBS;i<T.length;i++){const v=s.ser[i];if(v!=null&&(m==null||v<m))m=v}return m}
+function metric(s,i,l){
+  if(l==='t')return valAt(s,i);
+  if(l==='d1')return d1At(s,i);
+  if(l==='dp'){const v=valAt(s,i),td=tdAt(s,i);return v==null||td==null?null:v-td}
+  if(l==='mn')return s.mn;
+}
+// risico: 3 vorst, 2 kritiek, 1 let op, 0 normaal
+function risk(s){
+  const t=s.now,g=s.g;let r=0;
+  if(t==null)return{r:-1,rijp:false};
+  if(t<=0)r=3;else if(t<=1||(g!=null&&g<=0))r=2;else if(t<=3||(g!=null&&g<=1))r=1;
+  const rijp=t<=0.5&&s.dp!=null&&s.dp<=0;
+  return{r,rijp};
+}
+const RNAME=['','let op','kritiek','vorst'];
+
+function computeNow(){
+  for(const id of IDS){const s=D.S[id];const[v,j]=lastObs(s,NOBS-1);s.now=v;s.nowAge=j<0?null:NOBS-1-j;s.d1=j<0?null:d1At(s,j);s.mn=min24(s);s.g=gmsMin(s);const td=tdAt(s,NOBS-1);s.dp=v==null||td==null?null:v-td;Object.assign(s,risk(s))}
+}
+function inArea(s){return!area||s.prov===area}
+function label(s){return(s.road?s.road+' ':'')+(s.place||s.prov||'')}
+
+// ---- kaart ----
+function initMap(){
+  map=L.map('map',{zoomControl:true,attributionControl:true,preferCanvas:false,minZoom:6,maxZoom:15}).setView([52.15,5.3],7);
+  L.tileLayer('https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{z}/{x}/{y}.png',{maxZoom:19,attribution:'Kaart: <a href="https://www.pdok.nl">Kadaster/PDOK</a>'}).addTo(map);
+  map.on('zoomend',drawMarkers);
+}
+function pinHtml(s,v){
+  const big=map.getZoom()>=9;
+  const c=v==null?null:ramp(LAYERS[layer].scale,v);
+  const txt=v==null?'–':(layer==='d1'?sgn(v):fmt(v));
+  const cls=['pin',big?'lab':'',v==null?'na':'',s.r>=2&&layer==='t'?'r'+s.r:'',sel===s.id?'sel':''].join(' ');
+  const sz=big?18:12;
+  return{html:`<div class="${cls}" style="width:${sz}px;height:${sz}px;background:${c||'#cbd5e1'}">${big?txt:''}</div>`,sz};
+}
+function drawMarkers(){
+  for(const id of IDS){
+    const s=D.S[id];const show=inArea(s);
+    const v=metric(s,step,layer);
+    if(!show){if(markers[id]){markers[id].remove();delete markers[id]}continue}
+    const {html,sz}=pinHtml(s,v);
+    const icon=L.divIcon({html,className:'',iconSize:[sz,sz]});
+    if(!markers[id]){
+      markers[id]=L.marker([s.lat,s.lon],{icon,riseOnHover:true,keyboard:false}).addTo(map).on('click',()=>select(id));
+      markers[id].bindTooltip('',{direction:'top',offset:[0,-8]});
+    }else markers[id].setIcon(icon);
+    markers[id].setZIndexOffset(v==null?-1000:Math.round(-v*20)+(s.r*500));
+    markers[id].setTooltipContent(`<b>${s.id}</b> ${label(s)}<br>${LAYERS[layer].name}: <b>${layer==='d1'?sgn(v):fmt(v)} °C</b>`);
+  }
+}
+async function toggleRoads(on){
+  if(!on){roadsLayer&&roadsLayer.remove();return}
+  if(!roadsLayer){const gj=await fetch('data/roads.geojson').then(r=>r.json());roadsLayer=L.geoJSON(gj,{style:{color:'#00205b',weight:1.4,opacity:.45},interactive:false})}
+  roadsLayer.addTo(map);roadsLayer.bringToBack();
+}
+function drawLegend(){
+  const L_=LAYERS[layer];const stops=[];const n=24;
+  for(let i=0;i<=n;i++){const v=L_.lo+(L_.hi-L_.lo)*i/n;stops.push(ramp(L_.scale,v)+' '+(i/n*100).toFixed(1)+'%')}
+  $('#legend').innerHTML=`<span>${L_.name}</span><div style="flex:1 1 240px;min-width:180px"><div class="bar" style="background:linear-gradient(90deg,${stops.join(',')})"></div><div class="ends" style="position:relative;height:14px">${L_.ticks.map(t=>`<span style="position:absolute;left:${(t-L_.lo)/(L_.hi-L_.lo)*100}%;transform:translateX(-50%)">${fmt(t,0)}</span>`).join('')}</div></div>`;
+}
+
+// ---- tijdschuif ----
+function initSlider(){
+  const sl=$('#slider');sl.max=T.length-1;sl.value=step=NOBS-1;
+  const fcFrac=(NOBS-1)/(T.length-1||1);
+  $('#fcBar').style.left=(fcFrac*100)+'%';$('#fcBar').style.width=((1-fcFrac)*100)+'%';
+  $('#fcBar').hidden=T.length===NOBS;
+  const ticks=[];for(let i=0;i<NOBS;i++){const d=new Date(T[i]);const h=+d.toLocaleString('nl-NL',{hour:'numeric',hour12:false,timeZone:TZ});if(d.getMinutes()===0&&h%6===0)ticks.push([i,h+'u'])}
+  $('#ticks').style.position='relative';$('#ticks').style.height='14px';
+  $('#ticks').innerHTML=ticks.map(([i,t])=>`<span style="position:absolute;left:${i/(T.length-1)*100}%;transform:translateX(-50%)">${t}</span>`).join('');
+  sl.oninput=()=>{step=+sl.value;stopPlay();updateTime()};
+  $('#play').onclick=()=>timer?stopPlay():startPlay();
+}
+function startPlay(){if(step>=T.length-1)step=Math.max(0,NOBS-37);$('#play').textContent='❚❚';timer=setInterval(()=>{step++;if(step>=T.length-1){step=T.length-1;stopPlay()}$('#slider').value=step;updateTime()},220)}
+function stopPlay(){clearInterval(timer);timer=null;$('#play').textContent='▶'}
+function updateTime(){
+  const fc=step>=NOBS;
+  $('#when').innerHTML=fc?`<span class="fc">RWS-verwachting</span><br>${dhm(T[step])}`:`${step===NOBS-1?'Laatste meting':'Meting'}<br>${dhm(T[step])}`;
+  drawMarkers();
+  if(sel)drawDetail();
+}
+
+// ---- samenvatting ----
+function drawSummary(){
+  const ss=IDS.map(id=>D.S[id]).filter(s=>inArea(s)&&s.now!=null);
+  const by=r=>ss.filter(s=>s.r===r).length;
+  const cold=ss.slice().sort((a,b)=>a.now-b.now)[0];
+  const fall=ss.filter(s=>s.d1!=null).sort((a,b)=>a.d1-b.d1)[0];
+  const gmin=ss.filter(s=>s.g!=null).sort((a,b)=>a.g-b.g)[0];
+  const dpc=ss.filter(s=>s.dp!=null&&s.dp<=1).length;
+  const lvl=by(3)?3:by(2)?2:by(1)?1:0;
+  $('#banner').className='card banner'+(lvl?' l'+lvl:'');
+  const where=area||'Nederland';
+  const T_=[`Geen gladheidsrisico op het wegdek in ${where}`,`Let op: koud wegdek op ${by(1)+by(2)+by(3)} meetpunten`,`Kritiek: ${by(2)+by(3)} meetpunten rond het vriespunt`,`Vorst op het wegdek: ${by(3)} meetpunten ≤ 0 °C`][lvl];
+  $('#bannerTitle').textContent=T_;
+  const parts=[];
+  if(cold)parts.push(`Koudste meetpunt ${cold.id} (${label(cold)}) ${fmt(cold.now)} °C`);
+  if(fall&&fall.d1<-0.3)parts.push(`snelste daling ${fmt(fall.d1)} °C/u bij ${fall.id}`);
+  if(gmin)parts.push(`RWS verwacht tot ${hm(T[T.length-1])} minimaal ${fmt(gmin.g)} °C`);
+  if(dpc)parts.push(`${dpc} meetpunten binnen 1 °C van het dauwpunt`);
+  $('#bannerTxt').textContent=parts.join(' · ')+'.';
+  const mean=ss.reduce((a,s)=>a+s.now,0)/(ss.length||1);
+  const kp=[
+    ['Koudste nu',cold?fmt(cold.now)+' °C':'–',cold?cold.id+' '+label(cold):'',cold&&cold.id],
+    ['≤ 0 °C',by(3),'meetpunten met vorst',null],
+    ['≤ 3 °C',ss.filter(s=>s.now<=3).length,`van ${ss.length} actieve meetpunten`,null],
+    ['RWS-verwachting min',gmin?fmt(gmin.g)+' °C':'–',gmin?`${gmin.id} ${label(gmin)}`:'geen verwachting',gmin&&gmin.id],
+    ['Gemiddeld',fmt(mean)+' °C',fall?`snelste daling ${fmt(fall.d1)} °C/u`:'',fall&&fall.id],
+  ];
+  $('#kpis').innerHTML=kp.map(([l,v,s,id])=>`<div class="card kpi">${id?`<button data-id="${id}" title="Toon meetpunt">`:'<div>'}<div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div>${id?'</button>':'</div>'}</div>`).join('');
+  $('#kpis').querySelectorAll('button[data-id]').forEach(b=>b.onclick=()=>select(b.dataset.id,true));
+}
+
+// ---- sparkline ----
+function spark(s,w=90,h=26){
+  const v=s.ser;let lo=Infinity,hi=-Infinity;for(const x of v)if(x!=null){lo=Math.min(lo,x);hi=Math.max(hi,x)}
+  if(!isFinite(lo))return'';lo=Math.min(lo,0.5);hi=Math.max(hi,lo+2);
+  const X=i=>i/(T.length-1)*w,Y=x=>h-2-(x-lo)/(hi-lo)*(h-4);
+  const path=(a,b)=>{let d='',pen=false;for(let i=a;i<b;i++){const x=v[i];if(x==null){pen=false;continue}d+=(pen?'L':'M')+X(i).toFixed(1)+' '+Y(x).toFixed(1);pen=true}return d};
+  const z=lo<0.5&&hi>0?`<line x1="0" x2="${w}" y1="${Y(0)}" y2="${Y(0)}" stroke="#cc0000" stroke-width=".7" stroke-dasharray="2 2"/>`:'';
+  return`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${z}<path d="${path(0,NOBS)}" fill="none" stroke="#00205b" stroke-width="1.4"/><path d="${path(NOBS-1,T.length)}" fill="none" stroke="#6d28d9" stroke-width="1.4" stroke-dasharray="2 1.5"/></svg>`;
+}
+function tags(s){return(s.r>0?`<span class="tag r${s.r}">${RNAME[s.r]}</span>`:'')+(s.rijp?'<span class="tag rijp">rijp</span>':'')}
+
+function drawList(){
+  const ss=IDS.map(id=>D.S[id]).filter(s=>inArea(s)&&s.now!=null).sort((a,b)=>(b.r-a.r)||(a.now-b.now)).slice(0,40);
+  $('#list').innerHTML=ss.map(s=>`<button class="row${sel===s.id?' on':''}" data-id="${s.id}"><span class="dot" style="background:${ramp(TSCALE,s.now)}"></span><span class="n">${s.id} ${s.road||''}${tags(s)}<small>${s.place||''}${s.place&&s.prov?' · ':''}${s.prov||''}</small></span>${spark(s)}<span class="t">${fmt(s.now)}<small>${s.d1==null?'':(s.d1<-.2?'↓':s.d1>.2?'↑':'→')+' '+sgn(s.d1)}</small></span></button>`).join('');
+  $('#list').querySelectorAll('.row').forEach(b=>b.onclick=()=>select(b.dataset.id,true));
+}
+
+// ---- detailgrafiek ----
+function chart(series,opt){
+  const W=opt.w||360,H=opt.h||200,ml=30,mr=8,mt=8,mb=20;
+  let lo=Infinity,hi=-Infinity,t0=opt.t0,t1=opt.t1;
+  for(const s of series)for(const[t,v]of s.pts)if(v!=null&&t>=t0&&t<=t1){lo=Math.min(lo,v);hi=Math.max(hi,v)}
+  if(!isFinite(lo)){lo=0;hi=10}
+  lo=Math.floor(Math.min(lo,opt.zero?-0.5:lo)-0.5);hi=Math.ceil(Math.max(hi,lo+3)+0.5);
+  const X=t=>ml+(t-t0)/(t1-t0)*(W-ml-mr),Y=v=>mt+(hi-v)/(hi-lo)*(H-mt-mb);
+  let g='';
+  const stp=hi-lo>16?4:hi-lo>8?2:1;
+  for(let v=Math.ceil(lo/stp)*stp;v<=hi;v+=stp)g+=`<line x1="${ml}" x2="${W-mr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${v===0?'#cc0000':'#e3e8ef'}" stroke-width="${v===0?1.2:1}" ${v===0?'stroke-dasharray="4 3"':''}/><text x="${ml-4}" y="${Y(v)+4}" text-anchor="end">${v}</text>`;
+  const hr=3600e3;let first=Math.ceil(t0/hr)*hr;
+  for(let t=first;t<=t1;t+=hr){const h=+new Date(t).toLocaleString('nl-NL',{hour:'numeric',hour12:false,timeZone:TZ});if(h%(opt.tick||6))continue;g+=`<line x1="${X(t)}" x2="${X(t)}" y1="${mt}" y2="${H-mb}" stroke="#eef2f7"/><text x="${X(t)}" y="${H-5}" text-anchor="middle">${h===0?new Date(t).toLocaleDateString('nl-NL',{weekday:'short',timeZone:TZ}):h+'u'}</text>`}
+  if(opt.now)g+=`<line x1="${X(opt.now)}" x2="${X(opt.now)}" y1="${mt}" y2="${H-mb}" stroke="#94a3b8" stroke-dasharray="2 3"/>`;
+  if(opt.cursor!=null)g+=`<line x1="${X(opt.cursor)}" x2="${X(opt.cursor)}" y1="${mt}" y2="${H-mb}" stroke="#00205b" stroke-width="1.5" opacity=".5"/>`;
+  for(const s of series){
+    if(s.band){let up='',dn='';const pts=s.pts.filter(p=>p[1]!=null&&p[2]!=null&&p[0]>=t0&&p[0]<=t1);if(!pts.length)continue;up=pts.map(p=>X(p[0]).toFixed(1)+','+Y(p[2]).toFixed(1)).join(' ');dn=pts.slice().reverse().map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ');g+=`<polygon points="${up} ${dn}" fill="${s.color}" opacity="${s.op||.15}"/>`;continue}
+    let d='',pen=false,prev=null;
+    for(const[t,v]of s.pts){if(t<t0||t>t1)continue;if(v==null||(prev!=null&&t-prev>(s.gap||25*60e3))){pen=false}if(v==null){prev=null;continue}d+=(pen?'L':'M')+X(t).toFixed(1)+' '+Y(v).toFixed(1);pen=true;prev=t}
+    g+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.w||1.6}" ${s.dash?`stroke-dasharray="${s.dash}"`:''} stroke-linejoin="round"/>`;
+  }
+  return`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${opt.label||'grafiek'}">${g}</svg>`;
+}
+function drawDetail(){
+  const s=D.S[sel];if(!s)return;
+  const box=$('#detail');box.hidden=false;
+  const tObs=T.slice(0,NOBS);
+  const ser=[];
+  if(s.ta)ser.push({pts:tObs.map((t,i)=>[t,s.ta[i]]),color:'#94a3b8',w:1.2});
+  if(s.td)ser.push({pts:tObs.map((t,i)=>[t,s.td[i]]),color:'#0d9488',w:1.2,dash:'3 2'});
+  if(s.rs)ser.push({pts:s.rs,color:'#e07000',w:1.6,dash:'5 3',gap:2*3600e3});
+  ser.push({pts:tObs.map((t,i)=>[t,s.ser[i]]),color:'#00205b',w:2.2});
+  ser.push({pts:T.slice(NOBS-1).map((t,i)=>[t,s.ser[NOBS-1+i]]),color:'#6d28d9',w:2.2,dash:'4 2',gap:40*60e3});
+  const t1=s.rs?Math.max(T[T.length-1],s.rs[s.rs.length-1][0]):T[T.length-1];
+  const vNow=valAt(s,step);
+  const tdv=tdAt(s,step);
+  box.innerHTML=`<div class="hd"><div><h2>${s.id} ${s.road||''} ${tags(s)}</h2><div class="small muted">${[s.place,s.prov].filter(Boolean).join(' · ')}${s.k?` · lucht/dauwpunt: KNMI ${s.k[2]}`:''}</div></div><button class="x" aria-label="Sluiten">×</button></div>
+  <div class="facts"><div><b>${fmt(vNow)}</b><span>${step>=NOBS?'verwacht':'wegdek'} ${hm(T[step])}</span></div><div><b>${sgn(d1At(s,Math.min(step,NOBS-1)))}</b><span>°C per uur</span></div><div><b>${fmt(s.mn)}</b><span>min. 24 u</span></div><div><b>${vNow!=null&&tdv!=null?sgn(vNow-tdv):'–'}</b><span>t.o.v. dauwpunt</span></div></div>
+  ${chart(ser,{w:Math.max(300,box.clientWidth-34),h:innerWidth<640?190:210,t0:T[0],t1,now:T[NOBS-1],cursor:T[step],zero:true,tick:s.rs?12:6,label:'Wegdektemperatuur '+s.id})}
+  <div class="keys"><span><i style="border-color:#00205b"></i>wegdek gemeten</span><span><i style="border-color:#6d28d9;border-top-style:dashed"></i>RWS-verwachting</span>${s.rs?'<span><i style="border-color:#e07000;border-top-style:dashed"></i>RoadSurf</span>':''}${s.ta?'<span><i style="border-color:#94a3b8"></i>lucht</span><span><i style="border-color:#0d9488;border-top-style:dashed"></i>dauwpunt</span>':''}</div>`;
+  box.querySelector('.x').onclick=()=>{sel=null;box.hidden=true;drawMarkers();drawList()};
+}
+function select(id,pan){
+  sel=id;const s=D.S[id];drawDetail();drawMarkers();drawList();
+  if(pan&&s)map.setView([s.lat,s.lon],Math.max(map.getZoom(),10));
+  if(pan&&innerWidth<1100)$('#detail').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// ---- landelijk verloop ----
+function quant(a,q){const i=(a.length-1)*q,l=Math.floor(i);return a[l]+(a[Math.min(l+1,a.length-1)]-a[l])*(i-l)}
+function drawNat(){
+  const ss=IDS.map(id=>D.S[id]).filter(inArea);
+  const rows=T.map((t,i)=>{const v=ss.map(s=>s.ser[i]).filter(x=>x!=null).sort((a,b)=>a-b);return v.length<5?[t,null,null,null,null]:[t,v[0],quant(v,.1),quant(v,.5),v[v.length-1]]});
+  const W=Math.min(1360,Math.max(320,$('#natChart').clientWidth||900));
+  const o=rows.slice(0,NOBS),f=rows.slice(NOBS-1);
+  $('#natChart').innerHTML=chart([
+    {band:1,pts:o.map(r=>[r[0],r[1],r[4]]),color:'#00205b',op:.08},
+    {band:1,pts:f.map(r=>[r[0],r[1],r[4]]),color:'#6d28d9',op:.1},
+    {pts:o.map(r=>[r[0],r[4]]),color:'#f0a050',w:1.2},
+    {pts:o.map(r=>[r[0],r[3]]),color:'#00205b',w:1.8},
+    {pts:o.map(r=>[r[0],r[2]]),color:'#2f8fe0',w:1.4,dash:'4 2'},
+    {pts:o.map(r=>[r[0],r[1]]),color:'#3b5bdb',w:2},
+    {pts:f.map(r=>[r[0],r[1]]),color:'#6d28d9',w:2,dash:'4 2',gap:40*60e3},
+    {pts:f.map(r=>[r[0],r[3]]),color:'#6d28d9',w:1.4,dash:'4 2',gap:40*60e3},
+  ],{w:W,h:220,t0:T[0],t1:T[T.length-1],now:T[NOBS-1],zero:true,tick:3,label:'Verloop wegdektemperaturen'})+
+  `<div class="keys"><span><i style="border-color:#3b5bdb"></i>laagste</span><span><i style="border-color:#2f8fe0;border-top-style:dashed"></i>10 % koudste</span><span><i style="border-color:#00205b"></i>mediaan</span><span><i style="border-color:#f0a050"></i>hoogste</span><span><i style="border-color:#6d28d9;border-top-style:dashed"></i>RWS-verwachting</span></div>`;
+}
+
+// ---- tabel ----
+function tableRows(){
+  const q=$('#q').value.trim().toLowerCase();
+  const val=(s,k)=>({id:s.id,road:s.road,place:s.place,prov:s.prov,t:s.now,d1:s.d1,mn:s.mn,g:s.g,dp:s.dp})[k];
+  return IDS.map(id=>D.S[id]).filter(s=>inArea(s)&&(!q||[s.id,s.road,s.place,s.prov].join(' ').toLowerCase().includes(q)))
+   .sort((a,b)=>{const x=val(a,sortK),y=val(b,sortK);if(x==null)return 1;if(y==null)return-1;return(typeof x==='string'?x.localeCompare(y):x-y)*sortDir});
+}
+function chip(v){return v==null?'–':`<span class="chip" style="background:${ramp(TSCALE,v)}">${fmt(v)}</span>`}
+function drawTable(){
+  const rs=tableRows();
+  $('#count').textContent=`${rs.filter(s=>s.now!=null).length} van ${rs.length} meetpunten met recente meting · laatste ${hm(T[NOBS-1])}`;
+  $('#rows').innerHTML=rs.map(s=>`<tr data-id="${s.id}"><td class="mono">${s.id}${tags(s)}</td><td>${s.road||'–'}</td><td class="hide-s">${s.place||''}</td><td class="hide-s">${s.prov||''}</td><td class="num">${chip(s.now)}${s.nowAge>1?` <span class="muted small" title="laatste meting ${s.nowAge*10} min oud">·</span>`:''}</td><td class="num">${sgn(s.d1)}</td><td class="num">${chip(s.mn)}</td><td class="num">${chip(s.g)}</td><td class="num hide-s">${sgn(s.dp)}</td><td class="hide-s">${spark(s,110,22)}</td></tr>`).join('');
+  $('#rows').querySelectorAll('tr').forEach(tr=>tr.onclick=()=>{select(tr.dataset.id,true);window.scrollTo({top:$('#map').getBoundingClientRect().top+scrollY-20,behavior:'smooth'})});
+  document.querySelectorAll('th button').forEach(b=>{const k=b.dataset.k;b.textContent=b.textContent.replace(/ [↑↓]$/,'')+(k===sortK?(sortDir>0?' ↑':' ↓'):'')});
+}
+function csv(){
+  const rs=tableRows();const L_=['station;weg;plaats;provincie;lon;lat;wegdek_nu;verandering_1u;min_24u;rws_min_2u;wegdek_min_dauwpunt;risico'];
+  for(const s of rs)L_.push([s.id,s.road,s.place,s.prov,s.lon,s.lat,fmt(s.now),fmt(s.d1),fmt(s.mn),fmt(s.g),fmt(s.dp),RNAME[s.r]||''].join(';'));
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+L_.join('\r\n')],{type:'text/csv'}));a.download='wegdek_'+new Date(T[NOBS-1]).toISOString().slice(0,16).replace(/[:T]/g,'')+'.csv';a.click();
+}
+
+// ---- live-status ----
+function drawLive(){
+  const tl=D.latest?Date.parse(D.latest):T[NOBS-1],age=(Date.now()-tl)/60000;
+  $('#live').className='live'+(age>60?' dead':age>25?' stale':'');
+  $('#liveTxt').textContent=`meting ${hm(tl)} · ${age<1?'zojuist':Math.round(age)+' min geleden'}${SHIFT?' · DEMO −9 °C':''}`;
+}
+
+function renderAll(){computeNow();drawSummary();drawMarkers();drawList();drawNat();drawTable();drawLegend();drawLive();if(sel)drawDetail()}
+
+async function refresh(first){
+  try{
+    const d=prepare(await load());
+    const atEnd=first||step>=NOBS-1;
+    D=d;
+    if(first){
+      const provs=[...new Set(IDS.map(id=>D.S[id].prov).filter(Boolean))].sort();
+      $('#area').insertAdjacentHTML('beforeend',provs.map(p=>`<option>${p}</option>`).join(''));
+      if(P.get('prov')&&provs.includes(P.get('prov'))){area=P.get('prov');$('#area').value=area}
+    }
+    initSlider();if(!atEnd)$('#slider').value=step=Math.min(step,T.length-1);else step=NOBS-1;$('#slider').value=step;
+    renderAll();updateTime();
+    if(first&&area)fitArea();
+    if(first&&P.get('id')&&D.S[P.get('id')])select(P.get('id'),true);
+    $('#err').style.display='none';
+  }catch(e){$('#err').style.display='block';$('#err').textContent='Gegevens konden niet worden geladen: '+e.message+(D?' — laatste geldige set blijft staan.':'');console.error(e)}
+}
+function fitArea(){const pts=IDS.map(id=>D.S[id]).filter(inArea).map(s=>[s.lat,s.lon]);if(pts.length)map.fitBounds(pts,{padding:[30,30],maxZoom:11});else map.setView([52.15,5.3],7)}
+
+document.querySelectorAll('[data-layer]').forEach(b=>b.onclick=()=>{layer=b.dataset.layer;document.querySelectorAll('[data-layer]').forEach(x=>x.setAttribute('aria-pressed',x===b));drawLegend();drawMarkers()});
+$('#area').onchange=e=>{area=e.target.value;renderAll();fitArea()};
+$('#roads').onchange=e=>toggleRoads(e.target.checked);
+$('#q').oninput=drawTable;$('#csv').onclick=csv;
+document.querySelectorAll('th button').forEach(b=>b.onclick=()=>{const k=b.dataset.k;if(sortK===k)sortDir=-sortDir;else{sortK=k;sortDir=['id','road','place','prov'].includes(k)?1:1}drawTable()});
+addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTimeout(()=>D&&drawNat(),150)});
+initMap();refresh(true);
+setInterval(()=>refresh(false),5*60e3);setInterval(()=>D&&drawLive(),30e3);
+</script>
+</body></html>
