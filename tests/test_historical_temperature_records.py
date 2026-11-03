@@ -14,6 +14,7 @@ class HistoricalTemperatures(unittest.TestCase):
         expected = [(parameter, iso, station, temperature)
                     for parameter, parsed in [('TX', builder.parse_warm(builder.WARM_RAW)), ('TN', builder.parse_cold(builder.COLD_RAW))]
                     for _, _, iso, temperature, station in parsed]
+        expected = list(set(expected) | {(r['parameter'], r['datum'], r['station'], r['waarde']) for r in builder.document_observations()})
         for data in [builder.build(), json.loads((ROOT / 'records_nl_extreme.json').read_text())]:
             actual = [(r['parameter'], r['datum'], r['station'], r['waarde']) for r in data['waarnemingen']]
             self.assertCountEqual(actual, expected)
@@ -28,8 +29,21 @@ class HistoricalTemperatures(unittest.TestCase):
         for station in ['Warnsveld', 'De Bilt']:
             self.assertIn([-15.9, '1921-12-05', station], data['jaar']['1921']['tn_laag'])
 
+    def test_document_values_and_pending_conflicts(self):
+        data = builder.build()
+        self.assertIn([33.0, '1906-07-30', 'Breda'], data['jaar']['1906']['tx_hoog'])
+        self.assertIn([-19.3, '1942-01-27', 'Hoorn'], data['jaar']['1942']['tn_laag'])
+        self.assertIn([-16.3, '1942-01-27', 'Amsterdam'], data['jaar']['1942']['tn_laag'])
+        self.assertNotIn([33.0, '1906-11-02', 'Sittard'], data['jaar']['1906']['tx_hoog'])
+        self.assertIn([-15.9, '1921-12-05', 'Warnsveld'], data['jaar']['1921']['tn_laag'])
+        self.assertIn([-18.0, '1925-12-05', 'Sittard'], data['jaar']['1925']['tn_laag'])
+        keys = [(r['parameter'], r['datum'], r['station']) for r in data['waarnemingen']]
+        self.assertEqual(len(keys), len(set(keys)))
+
     def test_observations_are_not_truncated_by_rankings(self):
         original = builder.WARM_RAW
+        original_document = builder.document_observations
+        builder.document_observations = lambda: []
         try:
             builder.WARM_RAW = '\n'.join(f'10 oktober 1921: Station{chr(65+i)} 30,1°C' for i in range(26))
             data = builder.build()
@@ -38,6 +52,7 @@ class HistoricalTemperatures(unittest.TestCase):
             self.assertEqual(len([r for r in data['waarnemingen'] if r['parameter'] == 'TX']), 26)
         finally:
             builder.WARM_RAW = original
+            builder.document_observations = original_document
 
 if __name__ == '__main__':
     unittest.main()

@@ -12,6 +12,7 @@ Output past in bestaande records-pagina (records_debilt.html) via aparte
 """
 import json
 import re
+from pathlib import Path
 from datetime import datetime, timezone
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -859,9 +860,29 @@ def merge_maps(target: dict, source: dict):
                 tgt_inner[sleutel] = lst
 
 
+def document_observations():
+    path = Path(__file__).resolve().parents[1] / "historical-document-observations.json"
+    document = json.loads(path.read_text())
+    return [row for row in document["observations"] if row["status"] == "accepted"]
+
+
+def merge_document_observations(warm, cold):
+    for row in document_observations():
+        target = warm if row["parameter"] == "TX" else cold
+        date = datetime.strptime(row["datum"], "%Y-%m-%d")
+        match = [r for r in target if r[2] == row["datum"] and r[4] == row["station"]]
+        if match:
+            if any(r[3] != row["waarde"] for r in match):
+                raise ValueError("Conflicterende documentmeting: " + str(row))
+            continue
+        target.append((str(date.month), decade(date.day), row["datum"], row["waarde"], row["station"]))
+    return warm, cold
+
+
 def build() -> dict:
     warm = parse_warm(WARM_RAW)
     cold = parse_cold(COLD_RAW)
+    warm, cold = merge_document_observations(warm, cold)
 
     warm_dec, warm_maand, warm_dag, warm_seizoen, warm_all = aggregate(warm, "tx_hoog", ascending=False)
     cold_dec, cold_maand, cold_dag, cold_seizoen, cold_all = aggregate(cold, "tn_laag", ascending=True)
@@ -909,6 +930,7 @@ def build() -> dict:
         "tm": "2020-12-31",
         "gegenereerd": nu,
         "bron": "Gecureerde historische warmte- en koude-records Nederlandse stations (incl. opgeheven stations)",
+        "aanvullende_bronnen": [{"bestand": "Data Ed weerstations.docx", "status": "Door beheerder aangeleverd; geen afzonderlijke KNMI-verificatie", "waarnemingen": document_observations()}],
         # Complete source observations: never build period selections from top-N lists.
         "waarnemingen": [
             {"datum": iso, "station": stn, "parameter": parameter, "waarde": temp}
