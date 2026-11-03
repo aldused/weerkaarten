@@ -52,7 +52,7 @@ window.MijnWeerlab=(()=>{
   function options(current){return `<option value="">Niet ingedeeld</option>`+(data?.categories||[]).map(c=>`<option value="${esc(c.id)}" ${current===c.id?'selected':''}>${esc(c.name)}</option>`).join('');}
   function favorite(f){
     const p=catalog().get(f.productId),name=f.customName||p?.name||f.productId;
-    return `<article class="mw-favorite" data-favorite="${esc(f.id)}"><div class="mw-card-head"><button class="mw-drag" type="button" draggable="true" data-drag="${esc(f.id)}" aria-label="Versleep ${esc(name)}"${disabled()}>⠿</button><button data-mw="remove" data-id="${esc(f.id)}" aria-label="${esc(name)} verwijderen" title="Verwijderen"${disabled()}>★</button></div>${p?.available?`<a class="mw-open" href="${esc(p.href)}"><strong>${esc(name)}</strong><small>${esc(p.section)}</small><span>Direct openen →</span></a>`:`<strong>${esc(name)}</strong><p>Dit product is momenteel niet beschikbaar. Je favoriet blijft bewaard.</p>`}<details><summary>Aanpassen</summary><label>Persoonlijke naam<input data-edit="name" data-id="${esc(f.id)}" value="${esc(f.customName)}" placeholder="${esc(p?.name||f.productId)}" maxlength="100"${disabled()}></label><button data-mw="reset" data-id="${esc(f.id)}"${disabled()}>Standaardnaam</button><label>Categorie<select data-edit="category" data-id="${esc(f.id)}"${disabled()}>${options(f.categoryId)}</select></label><div class="mw-order"><button data-mw="up" data-id="${esc(f.id)}" aria-label="${esc(name)} omhoog"${disabled()}>↑ Omhoog</button><button data-mw="down" data-id="${esc(f.id)}" aria-label="${esc(name)} omlaag"${disabled()}>↓ Omlaag</button></div><small>Oorspronkelijk: ${esc(p?.name||f.productId)}</small></details></article>`;
+    return `<article class="mw-favorite" data-favorite="${esc(f.id)}"><div class="mw-card-head"><button class="mw-drag" type="button" draggable="false" data-drag="${esc(f.id)}" aria-label="Versleep ${esc(name)}"${disabled()}>⠿</button><button data-mw="remove" data-id="${esc(f.id)}" aria-label="${esc(name)} verwijderen" title="Verwijderen"${disabled()}>★</button></div>${p?.available?`<a class="mw-open" href="${esc(p.href)}"><strong>${esc(name)}</strong><small>${esc(p.section)}</small><span>Direct openen →</span></a>`:`<strong>${esc(name)}</strong><p>Dit product is momenteel niet beschikbaar. Je favoriet blijft bewaard.</p>`}<details><summary>Aanpassen</summary><label>Persoonlijke naam<input data-edit="name" data-id="${esc(f.id)}" value="${esc(f.customName)}" placeholder="${esc(p?.name||f.productId)}" maxlength="100"${disabled()}></label><button data-mw="reset" data-id="${esc(f.id)}"${disabled()}>Standaardnaam</button><label>Categorie<select data-edit="category" data-id="${esc(f.id)}"${disabled()}>${options(f.categoryId)}</select></label><div class="mw-order"><button data-mw="up" data-id="${esc(f.id)}" aria-label="${esc(name)} omhoog"${disabled()}>↑ Omhoog</button><button data-mw="down" data-id="${esc(f.id)}" aria-label="${esc(name)} omlaag"${disabled()}>↓ Omlaag</button></div><small>Oorspronkelijk: ${esc(p?.name||f.productId)}</small></details></article>`;
   }
   function savedPages(){return (data?.savedPages||[]).map(page=>{
     const product=page.productId?catalog().get(page.productId):null;
@@ -75,10 +75,11 @@ window.MijnWeerlab=(()=>{
     out+=`<div class="mw-toolbar"><label class="mw-search">Zoek in je favorieten<input id="mw-search" type="search" value="${esc(query)}" placeholder="Naam, categorie of omschrijving" autocomplete="off"></label><button data-mw="add"${disabled()}>+ Product toevoegen</button><button data-mw="view" data-view-value="cards" aria-pressed="${data.preferences.view==='cards'}"${disabled()}>Tegels</button><button data-mw="view" data-view-value="list" aria-pressed="${data.preferences.view==='list'}"${disabled()}>Lijst</button></div>`;
     if(!data.favorites.length)out+=`<section class="mw-welcome"><h2>Welkom bij Mijn Weerlab</h2><p>Voeg favorieten toe, geef ze een eigen naam en bepaal zelf de volgorde. Alles wordt automatisch bewaard, ook wanneer je later opnieuw inlogt.</p><button data-mw="add"${disabled()}>Mijn eerste favoriet toevoegen</button></section>`;
     if(adding)out+=`<section class="mw-discover"><h2>Product toevoegen</h2><button data-mw="close-add">Sluiten</button><label>Zoek een product<input id="mw-product-search" type="search" placeholder="Bijvoorbeeld ECMWF of neerslag"></label><label>Categorie voor nieuwe favorieten<select id="mw-add-category">${options(null)}</select></label><div id="mw-products">${productChoices('')}</div></section>`;
+    out+=`<p class="mw-drag-help" id="mw-drag-help">Sleep met ⠿ om favorieten te ordenen of naar een andere categorie te verplaatsen. Ook categorieën kun je met hun sleepgreep verplaatsen. Via Aanpassen kan dit ook met knoppen.${query?' Wis je zoekopdracht om te kunnen slepen.':''}</p>`;
     const groups=[...data.categories,{id:null,name:'Niet ingedeeld'}],map=catalog();
     for(const group of groups){
       const found=data.favorites.filter(f=>f.categoryId===group.id).filter(f=>{const p=map.get(f.productId);return [f.customName,p?.name,p?.description,group.name].join(' ').toLocaleLowerCase('nl').includes(query.toLocaleLowerCase('nl'));});
-      out+=`<section class="mw-group" data-drop-category="${esc(group.id||'')}"><div class="mw-group-title"><h2>${esc(group.name)}</h2><small>${found.length} favorieten</small>${group.id?`<details><summary>Categorie aanpassen</summary><label>Naam<input data-edit="group-name" data-id="${esc(group.id)}" value="${esc(group.name)}" maxlength="100"${disabled()}></label><button data-mw="group-up" data-id="${esc(group.id)}"${disabled()}>↑ Omhoog</button><button data-mw="group-down" data-id="${esc(group.id)}"${disabled()}>↓ Omlaag</button><label>Verplaats favorieten bij verwijderen naar<select id="mw-delete-${esc(group.id)}">${options(null)}</select></label><button data-mw="group-delete" data-id="${esc(group.id)}"${disabled()}>Categorie verwijderen</button></details>`:''}</div><div class="mw-items ${data.preferences.view==='list'?'mw-list':''}">${found.map(favorite).join('')}</div></section>`;
+      out+=`<section class="mw-group" data-drop-category="${esc(group.id||'')}"><div class="mw-group-title">${group.id?`<button class="mw-drag" type="button" data-drag-group="${esc(group.id)}" aria-label="Versleep categorie ${esc(group.name)}" aria-describedby="mw-drag-help"${disabled()}>⠿</button>`:''}<h2>${esc(group.name)}</h2><small>${found.length} favorieten</small>${group.id?`<details><summary>Categorie aanpassen</summary><label>Naam<input data-edit="group-name" data-id="${esc(group.id)}" value="${esc(group.name)}" maxlength="100"${disabled()}></label><button data-mw="group-up" data-id="${esc(group.id)}"${disabled()}>↑ Omhoog</button><button data-mw="group-down" data-id="${esc(group.id)}"${disabled()}>↓ Omlaag</button><label>Verplaats favorieten bij verwijderen naar<select id="mw-delete-${esc(group.id)}">${options(null)}</select></label><button data-mw="group-delete" data-id="${esc(group.id)}"${disabled()}>Categorie verwijderen</button></details>`:''}</div><div class="mw-items ${data.preferences.view==='list'?'mw-list':''}">${found.map(favorite).join('')}${!found.length?'<p class="mw-empty-drop">Sleep een favoriet hierheen</p>':''}</div></section>`;
     }
     const pages=savedPages().filter(p=>[p.title,p.productId,p.menuRoute].join(' ').toLocaleLowerCase('nl').includes(query.toLocaleLowerCase('nl')));
     if(pages.length)out+=`<section class="mw-saved-pages"><h2>Bewaarde pagina’s en instellingen</h2><p>Directe links naar een specifieke pagina of productconfiguratie.</p>${pages.map(p=>`<div class="mw-product">${p.url?`<a href="${esc(p.url)}">${esc(p.title)}</a>`:`<span>${esc(p.title)} · Momenteel niet beschikbaar</span>`}<button data-mw="remove-page" data-id="${esc(p.id)}"${disabled()}>Verwijderen</button></div>`).join('')}</section>`;
@@ -129,26 +130,71 @@ window.MijnWeerlab=(()=>{
       if(el.dataset.edit==='history'){n.preferences.history=el.checked;if(!el.checked)n.recent=[];}
     });
   });
-  document.addEventListener('dragstart',event=>{const handle=event.target.closest('[data-drag]');if(!handle||busy||query)return;drag=handle.dataset.drag;event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',drag);});
-  document.addEventListener('dragover',event=>{if(drag&&event.target.closest('[data-drop-category]'))event.preventDefault();});
-  document.addEventListener('drop',event=>{const group=event.target.closest('[data-drop-category]');if(!drag||!group)return;event.preventDefault();const id=drag;drag=null;move(id,event.target.closest('[data-favorite]')?.dataset.favorite,group.dataset.dropCategory||null);});
-  document.addEventListener('dragend',()=>drag=null);
+  // Use the same pointer interaction for mouse, pen and touch.
   let pointerDrag=null;
+  function cleanDrag(){
+    if(pointerDrag?.frame)cancelAnimationFrame(pointerDrag.frame);
+    document.querySelectorAll('.mw-dragging,.mw-drop-before,.mw-drop-after,.mw-drop-active').forEach(el=>el.classList.remove('mw-dragging','mw-drop-before','mw-drop-after','mw-drop-active'));
+    document.body.classList.remove('mw-is-dragging');pointerDrag=null;
+  }
+  function dragTarget(x,y){
+    document.querySelectorAll('.mw-drop-before,.mw-drop-after,.mw-drop-active').forEach(el=>el.classList.remove('mw-drop-before','mw-drop-after','mw-drop-active'));
+    const target=document.elementFromPoint(x,y),group=target?.closest('[data-drop-category]');
+    if(!group)return null;
+    if(pointerDrag.kind==='group'){
+      const id=group.dataset.dropCategory;if(!id||id===pointerDrag.id)return null;
+      const after=y>group.getBoundingClientRect().top+group.getBoundingClientRect().height/2;
+      group.classList.add(after?'mw-drop-after':'mw-drop-before');return {id,after};
+    }
+    const card=target.closest('[data-favorite]');
+    if(card?.dataset.favorite===pointerDrag.id)return null;
+    let after=false;
+    if(card){
+      const rect=card.getBoundingClientRect();
+      after=card.parentElement.classList.contains('mw-list')||innerWidth<=600?y>rect.top+rect.height/2:x>rect.left+rect.width/2;
+      card.classList.add(after?'mw-drop-after':'mw-drop-before');
+    }else group.classList.add('mw-drop-active');
+    return {id:card?.dataset.favorite,categoryId:group.dataset.dropCategory||null,after};
+  }
+  function trackDrag(){
+    if(!pointerDrag?.moved)return;
+    const d=pointerDrag;
+    d.target=dragTarget(d.x,d.y);
+    const edge=70,delta=d.y<edge?-16:d.y>innerHeight-edge?16:0;
+    if(delta)window.scrollBy(0,delta);
+    d.frame=requestAnimationFrame(trackDrag);
+  }
   document.addEventListener('pointerdown',event=>{
-    const handle=event.target.closest('[data-drag]');if(!handle||busy||query||event.pointerType==='mouse')return;
-    pointerDrag={id:handle.dataset.drag,x:event.clientX,y:event.clientY,moved:false};handle.setPointerCapture(event.pointerId);
+    const handle=event.target.closest('[data-drag],[data-drag-group]');
+    if(!handle||handle.disabled||busy||loading||retry||query||event.button!==0)return;
+    cleanDrag();
+    pointerDrag={id:handle.dataset.drag||handle.dataset.dragGroup,kind:handle.dataset.dragGroup?'group':'favorite',startX:event.clientX,startY:event.clientY,x:event.clientX,y:event.clientY,moved:false,handle};
+    handle.setPointerCapture(event.pointerId);
   });
   document.addEventListener('pointermove',event=>{
-    if(!pointerDrag)return;
-    if(Math.hypot(event.clientX-pointerDrag.x,event.clientY-pointerDrag.y)>8)pointerDrag.moved=true;
-    if(pointerDrag.moved){event.preventDefault();const edge=64;if(event.clientY<edge)window.scrollBy(0,-14);if(event.clientY>innerHeight-edge)window.scrollBy(0,14);}
+    const d=pointerDrag;if(!d)return;d.x=event.clientX;d.y=event.clientY;
+    if(!d.moved&&Math.hypot(d.x-d.startX,d.y-d.startY)>6){
+      d.moved=true;d.handle.closest(d.kind==='group'?'.mw-group':'.mw-favorite').classList.add('mw-dragging');
+      document.body.classList.add('mw-is-dragging');trackDrag();
+    }
+    if(d.moved)event.preventDefault();
   },{passive:false});
   document.addEventListener('pointerup',event=>{
-    const source=pointerDrag;pointerDrag=null;if(!source?.moved)return;
-    const target=document.elementFromPoint(event.clientX,event.clientY),group=target?.closest('[data-drop-category]');
-    if(group)move(source.id,target.closest('[data-favorite]')?.dataset.favorite,group.dataset.dropCategory||null);
+    const d=pointerDrag;if(!d)return;
+    const target=d.moved?dragTarget(event.clientX,event.clientY):null;
+    cleanDrag();if(!target)return;
+    if(d.kind==='group'){
+      change(n=>{const at=n.categories.findIndex(c=>c.id===d.id);if(at<0)return;const [item]=n.categories.splice(at,1);const to=n.categories.findIndex(c=>c.id===target.id);n.categories.splice(to+(target.after?1:0),0,item);});
+    }else{
+      let before=target.id;
+      if(target.after){const peers=data.favorites.filter(f=>f.categoryId===target.categoryId&&f.id!==d.id);before=peers[peers.findIndex(f=>f.id===target.id)+1]?.id;}
+      move(d.id,before,target.categoryId);
+    }
   });
-  document.addEventListener('pointercancel',()=>pointerDrag=null);
+  document.addEventListener('pointercancel',cleanDrag);
+  document.addEventListener('lostpointercapture',cleanDrag);
+  document.addEventListener('keydown',event=>{if(event.key==='Escape')cleanDrag();});
+  window.addEventListener('blur',cleanDrag);
 
   document.addEventListener('click',event=>{if(event.target.closest('a[href*="/cdn-cgi/access/logout"]'))clear();});
   window.addEventListener('pagehide',clear);
