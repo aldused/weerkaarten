@@ -61,8 +61,11 @@
     });
     if (!S.data) return;
     if (view === "gebied") showDetail(decodeURIComponent(h.split("/")[1] || ""));
-    if (view === "dichtbij") { $("f-regio").value = "grp:Dicht bij huis"; renderMap(true); }
-    else if (S.map) { setTimeout(function () { S.map.invalidateSize(); }, 0); }
+    if (view === "dichtbij") { $("f-regio").value = "grp:Dicht bij huis"; S.autoRegio = true; renderMap(true); }
+    else if (S.autoRegio && (view === "overzicht" || view === "kaart")) {
+      // filter dat 'Dicht bij huis' zelf zette niet meenemen naar het Europa-overzicht
+      $("f-regio").value = ""; S.autoRegio = false; renderMap(true);
+    }
     if (view === "kaart" || view === "overzicht") renderMap();
     if (view === "pluimen") renderPluim();
   }
@@ -199,6 +202,19 @@
     if (window.WeerlabOndergrond) { var o = WeerlabOndergrond.voegToe(S.map, { donker: false }); }
     S.markers = L.layerGroup().addTo(S.map);
     S.map.on("zoomend", function () { renderMap(); });
+    // De kaart kan ontstaan terwijl de pagina (of het bèta-iframe) nog verborgen is (0×0 px):
+    // bij elke maatwijziging opnieuw meten, anders blijft het kaartvlak leeg.
+    if (window.ResizeObserver) {
+      var lastW = 0, lastH = 0;
+      new ResizeObserver(function () {
+        var el = $("map"), w = el.clientWidth, h = el.clientHeight;
+        if (!w || !h || (w === lastW && h === lastH)) return;
+        var first = !lastW || !lastH;
+        lastW = w; lastH = h;
+        S.map.invalidateSize();
+        if (first && S.pendingFit) { S.pendingFit = false; renderMap(true); }
+      }).observe($("map"));
+    }
   }
 
   function layerValue(g, layer) {
@@ -268,8 +284,12 @@
       }[layer];
     }
     if (fit) {
+      var el = $("map");
+      if (!el.clientWidth || !el.clientHeight) { S.pendingFit = true; return; }   // nog onzichtbaar: later
+      S.map.invalidateSize();
       var b = gs.map(function (g) { return [g.punten.berg.lat, g.punten.berg.lon]; });
       if (b.length) S.map.fitBounds(b, { padding: [30, 30], maxZoom: 9 });
+      else S.map.setView([47.2, 9.5], 5);
     }
   }
   function unit(l) { return { vers: " cm", neerslag: " mm", temp: "", nul: " km", sg: " km", stoot: " km/u", lawine: "" }[l] || ""; }
