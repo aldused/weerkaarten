@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Wintersportweer · beheer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<link rel="stylesheet" href="wintersport.css?v=20261105-2">
+<style>
+  .ok { color: var(--wl-color-success); font-weight: 700; } .bad { color: var(--wl-color-danger); font-weight: 700; } .off { color: var(--wl-color-text-soft); }
+  .log { font: var(--wl-text-data-sm); max-height: 360px; overflow: auto; background: var(--wl-color-surface-muted); padding: 8px; border-radius: 4px; }
+  .log .error { color: var(--wl-color-danger); } .log .warn { color: var(--wl-color-warning-orange); }
+  code { font: var(--wl-text-data-sm); background: var(--wl-color-surface-muted); padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<header class="ws-top"><div><p class="eyebrow">WEERLAB · WINTERSPORTWEER · BEHEER</p><h1>Datastromen en actualiteit</h1></div><div class="ws-fresh" id="gen"></div></header>
+<main class="ws-main">
+  <section class="card"><h2>Bronnen</h2><div class="table-wrap"><table class="tbl" id="src"></table></div>
+    <p class="note">Bron tijdelijk uitzetten of modelvoorkeur wijzigen: <code>wintersport/config.json</code> (enabled / modelvoorkeur). Opnieuw verwerken: <code>python3 -m wintersport.build --publish</code>. Database opnieuw verifiëren: <code>python3 -m wintersport.build_resorts</code>.</p></section>
+  <section class="card"><h2>Dekking</h2><div id="cov"></div></section>
+  <section class="card"><h2>Verwachte updates</h2><div id="next"></div></section>
+  <section class="card"><h2>Actieve sneeuwalerts</h2><div id="alerts"></div></section>
+  <section class="card"><h2>Nog niet gekoppeld (en waarom)</h2>
+    <ul>
+      <li><b>ICON-CH1-EPS / ICON-CH2-EPS</b> (MeteoSwiss, open data via STAC): GRIB2 op een ongestructureerd ICON-rooster; vraagt eigen rooster-index (zoals onze ICON-D2-EPS-pijplijn). Gepland als volgende hires-bron voor Zwitserland.</li>
+      <li><b>AROME / AROME HD / ARPEGE</b> (Météo-France): officiële API vereist een (gratis) API-sleutel op portail-api.meteofrance.fr — niet aangevraagd. Franse Alpen vallen wel binnen C-LAEF; Pyreneeën nu alleen ECMWF.</li>
+      <li><b>ICON-2I</b> (ItaliaMeteo/ARPAE): open-data-portaal nog niet op machineleesbaarheid en licentie getoetst. Italiaanse Alpen vallen binnen C-LAEF.</li>
+      <li><b>CHMI ALADIN</b>: publieke kaarten, geen vastgestelde open machineleesbare datastroom gevonden → niet gebruikt (Tsjechië valt binnen C-LAEF).</li>
+      <li><b>AEMET HARMONIE-AROME</b>: open data vraagt API-sleutel (opendata.aemet.es) — niet aangevraagd.</li>
+      <li><b>ICON-D2 / HARMONIE</b> voor Sauerland/Ardennen: liggen al in Weerlab-pijplijnen (NL-domein); de skigebieden vallen buiten het huidige NL-kaartvak. C-LAEF dekt beide gebieden.</li>
+      <li><b>ECMWF ENS per punt</b> (kansen op 10/20/30/50 cm): bestaande sneeuw/ecmwf_ens-pijplijn kan dit zonder extra download meenemen; nog niet aangesloten.</li>
+      <li><b>Sneeuwmetingen Frankrijk, Italië, Scandinavië, Tsjechië, België</b>: Météo-France (sleutel), MET Norway Frost (client-id), SMHI/FMI (open, nog te koppelen), CHMI/ARPA (te onderzoeken).</li>
+      <li><b>Satelliet-sneeuwbedekking</b> (Copernicus HR-S&amp;I / GFSC): WMS/download beschikbaar, nog niet verwerkt; wordt strikt gescheiden van sneeuwhoogte gehouden.</li>
+      <li><b>Lift-/pistestatus en webcams</b>: geen open, toegestane bron met Europese dekking gevonden; scrapen van skigebied-sites gebeurt bewust niet.</li>
+    </ul>
+  </section>
+  <section class="card"><h2>Logboek</h2><div class="log" id="log"></div></section>
+</main>
+<script>
+(function () {
+  var DATA = (new URLSearchParams(location.search).get("data") || "https://data.weerlab.nl/wintersport").replace(/\/$/, "");
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  var age = function (iso) { if (!iso) return "—"; var h = (Date.now() - new Date(iso)) / 3.6e6; return h < 1 ? Math.round(h * 60) + " min" : h.toFixed(1) + " u"; };
+  var t = function (iso) { return iso ? new Date(iso).toLocaleString("nl-NL", { timeZone: "Europe/Amsterdam" }) : "—"; };
+  fetch(DATA + "/status.json", { cache: "no-cache" }).then(function (r) { return r.json(); }).then(function (s) {
+    document.getElementById("gen").innerHTML = "Verwerkt " + t(s.gegenereerd) + " (" + age(s.gegenereerd) + " geleden)<br>duur " + s.duur_s + " s";
+    document.getElementById("src").innerHTML = "<thead><tr><th>Bron</th><th>Status</th><th>Run / laatste meting</th><th>Ouderdom</th><th>Opgehaald</th><th>Details / fout</th></tr></thead><tbody>" +
+      Object.keys(s.bronnen).map(function (k) {
+        var b = s.bronnen[k], st = b.uitgeschakeld ? '<span class="off">uit</span>' : b.ok ? '<span class="ok">OK</span>' : b.ok === false ? '<span class="bad">FOUT</span>' : "—";
+        var run = b.run || b.laatste_meting || b.bulletindag || "";
+        var det = b.fout ? '<span class="bad">' + esc(b.fout) + "</span>" : esc(["punten", "gebieden", "aantal", "stappen", "laatste_stap", "regios_met_bulletin", "eind", "duur_s"].filter(function (x) { return b[x] != null; }).map(function (x) { return x + "=" + b[x]; }).join(" · "));
+        return "<tr><td>" + esc(b.naam || k) + "</td><td>" + st + "</td><td>" + esc(run) + "</td><td>" + (run && run.length > 10 ? age(run) : "—") + "</td><td>" + t(b.opgehaald) + "</td><td>" + det + "</td></tr>";
+      }).join("") + "</tbody>";
+    var c = s.dekking || {};
+    document.getElementById("cov").innerHTML = "<p>" + s.gebieden_met_punten + " van " + s.gebieden_totaal + " gebieden met bevestigde punten · hires-model: " + c.met_hires + " · ECMWF 48 u: " + c.met_ecmwf + " · met meting ≤15 km: " + c.met_meting + " · met lawinebulletin: " + c.met_lawinebulletin + "</p>" +
+      (c.zonder_verwachting && c.zonder_verwachting.length ? "<p class=\"bad\">Zonder 24 u-verwachting: " + esc(c.zonder_verwachting.join(", ")) + "</p>" : "") +
+      (c.niet_geverifieerd && c.niet_geverifieerd.length ? "<p>Niet (volledig) geverifieerd: " + esc(c.niet_geverifieerd.join(", ")) + "</p>" : "");
+    document.getElementById("next").innerHTML = "<ul>" + Object.keys(s.verwacht || {}).map(function (k) { return "<li><b>" + esc(k) + "</b>: " + esc(s.verwacht[k]) + "</li>"; }).join("") + "</ul>";
+    document.getElementById("alerts").innerHTML = (s.actieve_highlights || []).length ? "<ul>" + s.actieve_highlights.map(function (h) { return "<li>" + esc(h) + "</li>"; }).join("") + "</ul>" : "<p class=\"note\">Geen.</p>";
+    document.getElementById("log").innerHTML = (s.logboek || []).slice().reverse().map(function (l) { return '<div class="' + esc(l.niveau) + '">' + esc(l.tijd) + " [" + esc(l.niveau) + "] " + esc(l.bericht) + "</div>"; }).join("");
+  }).catch(function (e) { document.getElementById("gen").textContent = "status.json niet bereikbaar: " + e.message; });
+})();
+</script>
+</body>
+</html>

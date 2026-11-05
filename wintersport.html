@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wintersportweer Europa · Weerlab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<link rel="stylesheet" href="wintersport.css?v=20261105-2">
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script defer src="weerlab_basemap.js"></script>
+<script defer src="wintersport-core.js?v=20261105-2"></script>
+<script defer src="wintersport.js?v=20261105-2"></script>
+</head>
+<body>
+<a class="skip" href="#main">Naar inhoud</a>
+<header class="ws-top">
+  <div class="ws-title">
+    <p class="eyebrow">WEERLAB · WINTERSPORTWEER · BÈTA</p>
+    <h1>Wintersportweer Europa</h1>
+    <p class="sub">Gemeten sneeuwhoogtes, verse sneeuw en verwachtingen per hoogte voor de Europese wintersportgebieden.</p>
+  </div>
+  <div class="ws-fresh" id="fresh" aria-live="polite">Gegevens laden…</div>
+</header>
+<nav class="ws-tabs" aria-label="Onderdelen wintersportweer">
+  <a href="#overzicht" data-tab="overzicht">Europa-overzicht</a>
+  <a href="#sneeuwhoogtes" data-tab="sneeuwhoogtes">Actuele sneeuwhoogtes</a>
+  <a href="#verwacht" data-tab="verwacht">Verwachte sneeuwval</a>
+  <a href="#kaart" data-tab="kaart">Sneeuwkaarten</a>
+  <a href="#gebieden" data-tab="gebieden">Skigebieden</a>
+  <a href="#regios" data-tab="regios">Regionale verwachtingen</a>
+  <a href="#pluimen" data-tab="pluimen">Sneeuwpluimen</a>
+  <a href="#dichtbij" data-tab="dichtbij">Dicht bij huis</a>
+  <a href="#lawines" data-tab="lawines">Lawine-informatie</a>
+  <a href="#favorieten" data-tab="favorieten">★ Favorieten</a>
+</nav>
+<main id="main" class="ws-main">
+  <div id="err" class="ws-err" hidden></div>
+
+  <!-- ====== OVERZICHT ====== -->
+  <section data-view="overzicht">
+    <div class="hl-row" id="hl-row"></div>
+    <div class="hl-alerts" id="hl-alerts"></div>
+  </section>
+
+  <!-- ====== KAART (gedeeld door overzicht/kaart/dichtbij) ====== -->
+  <section data-view="overzicht kaart dichtbij" class="map-wrap" id="map-wrap">
+    <div class="map-bar" role="toolbar" aria-label="Kaartinstellingen">
+      <label>Kaartlaag
+        <select id="layer">
+          <option value="vers">Verwachte verse sneeuw</option>
+          <option value="hs">Gemeten sneeuwhoogte</option>
+          <option value="neerslag">Verwachte totale neerslag</option>
+          <option value="temp">Temperatuur</option>
+          <option value="nul">Nulgradengrens</option>
+          <option value="sg">Sneeuwvalgrens</option>
+          <option value="stoot">Windstoten</option>
+          <option value="lawine">Lawinegevaar (officieel)</option>
+          <option value="dek" disabled>Sneeuwbedekking satelliet (nog niet gekoppeld)</option>
+        </select>
+      </label>
+      <label data-for="vers neerslag">Periode
+        <select id="win">
+          <option value="12">12 uur</option><option value="24">24 uur</option><option value="48" selected>48 uur</option>
+          <option value="72">72 uur</option><option value="120">5 dagen</option><option value="168">7 dagen</option><option value="240">10 dagen</option>
+        </select>
+      </label>
+      <label data-for="vers neerslag">Hoogte
+        <select id="hgt"><option value="berg" selected>Bergstation</option><option value="midden">Middenstation</option><option value="dal">Dalstation</option></select>
+      </label>
+      <label data-for="temp">Niveau
+        <select id="lvl"><option value="tdal">Dalstation</option><option value="t1500">1500 m</option><option value="t2000" selected>2000 m</option><option value="t3000">3000 m</option></select>
+      </label>
+      <label>Land/regio
+        <select id="f-regio"><option value="">Heel Europa</option></select>
+      </label>
+      <label>Type
+        <select id="f-type"><option value="">Alle</option><option value="alpine">Alpineskiën</option><option value="langlauf">Langlauf</option><option value="mix">Alpine + langlauf</option></select>
+      </label>
+      <label>Min. bergstation
+        <select id="f-hoogte"><option value="0">—</option><option value="1000">1000 m</option><option value="1500">1500 m</option><option value="2000">2000 m</option><option value="2500">2500 m</option><option value="3000">3000 m</option></select>
+      </label>
+      <button type="button" id="fs" aria-label="Kaart op volledig scherm">⛶</button>
+    </div>
+    <div class="map-body">
+      <div id="map" role="application" aria-label="Kaart met skigebieden"></div>
+      <div class="map-legend" id="legend" aria-hidden="true"></div>
+    </div>
+    <div class="timebar" id="timebar" hidden>
+      <button type="button" id="t-prev" aria-label="Vorige tijdstap">‹</button>
+      <input type="range" id="t-range" min="0" max="0" value="0" aria-label="Geldigheidstijd">
+      <button type="button" id="t-next" aria-label="Volgende tijdstap">›</button>
+      <button type="button" id="t-play" aria-label="Afspelen">▶</button>
+      <span class="t-label" id="t-label"></span>
+    </div>
+    <p class="map-note" id="map-note"></p>
+  </section>
+
+  <!-- ====== WAAR GAAT HET SNEEUWEN ====== -->
+  <section data-view="overzicht verwacht" class="card finder">
+    <h2>Waar gaat het sneeuwen?</h2>
+    <div class="finder-form">
+      <label>Periode <select id="q-win"><option value="24">24 uur</option><option value="48" selected>48 uur</option><option value="72">72 uur</option><option value="120">5 dagen</option><option value="168">7 dagen</option></select></label>
+      <label>Land/regio <select id="q-regio"><option value="">Heel Europa</option></select></label>
+      <label>Minimaal <select id="q-min"><option value="1">1 cm</option><option value="5">5 cm</option><option value="10" selected>10 cm</option><option value="20">20 cm</option><option value="30">30 cm</option><option value="50">50 cm</option></select></label>
+      <label>Op hoogte <select id="q-hgt"><option value="berg">Bergstation</option><option value="midden">Middenstation</option><option value="dal">Dalstation</option></select></label>
+      <label>Bergstation vanaf <select id="q-alt"><option value="0">—</option><option value="1500">1500 m</option><option value="2000">2000 m</option><option value="2500">2500 m</option></select></label>
+    </div>
+    <div id="q-out" class="finder-out"></div>
+  </section>
+
+  <!-- ====== RANGLIJSTEN ====== -->
+  <section data-view="overzicht verwacht sneeuwhoogtes" class="ranks" id="ranks"></section>
+
+  <!-- ====== SNEEUWHOOGTES ====== -->
+  <section data-view="sneeuwhoogtes" class="card">
+    <h2>Gemeten sneeuwhoogtes per meetstation</h2>
+    <p class="note">Officiële metingen (SLF, GeoSphere Austria). Elke waarde geldt voor de stationshoogte en het meettijdstip — niet voor een heel skigebied. Andere landen: nog geen open meetnet gekoppeld (zie Beheer).</p>
+    <div class="table-wrap"><table class="tbl" id="obs-table"></table></div>
+  </section>
+
+  <!-- ====== SKIGEBIEDEN ====== -->
+  <section data-view="gebieden verwacht" class="card">
+    <h2 data-view="gebieden">Alle skigebieden</h2>
+    <h2 data-view="verwacht">Verwachte verse sneeuw per skigebied</h2>
+    <div class="search-row">
+      <input type="search" id="search" placeholder="Zoek skigebied, plaats of regio…" aria-label="Zoek skigebied">
+      <span class="note" id="count"></span>
+    </div>
+    <div class="table-wrap"><table class="tbl" id="resort-table"></table></div>
+  </section>
+
+  <!-- ====== REGIO'S ====== -->
+  <section data-view="regios" id="regio-list" class="regio-grid"></section>
+
+  <!-- ====== PLUIMEN ====== -->
+  <section data-view="pluimen" class="card">
+    <h2>Wintersportpluim</h2>
+    <label>Skigebied <select id="pl-resort"></select></label>
+    <div id="pluim"></div>
+  </section>
+
+  <!-- ====== LAWINES ====== -->
+  <section data-view="lawines" class="card">
+    <h2>Officiële lawinebulletins</h2>
+    <p class="note">Gevarenklasse 1-5 op de Europese lawineschaal, 1:1 overgenomen van de bevoegde dienst via EAWS. Een regionaal bulletin geeft geen garantie voor de veiligheid van een bepaalde helling. Lees altijd het volledige bulletin.</p>
+    <div class="aval-scale" id="aval-scale"></div>
+    <div class="table-wrap"><table class="tbl" id="aval-table"></table></div>
+  </section>
+
+  <!-- ====== FAVORIETEN ====== -->
+  <section data-view="favorieten" class="card">
+    <h2>Mijn favoriete skigebieden</h2>
+    <p class="note">Klik ☆ bij een skigebied om het hier toe te voegen. Opgeslagen in deze browser (geen account, geen meldingen).</p>
+    <div class="table-wrap"><table class="tbl" id="fav-table"></table></div>
+  </section>
+
+  <!-- ====== DETAIL ====== -->
+  <section data-view="gebied" id="detail" class="detail"></section>
+
+  <footer class="ws-foot">
+    <p id="credits"></p>
+    <p>Methode: <span id="methode"></span></p>
+    <p><a href="wintersport-beheer.html">Beheer & datastatus</a></p>
+  </footer>
+</main>
+</body>
+</html>
