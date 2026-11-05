@@ -213,6 +213,17 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
   .grid{grid-template-columns:1fr}
   .zij{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
 }
+.top10{list-style:none;margin:0;padding:0;font-size:12px;font-variant-numeric:tabular-nums}
+.top10 li{display:grid;grid-template-columns:18px 10px minmax(0,1fr) auto;gap:6px;align-items:center;padding:4px;border-bottom:1px solid var(--border);cursor:pointer}
+.top10 li:last-child{border-bottom:0}
+.top10 li:hover{background:var(--surface-muted)}
+.top10 .nr{color:var(--muted);text-align:right}
+.top10 .sw{width:10px;height:10px;border-radius:2px;display:inline-block}
+.top10 .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top10 b{color:var(--text)}
+.top-seg{display:flex;gap:4px;margin:0 0 8px}
+.top-seg button{font:inherit;font-size:12px;padding:6px 10px;border:1px solid var(--border-strong);border-radius:6px;background:transparent;color:var(--text);cursor:pointer;min-height:32px}
+.top-seg button[aria-pressed=true]{background:var(--primary-strong);border-color:var(--primary-strong);color:#fff}
 @media (max-width:760px){
   .wrap{padding:12px 12px 40px}
   h1{font-size:19px}
@@ -287,6 +298,12 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 
     <aside class="zij">
       <div class="kpis" id="kpis"></div>
+      <section class="paneel blok" aria-labelledby="topTitel" id="topBlok">
+        <h2 id="topTitel">Top 10</h2>
+        <div class="top-seg" role="group" aria-label="Volgorde"><button type="button" data-r="hoog" aria-pressed="true">Warmste</button><button type="button" data-r="laag" aria-pressed="false">Koudste</button></div>
+        <p class="s" id="topSub"></p>
+        <div id="topLijst"></div>
+      </section>
       <section class="paneel blok grafiek" aria-labelledby="grafTitel">
         <h2 id="grafTitel">Verloop</h2>
         <p class="s" id="grafSub">Klik op de kaart om een plaats te kiezen.</p>
@@ -497,9 +514,36 @@ function teken() {
   const [x0, y0] = xy(g.lon0 - g.dlon / 2, g.lat0 + (NY - 0.5) * g.dlat), [x1, y1] = xy(g.lon0 + (NX - 0.5) * g.dlon, g.lat0 - g.dlat / 2);
   const im = $("veld"); im.setAttribute("href", doek.toDataURL()); im.setAttribute("x", x0); im.setAttribute("y", y0);
   im.setAttribute("width", x1 - x0); im.setAttribute("height", y1 - y0);
-  isolijnen(vals); waardenOpKaart(); laagsteHoogste(); legenda(); titels();
+  isolijnen(vals); waardenOpKaart(); laagsteHoogste(); legenda(); titels(); topHoofd();
   if (staat.vast != null) grafiek(staat.vast); else if (staat.hov != null) grafiek(staat.hov);
 }
+
+// ---------- top 10 plaatsen (per plaatsnaam de extreemste 5 km-cel) ----------
+let topRicht = "hoog";
+function kleur(v, lu) { const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)))); return `rgb(${lu.lut[k * 3]},${lu.lut[k * 3 + 1]},${lu.lut[k * 3 + 2]})`; }
+function top10(fn, hoog, n = 10) {
+  const best = new Map();
+  for (const c of gebiedCellen()) {
+    const v = fn(c), nm = D.plaats[c]; if (!isFinite(v) || !nm) continue;
+    const o = best.get(nm); if (!o || (hoog ? v > o[0] : v < o[0])) best.set(nm, [v, c]);
+  }
+  return [...best].map(([nm, [v, c]]) => [nm, v, c]).sort((a, b) => hoog ? b[1] - a[1] : a[1] - b[1]).slice(0, n);
+}
+function topHoofd() {
+  const L = staat.laag, blok = $("topBlok");
+  if (L === "sigma" || !D.dagen[staat.di]) { blok.hidden = true; return; }
+  blok.hidden = false;
+  const kans = L === "kans", hoog = kans || topRicht === "hoog";
+  blok.querySelector(".top-seg").hidden = kans;
+  $("topTitel").textContent = kans ? `Top 10 hoogste kans op ≥ 25 °C` : `Top 10 ${hoog ? "warmste" : "koudste"} plaatsen`;
+  $("topSub").textContent = (kans ? "Kans op een zomerse dag" : "Dagmaximum (TX-MOS)") + ` in ${gebiedNaam()}; per plaats de ${hoog ? "warmste" : "koudste"} 5 km-cel. Klik voor het verloop.`;
+  const rijen = top10(c => waarde(c), hoog), lu = lutVan(L);
+  $("topLijst").innerHTML = rijen.length ? `<ol class="top10">` + rijen.map(([nm, v, c], i) => `<li data-c="${c}"><span class="nr">${i + 1}</span><span class="sw" style="background:${kleur(v, lu)}"></span><span class="nm" title="${nm}">${nm}</span><b>${kans ? Math.round(v) + " %" : fmt(v) + " °C"}</b></li>`).join("") + `</ol>` : `<p class="s">Geen waarden in dit gebied.</p>`;
+  $("topLijst").querySelectorAll("li").forEach(li => li.addEventListener("click", () => { const c = +li.dataset.c; staat.vast = c; focus(c); grafiek(c); }));
+}
+document.querySelectorAll(".top-seg button").forEach(b => b.addEventListener("click", () => {
+  topRicht = b.dataset.r; document.querySelectorAll(".top-seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); topHoofd();
+}));
 
 function isolijnen(vals) {
   const gI = $("gIso"); gI.innerHTML = "";
@@ -652,7 +696,7 @@ function statusEnMeldingen() {
   const gebruikt = j.runs.filter(r => r.status === "gebruikt").length;
   const b = $("statusBadge"); b.className = "badge " + (leeftijd < 5 ? "ok" : "oud");
   b.innerHTML = `<i></i>Run ${dagKort.format(a)} · ${gebruikt}/${j.runs.length} modellen`;
-  const ontbr = j.runs.filter(r => r.status !== "gebruikt");
+  const ontbr = j.runs.filter(r => r.status !== "gebruikt" && r.status !== "inloop");
   const txt = [];
   if (leeftijd >= 5) txt.push(`Deze verwachting is ${Math.round(leeftijd)} uur oud.`);
   if (ontbr.length) txt.push("Niet meegenomen: " + ontbr.map(r => `${r.label} (${r.reden || r.status})`).join("; ") + ".");
@@ -676,7 +720,7 @@ function runsLijst() {
   const ul = $("runs"); ul.innerHTML = "";
   D.j.runs.forEach(r => {
     const li = document.createElement("li"); ul.appendChild(li);
-    const st = r.status === "gebruikt" ? ["G", "gebruikt"] : r.status === "verouderd" ? ["V", "verouderd"] : r.status === "niet_actief" ? ["X", "niet actief"] : ["X", "ontbreekt"];
+    const st = r.status === "gebruikt" ? ["G", "gebruikt"] : r.status === "verouderd" ? ["V", "verouderd"] : r.status === "niet_actief" ? ["X", "niet actief"] : r.status === "inloop" ? ["V", "inloop"] : ["X", "ontbreekt"];
     const init = r.init ? new Date(r.init) : null;
     li.innerHTML = `<span>${r.label}</span><span class="t">${init ? dagKort.format(init) + " " + uurFmt.format(init) : "–"}${r.leeftijd_u != null ? " · " + fmt(r.leeftijd_u, 0) + " u" : ""}</span><span class="chip ${st[0]}" title="${r.reden || ""}">${st[1]}</span>`;
     if (r.bron?.access === "eigen modelbestanden") li.querySelector(".t").textContent += " · eigen bron";

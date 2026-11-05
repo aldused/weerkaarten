@@ -218,6 +218,17 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .mini svg .iso0{fill:none;stroke:var(--iso0);stroke-width:3}
 .mini .m-kpi{display:flex;justify-content:space-between;gap:6px;margin-top:6px;font-size:12px;color:var(--muted)}
 .mini .m-kpi b{color:var(--text);font-variant-numeric:tabular-nums}
+.mini .m-body{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:10px;align-items:start}
+.top10{list-style:none;margin:0;padding:0;font-size:12px;font-variant-numeric:tabular-nums}
+.top10 li{display:grid;grid-template-columns:18px 10px minmax(0,1fr) auto;gap:6px;align-items:center;padding:3px 4px;border-bottom:1px solid var(--border)}
+.top10 li:last-child{border-bottom:0}
+.top10 .nr{color:var(--muted);text-align:right}
+.top10 .sw{width:10px;height:10px;border-radius:2px;display:inline-block}
+.top10 .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top10 b{color:var(--text)}
+.top10-kop{font:700 12px var(--font);margin:0 0 4px;color:var(--text)}
+#topLijst .top10 li{cursor:pointer;padding:4px}
+#topLijst .top10 li:hover,#topLijst .top10 li:focus-visible{background:var(--surface-muted);outline:none}
 .plaatsen{margin-top:12px;overflow:auto;max-height:520px;border:1px solid var(--border);border-radius:6px}
 .plaatsen table{border-collapse:collapse;width:100%;font-size:12.5px}
 .plaatsen th{position:sticky;top:0;z-index:1;background:var(--primary-strong);color:#fff;font-weight:600;padding:6px 9px;text-align:right;white-space:nowrap;cursor:pointer;user-select:none}
@@ -229,7 +240,8 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .plaatsen td:first-child{text-align:left;font-weight:600}
 .plaatsen td .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 .plaatsen td small{color:var(--muted);font-weight:500;margin-left:4px}
-@media (max-width:760px){.drie-grid{grid-template-columns:1fr}}
+@media (max-width:1100px){.drie-grid{grid-template-columns:1fr}}
+@media (max-width:480px){.mini .m-body{grid-template-columns:1fr}}
 
 dialog{border:1px solid var(--border-strong);border-radius:12px;padding:0;max-width:760px;width:calc(100% - 24px);background:var(--surface);color:var(--text);box-shadow:var(--shadow-3)}
 dialog::backdrop{background:rgba(15,23,42,.45)}
@@ -338,6 +350,11 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 
     <aside class="zij">
       <div class="kpis" id="kpis"></div>
+      <section class="paneel blok" aria-labelledby="topTitel" id="topBlok">
+        <h2 id="topTitel">Top 10</h2>
+        <p class="s" id="topSub"></p>
+        <div id="topLijst"></div>
+      </section>
       <section class="paneel blok grafiek" aria-labelledby="grafTitel">
         <h2 id="grafTitel">Verloop</h2>
         <p class="s" id="grafSub">Klik op de kaart om een plaats te kiezen.</p>
@@ -661,7 +678,7 @@ function teken() {
   const im = $("veld"); im.setAttribute("href", doek.toDataURL()); im.setAttribute("x", x0); im.setAttribute("y", y0);
   im.setAttribute("width", x1 - x0); im.setAttribute("height", y1 - y0);
   im.style.imageRendering = L === "bodem" ? "pixelated" : "auto";
-  isolijnen(vals); waardenOpKaart(); laagste(); stations(); legenda(); titels(); tijdInfo(); if (staat.vast != null) grafiek(staat.vast); else if (staat.hov != null) grafiek(staat.hov);
+  isolijnen(vals); waardenOpKaart(); laagste(); stations(); legenda(); titels(); tijdInfo(); topHoofd(); if (staat.vast != null) grafiek(staat.vast); else if (staat.hov != null) grafiek(staat.hov);
 }
 
 // ---------- rasterbeeld voor willekeurige celwaarden (ook voor de minikaartjes) ----------
@@ -715,7 +732,8 @@ function drieNachten() {
     let mi = gebiedCellen()[0], p50 = 0; for (const c of gebiedCellen()) { if (minima[c] < minima[mi]) mi = c; if (n.p0[c] >= 50) p50++; }
     const let_ = n.buiten_training ? ` · <b>voorbij 60 u: HARMONIE/ICON-D2 ontbreken, niet geverifieerd</b>` : "";
     kaart.innerHTML = `<h3>Nacht ${dagKort.format(s)} → ${dagKort.format(e)}</h3><div class="m-sub${n.buiten_training ? " let" : ""}">+${Math.max(0, Math.round((s - new Date(D.j.analyse_utc)) / 36e5))}…${n.lead_max_u} u · ${n.n_modellen} modellen${let_}</div>`;
-    const sv = document.createElementNS(NS, "svg"); sv.setAttribute("viewBox", regioBox()); kaart.appendChild(sv);
+    const body = document.createElement("div"); body.className = "m-body"; kaart.appendChild(body);
+    const sv = document.createElementNS(NS, "svg"); sv.setAttribute("viewBox", regioBox()); body.appendChild(sv);
     const cid = "clipMini" + i; const defs = el("defs", {}, sv); el("path", {d: GEO.nl}, el("clipPath", {id: cid}, defs));
     GEO.buren.forEach(b => el("path", {d: b.d, class: "buur"}, sv)); el("path", {d: GEO.nl, class: "nlvlak"}, sv);
     const r = rasterUrl(c => v16(minima[c]), LUT.temp);
@@ -725,11 +743,42 @@ function drieNachten() {
     const k = document.createElement("div"); k.className = "m-kpi";
     k.innerHTML = `<span>laagste <b>${fmt(v16(minima[mi]))} °C</b> ${D.plaats[mi]}</span><span>${tn ? "Laagste uurwaarde op 2 m</span><span hidden>" : "vorstkans ≥ 50 %:"} <b>${Math.round(100 * p50 / gebiedCellen().length)} %</b></span>`;
     kaart.appendChild(k);
+    const lijst = document.createElement("div");
+    lijst.innerHTML = `<div class="top10-kop">Top 10 koudste plaatsen</div>` + topLijstHtml(top10(c => v16(minima[c])), LUT.temp);
+    body.appendChild(lijst);
     const kies = () => { staat.laag = tn ? "tn" : "nmin"; staat.ni = i; [...$("laagSeg").children].forEach(x => x.setAttribute("aria-pressed", String(x.dataset.l === staat.laag))); bouwTijd(); teken(); kpis(); $("kaart").scrollIntoView({behavior: "smooth", block: "start"}); };
     kaart.onclick = kies; kaart.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); kies(); } };
     grid.appendChild(kaart);
   });
   plaatsTabel();
+}
+
+// ---------- top 10 plaatsen (per plaatsnaam de extreemste 5 km-cel) ----------
+function kleur(v, lu) { const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)))); return `rgb(${lu.lut[k * 3]},${lu.lut[k * 3 + 1]},${lu.lut[k * 3 + 2]})`; }
+function top10(fn, hoog = false, n = 10) {
+  const best = new Map();
+  for (const c of gebiedCellen()) {
+    const v = fn(c), nm = D.plaats[c]; if (!isFinite(v) || !nm) continue;
+    const o = best.get(nm); if (!o || (hoog ? v > o[0] : v < o[0])) best.set(nm, [v, c]);
+  }
+  return [...best].map(([nm, [v, c]]) => [nm, v, c]).sort((a, b) => hoog ? b[1] - a[1] : a[1] - b[1]).slice(0, n);
+}
+function topLijstHtml(rijen, lu, pct = false) {
+  if (!rijen.length) return `<p class="s">Geen waarden in dit gebied.</p>`;
+  return `<ol class="top10">` + rijen.map(([nm, v, c], i) => `<li data-c="${c}" tabindex="-1"><span class="nr">${i + 1}</span><span class="sw" style="background:${kleur(v, lu)}"></span><span class="nm" title="${nm}">${nm}</span><b>${pct ? Math.round(v) + " %" : fmt(v) + " °C"}</b></li>`).join("") + `</ol>`;
+}
+const TOP_LAGEN = {t10: ["koudste", "T 10 cm op dit tijdstip"], t2: ["koudste", "T 2 m op dit tijdstip"],
+  nmin: ["koudste", "minimum op 10 cm deze nacht (18.00–09.00)"], tn: ["koudste", "minimum op 2 m deze nacht (18.00–09.00)"],
+  kans: ["hoogste kans", "kans op grondvorst (< 0 °C op 10 cm) deze nacht"]};
+function topHoofd() {
+  const blok = $("topBlok"); const L = staat.laag; const def = TOP_LAGEN[L];
+  if (!def) { blok.hidden = true; return; }
+  blok.hidden = false;
+  const kans = L === "kans";
+  $("topTitel").textContent = `Top 10 ${def[0]} plaatsen · ${gebiedNaam()}`;
+  $("topSub").textContent = `${def[1][0].toUpperCase() + def[1].slice(1)}. Per plaats de koudste 5 km-cel; klik voor het verloop.`.replace("de koudste 5 km-cel", kans ? "de 5 km-cel met de hoogste kans" : "de koudste 5 km-cel");
+  $("topLijst").innerHTML = topLijstHtml(top10(c => waarde(c), kans), lutVan(L), kans);
+  $("topLijst").querySelectorAll("li").forEach(li => li.addEventListener("click", () => { const c = +li.dataset.c; staat.vast = c; focus(c); grafiek(c); }));
 }
 
 function plaatsTabel() {
@@ -750,7 +799,7 @@ function plaatsTabel() {
     t += `<tr><td>${nm}</td>${D.nachten.map(n => { const v = v16((staat.laag === "tn" ? n.tn : n.t10min)[c]); return `<td><span class="sw" style="background:${kl(v)}"></span>${fmt(v)} °C<small>${staat.laag === "tn" ? "2 m" : n.p0[c] + "%"}</small></td>`; }).join("")}</tr>`;
   });
   $("plaatsTabel").innerHTML = t + "</tbody>";
-  $("drieNoot").textContent = staat.laag === "tn" ? `Minimum op 2 m in ${gebiedNaam()}: laagste uurwaarde van de modelmix per nacht (18.00–09.00), op een rooster van 5 km. Geen afzonderlijk getraind TN-MOS-model. Klik op een kolomkop om te sorteren.` : `Alle ${plaatsRijen.length} KNMI-stations met een 10 cm-minimumthermometer: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel rond het station; in laagtes en open veld buiten het meetterrein kan het kouder zijn. Klik op een kolomkop om te sorteren.`;
+  $("drieNoot").textContent = staat.laag === "tn" ? `Minimum op 2 m in ${gebiedNaam()}: laagste uurwaarde per nacht (18.00–09.00) volgens TN-MOS v3 (getraind op de officiële KNMI-TN, met bodemsoort, bodemvocht, bewolking/wind over de hele nacht en per-model-afwijkingen), op een rooster van 5 km. Klik op een kolomkop om te sorteren.` : `Alle ${plaatsRijen.length} KNMI-stations met een 10 cm-minimumthermometer: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel rond het station; in laagtes en open veld buiten het meetterrein kan het kouder zijn. Klik op een kolomkop om te sorteren.`;
   $("plaatsTabel").querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
     const k = +th.dataset.k;
     plaatsSort = { kol: k, dir: plaatsSort.kol === k ? -plaatsSort.dir : 1 };
@@ -993,7 +1042,7 @@ function statusEnMeldingen() {
   const gebruikt = j.runs.filter(r => r.status === "gebruikt").length;
   const b = $("statusBadge"); b.className = "badge " + (leeftijd < 4 ? "ok" : "oud");
   b.innerHTML = `<i></i>Run ${dagKort.format(a)} ${uurFmt.format(a)} · ${gebruikt}/${j.runs.length} modellen`;
-  const ontbr = j.runs.filter(r => r.status !== "gebruikt");
+  const ontbr = j.runs.filter(r => r.status !== "gebruikt" && r.status !== "inloop");
   const txt = [];
   if (leeftijd >= 4) txt.push(`Deze verwachting is ${Math.round(leeftijd)} uur oud — er is sindsdien geen nieuwe WGT-run gemaakt.`);
   if (ontbr.length) txt.push("Niet meegenomen: " + ontbr.map(r => `${r.label} (${r.reden || r.status})`).join("; ") + ".");
@@ -1022,7 +1071,7 @@ function kpis() {
 function runsLijst() {
   const ul = $("runs"); ul.innerHTML = "";
   D.j.runs.forEach(r => {
-    const li = el2("li", {}, ul); const st = r.status === "gebruikt" ? ["G", "gebruikt"] : r.status === "verouderd" ? ["V", "verouderd"] : r.status === "niet_actief" ? ["X", "niet actief"] : ["X", "ontbreekt"];
+    const li = el2("li", {}, ul); const st = r.status === "gebruikt" ? ["G", "gebruikt"] : r.status === "verouderd" ? ["V", "verouderd"] : r.status === "niet_actief" ? ["X", "niet actief"] : r.status === "inloop" ? ["V", "inloop"] : ["X", "ontbreekt"];
     const init = r.init ? new Date(r.init) : null;
     li.innerHTML = `<span>${r.label}</span><span class="t">${init ? dagKort.format(init) + " " + uurFmt.format(init) : "–"}${r.leeftijd_u != null ? " · " + fmt(r.leeftijd_u, 0) + " u" : ""}</span><span class="chip ${st[0]}" title="${r.reden || ""}">${st[1]}</span>`;
     if (r.bron?.access === "eigen modelbestanden") li.querySelector(".t").textContent += " · eigen bron";
