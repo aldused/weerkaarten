@@ -283,7 +283,7 @@ body {
 </style>
 <link rel="stylesheet" href="stationsanalyse-vragen.css?v=20261101-2">
 <script defer src="stationsanalyse-vragen-core.js?v=20261101-2"></script>
-<script defer src="stationsanalyse-vragen.js?v=20261101-2"></script>
+<script defer src="stationsanalyse-vragen.js?v=20261106-winterjaar"></script>
 </head>
 <body class="climate-page climate-stationsanalyse">
 <section class="climate-heading" aria-labelledby="climate-title">
@@ -355,6 +355,7 @@ body {
     <span class="ctrl-label">Seizoen:</span>
     <select class="ctrl-select" id="sel-seizoen">
       <option value="heel">Heel jaar</option>
+      <option value="winterjaar">Winterjaar (aug-jul)</option>
       <option value="lente">Lente (mrt-mei)</option>
       <option value="zomer">Zomer (jun-aug)</option>
       <option value="herfst">Herfst (sep-nov)</option>
@@ -595,6 +596,7 @@ function datumNaarDagNr(yyyy, mm, dd) {
 // spansYear=true betekent dec valt bij de winter van het VOLGENDE jaar (meteorologische winter)
 const SEIZOENEN = {
   heel:   {label:'heel jaar',       kort:'jaar',   maanden:[1,2,3,4,5,6,7,8,9,10,11,12], lengte:366, spansYear:false, startM:1,  startD:1},
+  winterjaar: {label:'winterjaar (aug-jul)', kort:'winterjaar', maanden:[8,9,10,11,12,1,2,3,4,5,6,7], lengte:366, spansYear:true, startM:8, startD:1},
   lente:  {label:'lente (mrt-mei)', kort:'lente',  maanden:[3,4,5],    lengte:92, spansYear:false, startM:3,  startD:1},
   zomer:  {label:'zomer (jun-aug)', kort:'zomer',  maanden:[6,7,8],    lengte:92, spansYear:false, startM:6,  startD:1},
   herfst: {label:'herfst (sep-nov)',kort:'herfst', maanden:[9,10,11],  lengte:91, spansYear:false, startM:9,  startD:1},
@@ -623,39 +625,22 @@ function inSeizoen(mm, info) {
 
 // Voor winter: dec hoort bij het seizoensjaar Y+1 (winter 2024/25 = dec 2024 + jan/feb 2025)
 function seizoensJaar(jaar, mm, info) {
-  if (info.spansYear && mm === 12) return jaar + 1;
+  if (info.spansYear && mm >= info.startM) return jaar + 1;
   return jaar;
 }
 
 // Positie van een datum binnen het seizoen (1-based)
 function seizoensDag(jaar, mm, dd, info) {
-  if (info.maanden.length === 12) {
-    return datumNaarDagNr(2024, mm, dd);
-  }
-  if (info.spansYear) {
-    // winter: dec 1..31 → 1..31; jan 1..31 → 32..62; feb 1..29 → 63..91
-    if (mm === 12) return dd;
-    if (mm === 1) return 31 + dd;
-    if (mm === 2) return 62 + dd;
-  }
-  // gebruik schrikkeljaar voor consistente offsets
-  const startDag = datumNaarDagNr(2024, info.startM, info.startD);
-  const curDag = datumNaarDagNr(2024, mm, dd);
-  return curDag - startDag + 1;
+  // Use a template containing February 29, including across the year boundary.
+  const startYear = info.spansYear ? 2023 : 2024;
+  const year = startYear + (info.spansYear && mm < info.startM ? 1 : 0);
+  return Math.round((Date.UTC(year, mm - 1, dd) - Date.UTC(startYear, info.startM - 1, info.startD)) / 86400000) + 1;
 }
 
-// Converteer een seizoensdag terug naar een leesbare datum
 function seizoensDagNaarDatum(sDag, info) {
-  if (info.maanden.length === 12) {
-    return dagNaarDatum(2024, sDag);
-  }
-  if (info.spansYear) {
-    if (sDag <= 31) return sDag + ' dec';
-    if (sDag <= 62) return (sDag - 31) + ' jan';
-    return (sDag - 62) + ' feb';
-  }
-  const startDag = datumNaarDagNr(2024, info.startM, info.startD);
-  return dagNaarDatum(2024, startDag + sDag - 1);
+  const startYear = info.spansYear ? 2023 : 2024;
+  const d = new Date(Date.UTC(startYear, info.startM - 1, info.startD) + (sDag - 1) * 86400000);
+  return d.getUTCDate() + ' ' + MND[d.getUTCMonth()];
 }
 
 // Jaar-label voor winter: "2024/25", anders gewoon jaar
@@ -1086,7 +1071,7 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   const isAlle = stn === 'all';
   const stationNaam = isAlle ? 'Alle stations (Nederlandrecord)' : (STATIONS[stn]?.naam || stn);
   const richtTekst = richting === 'boven' ? '≥' : '<';
-  const isHeelJaar = sInfo.maanden.length === 12;
+  const isHeelJaar = (sInfo.maanden.length === 12 && !sInfo.spansYear);
   const seizoenTxt = sInfo.kort;
   const perTxt = isHeelJaar ? 'per jaar' : `per ${seizoenTxt}`;
   const inTxt = isHeelJaar ? 'in jaar' : `in ${seizoenTxt}`;
