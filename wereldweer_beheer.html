@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Wereldweer — bronnen en beheer — Weerlab.nl</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+:root{--navy:var(--wl-color-primary,#00205b);--navy2:var(--wl-color-primary-strong,#003366);--cyan:var(--wl-color-accent,#2ec4e8);--bg:var(--wl-color-background,#f6f8fb);--line:var(--wl-color-border,#e3e8ef);--ink:var(--wl-color-text,#0f172a);--muted:var(--wl-color-text-muted,#64748b);--rood:var(--wl-color-danger,#cc0000);--oranje:var(--wl-color-warning-orange,#e07000);--groen:#047857}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 "DM Sans",system-ui,sans-serif}
+a{color:var(--navy2)}
+.top{background:var(--navy);color:#fff;border-bottom:3px solid var(--cyan);padding:14px max(20px,calc((100% - 1400px)/2));display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.top h1{font-size:19px;margin:0}.top p{margin:2px 0 0;font-size:12px;color:#a8c4e8}
+.modus{margin-left:auto;font:600 12px "DM Sans";border-radius:6px;padding:5px 10px;background:rgba(255,255,255,.12)}
+.modus.aan{background:#047857}
+main{max-width:1400px;margin:0 auto;padding:18px 20px 50px;display:grid;gap:18px}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.kpi b{display:block;font:600 20px "DM Mono";color:var(--navy)}
+.kpi span{font-size:11.5px;color:var(--muted)}
+.vak{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.vak h2{font-size:15px;margin:0;padding:11px 14px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.vak h2 small{font:500 11px "DM Mono";color:var(--muted)}
+.vak h2 .r{margin-left:auto;display:flex;gap:6px}
+.schuif{overflow:auto;max-height:640px}
+table{width:100%;border-collapse:collapse}
+th{position:sticky;top:0;background:#eef2f7;text-align:left;font:700 10.5px "DM Sans";letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:7px 9px;cursor:pointer;white-space:nowrap;z-index:1}
+td{padding:6px 9px;border-top:1px solid var(--line);vertical-align:top}
+td.m{font-family:"DM Mono",monospace;font-size:11.5px;white-space:nowrap}
+tr.fout td{background:#fef2f2}
+tr.uit td{opacity:.55}
+.ok{color:var(--groen);font-weight:700}.nee{color:var(--rood);font-weight:700}.oud{color:var(--oranje);font-weight:700}
+.fouttekst{color:var(--rood);font-size:11px;display:block;max-width:360px;overflow-wrap:anywhere}
+input[type=search],select,input[type=number]{font:inherit;border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:#fff}
+input[type=number]{width:64px}
+button{font:600 11.5px "DM Sans";border:1px solid #cbd5e1;background:#fff;border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--ink)}
+button.p{background:var(--navy2);color:#fff;border-color:var(--navy2)}
+button.g{color:var(--rood);border-color:#fecaca}
+button:disabled{opacity:.4;cursor:default}
+.dek{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px;padding:12px 14px}
+.dek div{border:1px solid var(--line);border-radius:6px;padding:6px 9px;display:flex;justify-content:space-between;gap:6px}
+.dek div.nul{background:#fff7ed;border-color:#fed7aa}
+.dek b{font-family:"DM Mono",monospace}
+.leeg{padding:16px;color:var(--muted)}
+.uitleg{font-size:12px;color:var(--muted);padding:10px 14px 0;margin:0}
+.melding{position:fixed;right:16px;bottom:16px;background:#0f172a;color:#fff;border-radius:8px;padding:10px 14px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.melding.toon{opacity:1}
+</style>
+</head>
+<body>
+<header class="top">
+  <div><h1><a href="wereldweer.html" style="color:#fff;text-decoration:none">Wereldweer</a> · bronnen en beheer</h1>
+  <p id="sub">Status van alle nieuwsbronnen, landendekking, verificatiewachtrij en uitgelichte berichten</p></div>
+  <span class="modus" id="modus">Alleen-lezen</span>
+</header>
+<main>
+  <div class="kpi" id="kpi"></div>
+  <section class="vak"><h2>Verificatiewachtrij <small id="v-n"></small></h2>
+    <p class="uitleg">Berichten met een opvallende claim uit één bron, een onbevestigde melding, tegenstrijdige bronnen of een getal dat niet in de bron terug te vinden is. Ze staan met het label “Nog niet bevestigd” op de site en nooit in de opening. Goedkeuren haalt het label weg; blokkeren haalt het bericht van de site.</p>
+    <div class="schuif"><table><thead><tr><th>Score</th><th>Bericht</th><th>Reden</th><th>Bronnen</th><th></th></tr></thead><tbody id="v-tabel"></tbody></table></div></section>
+  <section class="vak"><h2>Nieuwsdossiers <small id="d-n"></small><span class="r"><input type="search" id="d-zoek" placeholder="Zoek in koppen…"></span></h2>
+    <div class="schuif" style="max-height:520px"><table><thead><tr><th>Score</th><th>Land</th><th>Bericht</th><th>Soort</th><th>Laatste bron</th><th>Bronnen</th><th></th></tr></thead><tbody id="d-tabel"></tbody></table></div></section>
+  <section class="vak"><h2>Nieuwsdekking per Europees land <small>dossiers met een bericht in de afgelopen 72 uur · oranje = geen</small></h2><div class="dek" id="dekking"></div></section>
+  <section class="vak"><h2>Bronnen <small id="b-n"></small><span class="r"><select id="b-filter"><option value="">Alle</option><option value="fout">Met fout</option><option value="stil">Geen nieuw bericht &gt; 3 dagen</option><option value="uit">Uitgeschakeld</option></select><input type="search" id="b-zoek" placeholder="Zoek bron of land…"></span></h2>
+    <div class="schuif"><table><thead><tr><th data-s="naam">Bron</th><th data-s="land">Land</th><th data-s="soort">Soort</th><th data-s="ok">Laatst gelukt</th><th data-s="nieuwste_item">Nieuwste bericht</th><th data-s="in_feed">In feed</th><th data-s="nieuw_totaal">Nieuw (9 d)</th><th data-s="relevant">Weernieuws</th><th data-s="dubbel_totaal">Duplicaten</th><th data-s="interval">Interval</th><th>Actief</th></tr></thead><tbody id="b-tabel"></tbody></table></div></section>
+  <section class="vak" id="geblokkeerd-vak"><h2>Geblokkeerd <small id="g-n"></small></h2><div class="schuif"><table><tbody id="g-tabel"></tbody></table></div></section>
+</main>
+<div class="melding" id="melding" role="status"></div>
+<script>
+(function () {
+  "use strict";
+  var LOKAAL = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  var DATA = LOKAAL ? "data/wereldweer/stroom/" : "https://data.weerlab.nl/wereldweer/stroom/";
+  var EUROPA = "NL BE LU FR DE GB IE ES PT IT CH AT SI HR GR CY MT NO SE DK FI IS PL CZ SK HU RO BG RS BA ME MK AL XK MD UA BY LT LV EE TR".split(" ");
+  var S = { bron: null, stroom: null, beheer: null, kan: false, sort: "naam", omgekeerd: false };
+  function el(tag, a, kids) { var e = document.createElement(tag); for (var k in a || {}) { if (a[k] == null) continue; if (k === "text") e.textContent = a[k]; else if (k === "on") for (var v in a.on) e.addEventListener(v, a.on[v]); else e.setAttribute(k, a[k]); } (kids || []).forEach(function (c) { if (c != null) e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); }); return e; }
+  function leeg(n) { while (n.firstChild) n.removeChild(n.firstChild); return n; }
+  function json(u) { return fetch(u, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
+  function oud(iso) { if (!iso) return "—"; var m = (Date.now() - new Date(iso)) / 6e4; if (m < 60) return Math.round(m) + " min"; if (m < 2880) return Math.round(m / 60) + " u"; return Math.round(m / 1440) + " d"; }
+  function melding(t) { var m = document.getElementById("melding"); m.textContent = t; m.classList.add("toon"); setTimeout(function () { m.classList.remove("toon"); }, 2600); }
+  function actie(body) {
+    if (!S.kan) return;
+    fetch("/api/wereldweer/beheer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); }).then(function (b) {
+        if (b.fout) { melding("Fout: " + b.fout); return; }
+        S.beheer = b; melding("Opgeslagen; de site wordt binnen enkele seconden bijgewerkt"); setTimeout(laad, 4000); teken();
+      }).catch(function () { melding("Beheerserver niet bereikbaar"); });
+  }
+  function knop(tekst, body, cls) { return el("button", { "class": cls || null, disabled: S.kan ? null : "", title: S.kan ? null : "Alleen via de lokale beheerserver", on: { click: function () { actie(body); } }, text: tekst }); }
+  function in_(lijst, id) { return ((S.beheer || {})[lijst] || []).indexOf(id) >= 0; }
+
+  function teken() {
+    var b = S.bron, s = S.stroom; if (!b || !s) return;
+    var rijen = b.bronnen, fout = rijen.filter(function (r) { return r.fout; }).length;
+    var nu = Date.now();
+    var eu72 = s.dossiers.filter(function (d) { return d.groepen[0] === "europa" && nu - new Date(d.laatste_bron) < 72 * 36e5; });
+    var k = leeg(document.getElementById("kpi"));
+    [[rijen.length, "bronnen aangesloten"], [rijen.filter(function (r) { return r.ok && !r.fout; }).length, "bronnen werkend"], [fout, "bronnen met fout"],
+     [s.dossiers.length, "dossiers (7 dagen)"], [eu72.length, "Europese dossiers ≤ 72 u"], [s.dossiers.filter(function (d) { return d.verificatie; }).length, "in verificatie"],
+     [oud(b.gemaakt), "sinds laatste run"], [(b.llm && b.llm.ok) ? oud(b.llm.ok) : "—", "sinds laatste modelronde" + (b.llm && b.llm.fout ? " (FOUT)" : "")]
+    ].forEach(function (x) { k.appendChild(el("div", {}, [el("b", { text: String(x[0]) }), el("span", { text: x[1] })])); });
+    if (b.llm && b.llm.fout) k.appendChild(el("div", { style: "grid-column:1/-1;border-color:#fecaca;background:#fef2f2" }, [el("span", { text: "Modelronde: " + b.llm.fout })]));
+
+    // verificatie
+    var vt = leeg(document.getElementById("v-tabel")), ver = s.dossiers.filter(function (d) { return d.verificatie; });
+    document.getElementById("v-n").textContent = ver.length + " berichten";
+    ver.forEach(function (d) {
+      vt.appendChild(el("tr", {}, [el("td", { "class": "m", text: String(Math.round(d.score)) }),
+        el("td", {}, [el("a", { href: "wereldweer.html#d=" + d.id, target: "_blank", text: d.kop }), el("div", { style: "color:var(--muted)", text: d.land_nl + " · " + (d.samenvatting || "").slice(0, 160) })]),
+        el("td", { text: d.verificatie }),
+        el("td", {}, d.bronnen.slice(0, 4).map(function (x) { return el("div", {}, [el("a", { href: x.url, target: "_blank", rel: "noopener", text: x.naam })]); })),
+        el("td", { style: "white-space:nowrap" }, [knop("Goedkeuren", { actie: "goedkeuren", id: d.id }, "p"), " ", knop("Blokkeren", { actie: "blokkeer", id: d.id }, "g")])]));
+    });
+    if (!ver.length) vt.appendChild(el("tr", {}, [el("td", { colspan: "5", "class": "leeg", text: "Niets te verifiëren." })]));
+
+    // dossiers
+    var q = document.getElementById("d-zoek").value.toLowerCase();
+    var dt = leeg(document.getElementById("d-tabel"));
+    var ds = s.dossiers.filter(function (d) { return !q || (d.kop + " " + d.land_nl).toLowerCase().indexOf(q) >= 0; });
+    document.getElementById("d-n").textContent = ds.length + " van " + s.dossiers.length;
+    ds.slice(0, 300).forEach(function (d) {
+      var vast = in_("vastgezet", d.id), licht = in_("uitgelicht", d.id);
+      dt.appendChild(el("tr", {}, [el("td", { "class": "m", text: String(Math.round(d.score)) }), el("td", { text: d.land_nl }),
+        el("td", {}, [el("a", { href: "wereldweer.html#d=" + d.id, target: "_blank", text: d.kop })]), el("td", { text: d.soort + " · " + d.cat }),
+        el("td", { "class": "m", text: oud(d.laatste_bron) }), el("td", { "class": "m", text: d.n_media + " / " + d.n_berichten }),
+        el("td", { style: "white-space:nowrap" }, [knop(vast ? "Losmaken" : "Bovenaan vastzetten", { actie: vast ? "losmaken" : "vastzetten", id: d.id }, vast ? "p" : null), " ",
+          knop(licht ? "Niet uitlichten" : "Uitlichten", { actie: licht ? "niet_uitlichten" : "uitlichten", id: d.id }), " ",
+          knop("Blokkeren", { actie: "blokkeer", id: d.id }, "g")])]));
+    });
+
+    // dekking
+    var dek = leeg(document.getElementById("dekking")), per = {}, namen = {};
+    s.dossiers.forEach(function (d) { namen[d.land] = d.land_nl; });
+    eu72.forEach(function (d) { per[d.land] = (per[d.land] || 0) + 1; });
+    EUROPA.slice().sort(function (a, b) { return (per[b] || 0) - (per[a] || 0); }).forEach(function (iso) {
+      var nb = rijen.filter(function (r) { return r.land === iso; }).length;
+      dek.appendChild(el("div", { "class": per[iso] ? "" : "nul", title: nb + " eigen bron(nen)" }, [el("span", { text: (namen[iso] || iso) + " · " + nb + " br." }), el("b", { text: String(per[iso] || 0) })]));
+    });
+
+    // bronnen
+    var f = document.getElementById("b-filter").value, bz = document.getElementById("b-zoek").value.toLowerCase();
+    var lijst = rijen.filter(function (r) {
+      var actief = !(S.beheer && S.beheer.bronnen && S.beheer.bronnen[r.id] && S.beheer.bronnen[r.id].actief === false) && r.actief !== false;
+      if (f === "fout" && !r.fout) return false;
+      if (f === "stil" && r.nieuwste_item && nu - new Date(r.nieuwste_item) < 3 * 864e5) return false;
+      if (f === "uit" && actief) return false;
+      return !bz || (r.naam + " " + (r.land || "") + " " + r.id).toLowerCase().indexOf(bz) >= 0;
+    });
+    var sk = S.sort;
+    lijst.sort(function (a, c) { var x = a[sk], y = c[sk]; if (x == null) return 1; if (y == null) return -1; var r = x < y ? -1 : x > y ? 1 : 0; return S.omgekeerd ? -r : r; });
+    document.getElementById("b-n").textContent = lijst.length + " van " + rijen.length + " · " + fout + " met fout";
+    var bt = leeg(document.getElementById("b-tabel"));
+    lijst.forEach(function (r) {
+      var over = (S.beheer && S.beheer.bronnen && S.beheer.bronnen[r.id]) || {};
+      var actief = over.actief !== false && r.actief !== false;
+      var stil = r.nieuwste_item && nu - new Date(r.nieuwste_item) > 3 * 864e5;
+      var iv = el("input", { type: "number", min: "5", max: "1440", value: String(over.interval || r.interval), disabled: S.kan ? null : "", "aria-label": "Interval in minuten" });
+      iv.addEventListener("change", function () { actie({ actie: "bron", id: r.id, interval: +iv.value }); });
+      bt.appendChild(el("tr", { "class": (r.fout ? "fout" : "") + (actief ? "" : " uit") }, [
+        el("td", {}, [r.url ? el("a", { href: r.url, target: "_blank", rel: "noopener", text: r.naam }) : el("span", { text: r.naam }), r.fout ? el("span", { "class": "fouttekst", text: r.fout + (r.fouten_op_rij > 1 ? " (" + r.fouten_op_rij + "× op rij)" : "") }) : null]),
+        el("td", { text: r.land || "intern." }), el("td", { text: r.soort }),
+        el("td", { "class": "m" }, [el("span", { "class": r.ok && !r.fout ? "ok" : "nee", text: r.ok ? oud(r.ok) : "nooit" })]),
+        el("td", { "class": "m" }, [el("span", { "class": stil ? "oud" : null, text: oud(r.nieuwste_item) })]),
+        el("td", { "class": "m", text: r.in_feed == null ? "—" : String(r.in_feed) }), el("td", { "class": "m", text: String(r.nieuw_totaal || 0) }),
+        el("td", { "class": "m", text: String(r.relevant || 0) }), el("td", { "class": "m", text: String(r.dubbel_totaal || 0) }),
+        el("td", { "class": "m" }, ["id" in r && r.soort !== "waarschuwingen" && r.id !== "gdacs" ? iv : String(r.interval), " min"]),
+        el("td", {}, [r.soort === "waarschuwingen" || r.id === "gdacs" ? el("span", { text: "altijd" }) : knop(actief ? "Uitschakelen" : "Inschakelen", { actie: "bron", id: r.id, actief: !actief }, actief ? null : "p")])
+      ]));
+    });
+
+    var gb = leeg(document.getElementById("g-tabel")), gl = s.geblokkeerd || [];
+    document.getElementById("g-n").textContent = gl.length + " dossiers";
+    gl.forEach(function (d) { gb.appendChild(el("tr", {}, [el("td", { text: d.land }), el("td", { text: d.kop }), el("td", {}, [knop("Deblokkeren", { actie: "deblokkeer", id: d.id })])])); });
+    if (!gl.length) gb.appendChild(el("tr", {}, [el("td", { "class": "leeg", text: "Niets geblokkeerd." })]));
+  }
+  document.querySelectorAll("th[data-s]").forEach(function (th) { th.addEventListener("click", function () { var s = th.dataset.s; S.omgekeerd = S.sort === s ? !S.omgekeerd : false; S.sort = s; teken(); }); });
+  ["d-zoek", "b-zoek", "b-filter"].forEach(function (id) { document.getElementById(id).addEventListener("input", teken); });
+  function laad() {
+    var api = LOKAAL ? fetch("/api/wereldweer/beheer", { cache: "no-store" }).then(function (r) { if (!r.ok) throw 0; return r.json(); }).catch(function () { return null; }) : Promise.resolve(null);
+    return Promise.all([json(DATA + "bronstatus.json"), json(DATA + "stroom.json"), api]).then(function (r) {
+      S.bron = r[0]; S.stroom = r[1]; S.beheer = r[2]; S.kan = !!r[2];
+      var m = document.getElementById("modus"); m.textContent = S.kan ? "Beheermodus (lokaal)" : "Alleen-lezen"; m.className = "modus" + (S.kan ? " aan" : "");
+      teken();
+    }).catch(function (e) { document.getElementById("sub").textContent = "Status kon niet worden geladen: " + e.message; });
+  }
+  laad(); setInterval(laad, 120000);
+})();
+</script>
+</body>
+</html>
