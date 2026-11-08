@@ -9,6 +9,7 @@ krijgt de landcoördinaat met nauwkeurigheid 'land', of geen markering.
     python3 scripts/wereldweer_geo.py IT Abruzzo  # test een opzoeking
 """
 import json
+import math
 import re
 import sys
 import unicodedata
@@ -143,35 +144,120 @@ def in_box(lat, lon, bbox, marge=1.0):
     return bbox is None or (bbox[0] - marge <= lon <= bbox[2] + marge and bbox[1] - marge <= lat <= bbox[3] + marge)
 
 
+# Aanvullende geografische objecten die in de stedenlijst ontbreken of daar alleen als alias van een stad staan
+# (Tenerife → Santa Cruz). Eilanden, archipels en grote regio's met hun Nederlandse, lokale en Engelse naam;
+# coördinaat = ongeveer het midden (GeoNames CC BY 4.0 / Natural Earth). 's' = nauwkeurigheid.
+# Zugspitze: https://www.geonames.org/DE/highest-mountains-in-germany.html
+def _obj(n, namen, lat, lon, s='regio'):
+    return {'n': n, 'k': sorted({_plat(x) for x in namen + [n]}), 'lat': lat, 'lon': lon, 's': s}
+
+
+def _plat(s):
+    """Sleutel zonder stopwoorden te schrappen: 'La Palma' ≠ 'Palma', 'El Hierro' blijft herkenbaar."""
+    s = unicodedata.normalize('NFKD', s or '').encode('ascii', 'ignore').decode().lower()
+    return re.sub(r'[^a-z0-9]+', '', s)
+
+
+OBJECTEN = {
+    'DE': [_obj('Zugspitze', [], 47.421184, 10.986352, 'locatie')],
+    'AT': [_obj('Zugspitze', [], 47.421184, 10.986352, 'locatie')],
+    'ES': [
+        _obj('Canarische Eilanden', ['Canarias', 'Islas Canarias', 'Canary Islands', 'Kanaren', 'Canaries',
+                                     'Canarische eilanden'], 28.29, -15.9),
+        _obj('Tenerife', ['Teneriffa'], 28.27, -16.61), _obj('Gran Canaria', [], 27.96, -15.59),
+        _obj('Lanzarote', [], 29.04, -13.63), _obj('Fuerteventura', [], 28.36, -14.05),
+        _obj('La Palma', ['Isla de La Palma'], 28.68, -17.86), _obj('La Gomera', ['Gomera'], 28.10, -17.23),
+        _obj('El Hierro', [], 27.74, -18.02),
+        _obj('Balearen', ['Baleares', 'Islas Baleares', 'Illes Balears', 'Balearic Islands'], 39.57, 2.9),
+        _obj('Mallorca', ['Majorca'], 39.62, 2.98), _obj('Menorca', ['Minorca'], 39.95, 4.11),
+        _obj('Ibiza', ['Eivissa'], 38.98, 1.43), _obj('Formentera', [], 38.70, 1.45),
+        _obj('Andalusië', ['Andalucía', 'Andalucia', 'Andalusia'], 37.46, -4.58),
+        _obj('Catalonië', ['Cataluña', 'Catalunya', 'Catalonia'], 41.82, 1.53),
+        _obj('Galicië', ['Galicia'], 42.76, -7.91), _obj('Baskenland', ['País Vasco', 'Euskadi', 'Basque Country'], 43.04, -2.62),
+        _obj('Aragón', ['Aragon'], 41.52, -0.66),
+    ],
+    'PT': [_obj('Azoren', ['Açores', 'Acores', 'Azores'], 38.5, -28.0), _obj('Madeira', ['Ilha da Madeira'], 32.75, -16.96)],
+    'FR': [_obj('Corsica', ['Corse', 'Korsika'], 42.15, 9.11)],
+    'IT': [_obj('Sardinië', ['Sardegna', 'Sardinia', 'Sardinien'], 40.08, 9.03),
+           _obj('Sicilië', ['Sicilia', 'Sicily', 'Sizilien'], 37.55, 14.15)],
+    'GR': [_obj('Kreta', ['Crete', 'Kriti', 'Κρήτη'], 35.24, 24.81), _obj('Rhodos', ['Rhodes', 'Rodos', 'Ρόδος'], 36.17, 27.92),
+           _obj('Corfu', ['Kerkyra', 'Korfu'], 39.62, 19.92), _obj('Evia', ['Euboea', 'Euboia', 'Εύβοια'], 38.55, 23.85)],
+    'GB': [_obj('Schotland', ['Scotland'], 56.8, -4.2), _obj('Wales', [], 52.3, -3.7),
+           _obj('Noord-Ierland', ['Northern Ireland'], 54.65, -6.75), _obj('Engeland', ['England'], 52.6, -1.5)],
+}
+
+
+def _afstand(a, b):
+    la1, lo1, la2, lo2 = map(math.radians, (a['lat'], a['lon'], b['lat'], b['lon']))
+    v = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
+    return 12742 * math.asin(min(1, math.sqrt(v)))
+
+
+def _eenduidig(kandidaten):
+    # Natural Earth en GeoNames bevatten vaak dezelfde stad. Alleen nabije duplicaten
+    # mogen samenvallen; inwonertal bewijst niet welke gelijknamige plaats bedoeld is.
+    if not kandidaten or any(_afstand(a, b) > 25 for a in kandidaten for b in kandidaten):
+        return None
+    return kandidaten[0]
+
+
 def zoek(iso, plaats=None, regio=None):
-    """→ {'lat','lon','nauwkeurigheid': plaats|regio|land, 'naam'} of None. Alleen binnen het opgegeven land."""
+    """Zoek binnen het land; onzekere of meervoudige treffers krijgen landnauwkeurigheid.
+
+    Een regio wordt nooit als stad opgezocht. Een exacte regionaam gaat voor een
+    stadsalias (New Mexico != Mexico, Kreta != Chaniá). Geen fuzzy matching.
+    """
     iso = (iso or '').upper()
     l = land(iso)
     if not l:
         return None
     g = gaz()
-    for naam, soort in ((plaats, 'plaats'), (regio, 'regio')):
-        for deel in re.split(r'\s*[,/;]\s*|\s+en\s+|\s+and\s+', naam or ''):
-            k = sleutel(deel)
-            if len(k) < 3:
-                continue
-            kand = []
-            if soort == 'plaats':
-                kand = sorted((p for p in g['plaatsen'].get(iso, []) if k in p['k']), key=lambda p: -p['pop'])
-            if not kand:  # plaatsnaam kan ook een regionaam zijn (en omgekeerd)
-                kand = [r for r in g['regios'].get(iso, []) if k in r['k']]
-                soort_echt = 'regio'
-            else:
-                soort_echt = 'plaats'
-            if not kand and soort == 'regio':
-                kand = sorted((p for p in g['plaatsen'].get(iso, []) if k in p['k']), key=lambda p: -p['pop'])
-                soort_echt = 'plaats'
-            if kand:
-                c = kand[0]
-                return {'lat': c['lat'], 'lon': c['lon'], 'nauwkeurigheid': soort_echt, 'naam': c['n']}
+
+    def resultaat(c, soort):
+        return {'lat': c['lat'], 'lon': c['lon'], 'nauwkeurigheid': soort, 'naam': c['n']}
+
+    def opzoeken(naam, stad):
+        k = sleutel(naam)
+        if len(k) < 3:
+            return None
+        obj = [p for p in OBJECTEN.get(iso, []) if _plat(naam) in p['k']]
+        if obj:  # vaste objecten zijn eenduidig en gaan voor stadsaliassen (Tenerife ≠ Santa Cruz)
+            return resultaat(obj[0], obj[0].get('s', 'locatie'))
+        rs = [r for r in g['regios'].get(iso, []) if k in r['k']]
+        ps = [p for p in g['plaatsen'].get(iso, []) if k in p['k']] if stad else []
+        # GeoNames-stadsaliassen kunnen ook eilanden/regio’s noemen (Tenerife bij
+        # Santa Cruz). Gebruik daarvan alleen de canonieke naam; Natural Earth
+        # heeft afzonderlijk geselecteerde meertalige stadsnamen (adm1 aanwezig).
+        # Canonieke namen gaan voor aliassen, ongeacht inwonertal.
+        exact_r = [r for r in rs if sleutel(r['n']) == k]
+        exact_p = sorted((p for p in ps if sleutel(p['n']) == k), key=lambda p: -p.get('pop', 0))
+        for kandidaten, soort in ((exact_p, 'plaats'), (exact_r, 'regio'),
+                                   ([p for p in ps if p.get('adm1') is not None], 'plaats'),
+                                   (rs, 'regio')):
+            if kandidaten:
+                c = _eenduidig(kandidaten)
+                return resultaat(c, soort) if c else None
+        return None
+
+    # Een lijst gebieden is geen puntlocatie: alleen gelijkliggende treffers mogen
+    # samenvallen. Onbekende onderdelen maken de hele veldwaarde onzeker.
+    for naam, stad in ((plaats, True), (regio, False)):
+        delen = [d for d in re.split(r'\s*[,/;]\s*|\s+en\s+|\s+and\s+', naam or '') if d.strip()]
+        if not delen:
+            continue
+        treffers = [opzoeken(d, stad) for d in delen]
+        if all(treffers):
+            c = _eenduidig(treffers)
+            if c:
+                return c
+            # aangrenzende gebieden ('Georgia, Tennessee'): het midden, als ze dicht genoeg bij elkaar liggen
+            if max(_afstand(a, b) for a in treffers for b in treffers) <= 700:
+                return {'lat': round(sum(t['lat'] for t in treffers) / len(treffers), 2),
+                        'lon': round(sum(t['lon'] for t in treffers) / len(treffers), 2),
+                        'nauwkeurigheid': 'gebied', 'naam': ' / '.join(t['naam'] for t in treffers)}
     if l['lat'] is None:
         return None
-    return {'lat': l['lat'], 'lon': l['lon'], 'nauwkeurigheid': 'land', 'naam': l['nl']}
+    return resultaat({'lat': l['lat'], 'lon': l['lon'], 'n': l['nl']}, 'land')
 
 
 @lru_cache(1)

@@ -449,7 +449,7 @@ dialog#detail::backdrop{background:rgba(15,23,42,.55)}
       var t = svgEl("text", { x: w / 2, y: h / 2 + 5, "text-anchor": "middle", "font-size": Math.max(11, h / 9), "font-family": "DM Sans", "font-weight": "700", fill: catKleur(d.cat) });
       t.textContent = catNaam(d.cat); svg.appendChild(t); return svg;
     }
-    var span = ruim || (geo.nauwkeurigheid === "land" ? 24 : 14);
+    var span = ruim || (geo.nauwkeurigheid === "land" ? 24 : geo.nauwkeurigheid === "gebied" ? 18 : 12);
     var cos = Math.max(Math.cos(geo.lat * Math.PI / 180), .3);
     var dlon = span, dlat = span * h / w * cos;
     var b = [geo.lon - dlon / 2, geo.lon + dlon / 2, geo.lat - dlat / 2, geo.lat + dlat / 2];
@@ -459,7 +459,9 @@ dialog#detail::backdrop{background:rgba(15,23,42,.55)}
       var bb = f._bb; if (bb && (bb[2] < b[0] || bb[0] > b[1] || bb[3] < b[2] || bb[1] > b[3])) return;
       svg.appendChild(svgEl("path", { d: padVoor(f.p, p), fill: f.i === d.land ? "#f2ead8" : "#f8f6f1", stroke: "#a3b1c2", "stroke-width": f.i === d.land ? 1.1 : .6 }));
     });
-    var q = p(geo.lon, geo.lat), c = catKleur(d.cat), r = geo.nauwkeurigheid === "land" ? h / 4.2 : h / 7;
+    // alleen het land bekend: land gemarkeerd, geen stip (die zou een plek suggereren die we niet weten)
+    if (geo.nauwkeurigheid === "land") return svg;
+    var q = p(geo.lon, geo.lat), c = catKleur(d.cat), r = geo.nauwkeurigheid === "plaats" ? h / 9 : h / 6;
     svg.appendChild(svgEl("circle", { cx: q[0], cy: q[1], r: r, fill: c, "fill-opacity": ".16", stroke: c, "stroke-opacity": ".5", "stroke-width": 1.2 }));
     svg.appendChild(svgEl("circle", { cx: q[0], cy: q[1], r: Math.max(4, h / 26), fill: c, stroke: "#fff", "stroke-width": 2 }));
     return svg;
@@ -730,7 +732,7 @@ dialog#detail::backdrop{background:rgba(15,23,42,.55)}
 
   // ---------------------------------------------------------------- kaart
   var K = { W: 1000, H: 690, b: null, p: null, k: 1, tx: 0, ty: 0, svg: null, gLand: null, gMk: null };
-  var GEBIED = { europa: [-26, 46, 33.5, 71.5], wereld: [-180, 180, -58, 82] };
+  var GEBIED = { europa: [-26, 46, 26.5, 71.5], wereld: [-180, 180, -58, 82] }; // zuidgrens 26,5°N: Canarische Eilanden en Madeira horen erbij
   function kaartProj() {
     var b = GEBIED[S.kaart.gebied];
     var cos = S.kaart.gebied === "europa" ? Math.cos(52 * Math.PI / 180) : 1;
@@ -767,7 +769,7 @@ dialog#detail::backdrop{background:rgba(15,23,42,.55)}
   function markersData() {
     var uit = [], ka = S.kaart;
     if (ka.lagen.nieuws) zichtbaar().forEach(function (d) {
-      if (!d.geo || d.geo.lat == null || uren(d) > 96 && !S.zoek) return;
+      if (!d.geo || d.geo.lat == null || d.geo.nauwkeurigheid === "land" || uren(d) > 96 && !S.zoek) return; // alleen land bekend: geen punt
       if (!ka.gevaar[gevaarVan(d.cat)]) return;
       uit.push({ t: "n", lat: d.geo.lat, lon: d.geo.lon, kleur: catKleur(d.cat), score: d.score, d: d, r: 5 + Math.min(d.score, 90) / 13 });
     });
@@ -996,7 +998,7 @@ dialog#detail::backdrop{background:rgba(15,23,42,.55)}
         el("dt", { text: "Laatste bron" }), el("dd", { text: tijdKort(d.laatste_bron) }),
         el("dt", { text: "Tekst bijgewerkt" }), el("dd", { text: tijdKort(d.inhoud_bijgewerkt) }),
         el("dt", { text: "Gecontroleerd" }), el("dd", { text: tijdKort(S.stroom.gemaakt) }),
-        d.geo ? el("dt", { text: "Kaartpunt" }) : null, d.geo ? el("dd", { text: d.geo.naam + " (" + d.geo.nauwkeurigheid + ")" }) : null
+        d.geo ? el("dt", { text: "Kaartpunt" }) : null, d.geo ? el("dd", { text: d.geo.nauwkeurigheid === "land" ? "alleen land bekend" : d.geo.naam + " (" + d.geo.nauwkeurigheid + ")" }) : null
       ]),
       d.geo ? el("button", { "class": "chip", style: "margin-top:10px", type: "button", on: { click: function () { sluit(); naarKaart(d.geo.lat, d.geo.lon, isEuropa(d) ? "europa" : "wereld"); } }, text: "Toon op de kaart" }) : null,
       el("details", { "class": "score" }, [el("summary", { text: "Waarom staat dit bericht hier?" }), el("p", { style: "margin:4px 0", text: "Interne score 0–100 uit actualiteit, bijzonderheid, impact, betrouwbaarheid van de bron, bevestiging, Europa en nieuwheid." }), tbl])

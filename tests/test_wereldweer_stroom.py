@@ -156,6 +156,15 @@ class TestScoreEnGeo(unittest.TestCase):
         self.assertEqual(G.zoek('FR', None, 'Corse')['nauwkeurigheid'], 'regio')
         self.assertEqual(G.zoek('IT', 'Onbekendedorp')['nauwkeurigheid'], 'land')
         self.assertIsNone(G.zoek('ZZ', 'X'))
+        # eilanden en archipels: niet het midden van het vasteland, niet de hoofdstad van het eiland
+        t = G.zoek('ES', 'Tenerife', 'Canarische Eilanden')
+        self.assertLess(t['lat'], 29.5)
+        self.assertLess(t['lon'], -13)
+        self.assertLess(G.zoek('ES', None, 'Canarische Eilanden')['lat'], 29.5)
+        self.assertAlmostEqual(G.zoek('ES', 'La Palma')['lon'], -17.86, delta=0.3)
+        self.assertAlmostEqual(G.zoek('ES', 'Palma')['lon'], 2.65, delta=0.3)       # Palma de Mallorca
+        self.assertAlmostEqual(G.zoek('PT', None, 'Azoren')['lon'], -28, delta=2)
+        self.assertEqual(G.zoek('US', 'McCaysville', 'Georgia, Tennessee')['nauwkeurigheid'], 'gebied')
         self.assertEqual(G.groepen('AT')[:2], ['europa', 'alpen'])
         self.assertIn('alpen', G.groepen('FR', 45.92, 6.87))  # Chamonix
         self.assertEqual(G.groepen('JP'), ['azie'])
