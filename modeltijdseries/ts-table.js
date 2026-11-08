@@ -52,7 +52,7 @@
     h.push('</tr><tr class="ts-hourrow">');
     for (i = 0; i < times.length; i++) {
       var pp = C.parts(times[i], tz);
-      h.push('<th data-c="' + i + '"' + (newDay[i] ? ' class="ts-nd"' : '') + '>' + pp.hour + '</th>');
+      h.push('<th data-c="' + i + '"' + (newDay[i] ? ' class="ts-nd"' : '') + '>' + pp.hour + (pp.minute !== '00' ? ':' + pp.minute : '') + '<small>' + C.tzLabel(times[i], tz) + '</small></th>');
     }
     h.push('</tr></thead><tbody>');
     opts.rows.forEach(function (r) {
@@ -69,7 +69,7 @@
         var c = cells[j];
         var k = (newDay[j] ? 'ts-nd ' : '') + (c && c[3] ? c[3] : '');
         var cls = k.trim() ? ' class="' + k.trim() + '"' : '';
-        if (!c) { h.push('<td' + cls + '></td>'); continue; }
+        if (!c) { h.push('<td' + cls + ' title="Geen uitvoerstap">—</td>'); continue; }
         h.push('<td' + cls + (c[1] ? ' style="' + c[1] + '"' : '') + (c[2] ? ' title="' + attr(c[2]) + '"' : '') + '>' + c[0] + '</td>');
       }
       h.push('</tr>');

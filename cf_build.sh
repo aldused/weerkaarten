@@ -49,6 +49,12 @@ if [ -d klimatologie-data ]; then
   cp -R klimatologie-data "$STAGE/klimatologie-data"
 fi
 
+# Modeltijdseries: scripts, stijlen en locatie-index bij de pagina houden.
+if [ -d modeltijdseries ]; then
+  mkdir -p "$STAGE/modeltijdseries"
+  cp modeltijdseries/ts-*.js modeltijdseries/ts.css modeltijdseries/plaatsen.json "$STAGE/modeltijdseries/"
+fi
+
 # Pas vervangen wanneer de volledige staging-build geslaagd is. Hiermee
 # verdwijnen ook oude bestanden die niet meer in de bronroot bestaan.
 rm -rf "$OUTPUT"

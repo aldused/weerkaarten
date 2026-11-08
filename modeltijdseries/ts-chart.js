@@ -94,7 +94,7 @@
     this.series = []; this.times = []; this.range = null; this.full = null;
     this.hoverT = null; this.selT = null; this.listeners = {};
     this.units = { wind: 'kt', height: 'm' }; this.tz = 'local'; this.place = null;
-    this.M = { l: 58, r: 14, t: 26, b: 22, gap: 8 };
+    this.M = { l: 66, r: 16, t: 48, b: 30, gap: 44 };
     this._bind();
     var self = this;
     if (root.ResizeObserver) new ResizeObserver(function () { self.resize(); }).observe(el);
@@ -139,9 +139,11 @@
     var panels = this.panelsUsed();
     var base = panels.reduce(function (a, k) { return a + C.PANELS[k].h; }, 0) || 1;
     var avail = H - M.t - M.b - M.gap * Math.max(0, panels.length - 1);
+    var minimum = panels.reduce(function (n, k) { return n + (k === 'wdir' ? 94 : 120); }, 0);
+    var extra = Math.max(0, avail - minimum);
     var y = M.t, out = [];
     panels.forEach(function (k) {
-      var h = Math.max(46, Math.floor(avail * C.PANELS[k].h / base));
+      var h = (k === 'wdir' ? 94 : 120) + Math.floor(extra * C.PANELS[k].h / base);
       out.push({ key: k, y: y, h: h });
       y += h + M.gap;
     });
@@ -222,7 +224,7 @@
       var xa = self.x(d.t), xb = i + 1 < days.length ? self.x(days[i + 1].t) : x1;
       if (xa >= x0 - 1) g.line([[Math.round(xa) + .5, M.t - 18], [Math.round(xa) + .5, self.H - M.b]], th.day, 1, [3, 3]);
       var cx = (Math.max(xa, x0) + Math.min(xb, x1)) / 2;
-      if (Math.min(xb, x1) - Math.max(xa, x0) > 54) g.text(cx, 14, d.label, '600 11px ' + th.font, th.text, 'center', 'middle');
+      if (Math.min(xb, x1) - Math.max(xa, x0) > 54) g.text(cx, 10, d.label, '600 11px ' + th.font, th.text, 'center', 'middle');
     });
     g.unclip();
     // uurmarkeringen onderaan
@@ -242,10 +244,11 @@
         var lab = sc.log ? (v >= 1000 ? (v / 1000) + ' km' : v + ' m') : fmtNum(v, sc.step && sc.step < 1 ? (sc.step < 0.1 ? 2 : 1) : 0);
         if (P.key === 'wdir' && v < 360) lab = C.compass(v) || 'N';
         if (P.key === 'wdir' && v === 360) lab = 'N';
-        g.text(x0 - 6, y, lab, '500 10px ' + th.mono, th.axis, 'right', 'middle');
+        g.text(x0 - 6, y, lab, '500 11px ' + th.mono, th.axis, 'right', 'middle');
       });
       ticks.forEach(function (t) { var x = Math.round(self.x(t)) + .5; if (x > x0 && x < x1) g.line([[x, P.y], [x, P.y + P.h]], th.grid, 1); });
-      g.text(x0 + 6, P.y + 12, cfg.label + ' (' + self.unitLabel(cfg.unit) + ')', '700 10px ' + th.font, th.axis, 'left', 'middle');
+      g.rect(x0, P.y - 27, x1 - x0, 21, th.bg);
+      g.text(x0, P.y - 16, cfg.label + ' · ' + self.unitLabel(cfg.unit) + (P.key === 'cbh' || P.key === 'blh' ? ' boven grondniveau' : P.key === 'precip' ? ' per uitvoerinterval' : ''), '700 12px ' + th.font, th.text, 'left', 'middle');
       g.strokeRect(x0, P.y, x1 - x0, P.h, th.grid);
     });
     // reeksen
@@ -290,9 +293,14 @@
     ticks.forEach(function (t) {
       var x = self.x(t); if (x < x0 + 8 || x > x1 - 8) return;
       var pp = C.parts(t, self.tz);
-      g.text(x, self.H - M.b + 14, pp.hour + (stepH >= 24 ? '' : ''), '500 10px ' + th.mono, th.axis, 'center', 'middle');
+      g.text(x, self.H - M.b + 14, pp.hour + (stepH >= 24 ? '' : ''), '500 11px ' + th.mono, th.axis, 'center', 'middle');
     });
     g.text(M.l - 6, this.H - M.b + 14, C.tzLabel(r[0], this.tz), '700 9px ' + th.font, th.axis, 'right', 'middle');
+    var now = Date.now(), nx = self.x(now);
+    if (nx >= x0 && nx <= x1) {
+      g.line([[nx, M.t - 4], [nx, this.H - M.b]], th.axis, 1, [5, 4]);
+      g.text(nx + 4, this.H - 4, 'nu', '600 10px ' + th.font, th.axis, 'left', 'middle');
+    }
     if (opt.selected && this.selT != null) {
       var xs = Math.round(this.x(this.selT)) + .5;
       if (xs >= x0 && xs <= x1) g.line([[xs, M.t - 4], [xs, this.H - M.b]], th.sel, 2);
@@ -386,23 +394,29 @@
     var byParam = {};
     this.series.forEach(function (s) { (byParam[s.param] = byParam[s.param] || []).push(s); });
     Object.keys(byParam).forEach(function (pid) {
-      var P = C.PARAM[pid], cells = [];
+      var P = C.PARAM[pid];
+      html.push('<div class="ts-tip-param">' + P.label + (P.unit ? ' · ' + self.unitLabel(P.unit) : '') + '</div>');
       byParam[pid].forEach(function (s) {
         var i = s.t.indexOf(t), v = i >= 0 ? s.v[i] : NaN, txt;
-        if (P.kind === 'dir') txt = isFinite(v) ? Math.round(v) + '° ' + C.compass(v) : '—';
-        else if (s.na && i >= 0 && s.na[i]) txt = 'geen';
+        if (i < 0) txt = t < s.t[0] || t > s.t[s.t.length - 1] ? 'buiten voorspellingsperiode' : 'geen uitvoerstap';
+        else if (P.kind === 'dir') txt = isFinite(v) ? Math.round(v) + '° ' + C.compass(v) : 'geen richting / waarde ontbreekt';
+        else if (s.na && s.na[i]) txt = 'geen basis volgens modeldefinitie';
+        else if (!isFinite(v)) txt = 'waarde ontbreekt';
         else txt = fmtNum(self.conv(pid, v), P.unit === 'wind' && self.units.wind === 'ms' ? 1 : P.unit === 'height' ? 0 : P.dec);
-        if (P.kind === 'bar' && isFinite(v) && s.window && s.window[i]) txt += ' <span class="ts-tip-w">/' + (s.window[i][1] - s.window[i][0]) + 'u</span>';
-        cells.push('<span class="ts-tip-m" style="--c:' + s.color + '">' + C.MODELS[s.model].short + '</span> <b>' + txt + '</b>');
+        var win = i >= 0 && s.window && s.window[i];
+        var timing = function (tt) { var pp = C.parts(tt, self.tz); return pp.day + '-' + pp.month + ' ' + pp.hour + ':' + pp.minute + ' ' + C.tzLabel(tt, self.tz); };
+        var detail = s.run ? 'run ' + timing(Date.parse(s.run)) : '';
+        if (win) detail += ' · interval ' + timing(t - (win[1] - win[0]) * HOUR) + ' – ' + timing(t) + ' (' + (win[1] - win[0]) + ' uur)';
+        if (s.derived) detail += ' · berekend';
+        html.push('<div class="ts-tip-r"><span class="ts-tip-m" style="--c:' + s.color + '">' + C.MODELS[s.model].label + '</span><b>' + txt + '</b></div><div class="ts-tip-detail">' + detail + '</div>');
       });
-      html.push('<div class="ts-tip-r"><span class="ts-tip-l">' + P.label + '</span><span class="ts-tip-v">' + cells.join(' ') + (P.kind === 'dir' ? '' : ' <i>' + self.unitLabel(P.unit) + '</i>') + '</span></div>');
     });
     this.tip.innerHTML = html.join('');
     this.tip.hidden = false;
     var w = this.tip.offsetWidth, left = x + 14;
     if (left + w > this.W - 4) left = x - 14 - w;
     this.tip.style.left = Math.max(4, left) + 'px';
-    this.tip.style.top = (this.M.t + 4) + 'px';
+    this.tip.style.top = ((this.el.scrollTop || 0) + 8) + 'px';
   };
 
   TSChart.prototype.setHover = function (t, silent) {
@@ -432,6 +446,9 @@
     el.addEventListener('pointerdown', function (e) {
       if (!self.range || e.button !== 0) return;
       var r = el.getBoundingClientRect();
+      self.hoverT = self.nearestTime(self.t(e.clientX - r.left));
+      self.hoverY = e.clientY - r.top;
+      self.drawOverlay();
       drag = { x: e.clientX - r.left, r: self.range.slice(), moved: false };
       el.setPointerCapture(e.pointerId);
     });
@@ -440,6 +457,7 @@
       var moved = drag.moved; drag = null;
       if (!moved && self.hoverT != null) self.emit('select', self.hoverT);
     });
+    el.addEventListener('pointercancel', function () { drag = null; });
     el.addEventListener('dblclick', function () { if (self.full) self.setRange(self.full[0], self.full[1]); });
     el.addEventListener('wheel', function (e) {
       if (!self.range) return;
@@ -463,27 +481,33 @@
   TSChart.prototype.zoom = function (factor) { var r = this.range; if (r) this.zoomAt((r[0] + r[1]) / 2, factor); };
 
   // ------------------------------------------------------------------ export
+  function headerRows(header, width) {
+    if (!header) return [];
+    var out = [], max = Math.max(28, Math.floor((width - 36) / 6));
+    header.forEach(function (line) { var row = ''; String(line).split(/\s+/).forEach(function (word) { if (row && row.length + word.length > max) { out.push(row); row = ''; } row += (row ? ' ' : '') + word; }); if (row) out.push(row); });
+    return out;
+  }
   TSChart.prototype.exportCanvas = function (scale, header) {
-    var s = scale || 2, th = theme(), hh = header ? 44 : 0;
+    var s = scale || 2, th = theme(), rows = headerRows(header, this.W), hh = rows.length ? rows.length * 16 + 32 : 0;
     var cv = document.createElement('canvas');
     cv.width = Math.round(this.W * s); cv.height = Math.round((this.H + hh) * s);
     var ctx = cv.getContext('2d'); ctx.scale(s, s);
     ctx.fillStyle = th.bg; ctx.fillRect(0, 0, this.W, this.H + hh);
     if (header) {
       var g0 = new CanvasG(ctx);
-      g0.text(this.M.l, 18, header[0], '700 13px ' + th.font, th.text, 'left', 'middle');
-      g0.text(this.M.l, 34, header[1], '500 10px ' + th.font, th.axis, 'left', 'middle');
+      rows.forEach(function (row, i) { g0.text(18, 16 + i * 16, row, (i ? '500 10px ' : '700 13px ') + th.font, th.text, 'left', 'middle'); });
+      C.MODEL_IDS.forEach(function (m, i) { g0.text(18 + i * 140, hh - 12, C.MODELS[m].label, '700 11px ' + th.font, C.MODELS[m].color, 'left', 'middle'); });
     }
     ctx.translate(0, hh);
     this.paint(new CanvasG(ctx), th, { selected: false });
     return cv;
   };
   TSChart.prototype.exportSVG = function (header) {
-    var th = theme(), hh = header ? 44 : 0;
+    var th = theme(), rows = headerRows(header, this.W), hh = rows.length ? rows.length * 16 + 32 : 0;
     var g = new SvgG(this.W, this.H + hh, th.bg);
     if (header) {
-      g.text(this.M.l, 18, header[0], '700 13px ' + th.font, th.text, 'left', 'middle');
-      g.text(this.M.l, 34, header[1], '500 10px ' + th.font, th.axis, 'left', 'middle');
+      rows.forEach(function (row, i) { g.text(18, 16 + i * 16, row, (i ? '500 10px ' : '700 13px ') + th.font, th.text, 'left', 'middle'); });
+      C.MODEL_IDS.forEach(function (m, i) { g.text(18 + i * 140, hh - 12, C.MODELS[m].label, '700 11px ' + th.font, C.MODELS[m].color, 'left', 'middle'); });
     }
     g.o.push('<g transform="translate(0,' + hh + ')">');
     this.paint(g, th, { selected: false });

@@ -115,13 +115,13 @@
   var PANELS = {
     temp: { label: 'Temperatuur', unit: '°C', h: 150 },
     spread: { label: 'T − Td', unit: '°C', h: 80, min0: true },
-    rh: { label: 'Rel. vochtigheid', unit: '%', h: 80, fixed: [0, 100] },
+    rh: { label: 'Rel. vochtigheid', unit: '%', h: 80, fixed: [0, 100], ticks: [0, 25, 50, 75, 100] },
     wind: { label: 'Wind', unit: 'wind', h: 140, min0: true },
     wdir: { label: 'Windrichting', unit: '°', h: 90, fixed: [0, 360], ticks: [0, 90, 180, 270, 360] },
     msl: { label: 'Luchtdruk', unit: 'hPa', h: 100 },
     precip: { label: 'Neerslag', unit: 'mm', h: 90, min0: true, minMax: 1 },
     prate: { label: 'Intensiteit', unit: 'mm/u', h: 80, min0: true, minMax: 1 },
-    cloud: { label: 'Bewolking', unit: '%', h: 100, fixed: [0, 100] },
+    cloud: { label: 'Bewolking', unit: '%', h: 100, fixed: [0, 100], ticks: [0, 25, 50, 75, 100] },
     cbh: { label: 'Wolkenbasis', unit: 'height', h: 100, min0: true },
     vis: { label: 'Zicht', unit: 'm', h: 100, log: true, fixed: [50, 50000] },
     cape: { label: 'CAPE', unit: 'J/kg', h: 80, min0: true, minMax: 100 },
@@ -133,7 +133,8 @@
   function nearestPoint(man, lat, lon) {
     var g = man.grid;
     var iy = Math.round((lat - g.lat0) / g.dlat), ix = Math.round((lon - g.lon0) / g.dlon);
-    var inside = iy >= 0 && iy < g.nlat && ix >= 0 && ix < g.nlon;
+    var lat1 = g.lat0 + (g.nlat - 1) * g.dlat, lon1 = g.lon0 + (g.nlon - 1) * g.dlon;
+    var inside = Number.isFinite(lat) && Number.isFinite(lon) && lat >= Math.min(g.lat0, lat1) - 1e-8 && lat <= Math.max(g.lat0, lat1) + 1e-8 && lon >= Math.min(g.lon0, lon1) - 1e-8 && lon <= Math.max(g.lon0, lon1) + 1e-8;
     if (!inside) return { inside: false };
     var plat = g.lat0 + iy * g.dlat, plon = g.lon0 + ix * g.dlon;
     return { inside: true, iy: iy, ix: ix, lat: plat, lon: plon, km: distKm(lat, lon, plat, plon) };
@@ -233,6 +234,7 @@
         v: arr(function (i) {
           if (!isFinite(r[i])) return NaN;
           if (r[i] < 0.05) return 0;
+          if (!isFinite(sn[i])) return NaN;
           var f = sn[i] / r[i];
           return f >= 0.8 ? 5 : f <= 0.2 ? 1 : 7;
         }), derived: true, coded: 'wmo',
@@ -300,7 +302,7 @@
       var lsm = deq.lsm ? deq.lsm.v[0] : NaN, orog = deq.orog ? deq.orog.v[0] : NaN;
       return {
         inside: true, point: np, lsm: lsm, orog: orog,
-        valid: man.valid.map(function (s) { return Date.parse(s.replace('Z', ':00Z')); }),
+        valid: man.valid.map(function (s) { return Date.parse(s); }),
         leads: man.leads, raw: deq, series: deriveSeries(deq, man)
       };
     });

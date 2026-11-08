@@ -20,7 +20,7 @@
       bands: [[1, '#9b6bd6', 0.35], [2.5, '#c4a5ec', 0.25]], below: true
     },
     rh: {
-      basis: 'RV ≥ 97 % (verzadiging binnen modelonzekerheid) en ≥ 90 %.',
+      basis: 'Instelbare visualisatiegrenzen: RV 90 en 97 %. Geen gekwantificeerde modelonzekerheid.',
       bands: [[90, '#c4a5ec', 0.22], [97, '#9b6bd6', 0.32]], above: true
     },
     wspd: {
@@ -29,15 +29,15 @@
     },
     wspd50: { same: 'wspd' }, wspd100: { same: 'wspd' },
     gust: {
-      basis: 'Windstoten: 60 km/u (16,7 m/s) aandachtsniveau; 75 / 100 / 120 km/u = KNMI-waarschuwingscriteria code geel / oranje / rood (binnenland, indicatief).',
+      basis: 'Instelbare visualisatiegrenzen: 60, 75, 100 en 120 km/u. Dit zijn geen officiële waarschuwingen; tijdvensters verschillen per model.',
       bands: [[16.7, '#f6d365', 0.35], [20.8, '#f59f00', 0.45], [27.8, '#e8590c', 0.50], [33.3, '#c92a2a', 0.55]], above: true
     },
     vis: {
-      basis: 'Zicht < 5000 m (nevel/VFR-zichtminimum), < 1000 m (mist, KNMI/WMO), < 200 m (dichte mist, KNMI-waarschuwingscriterium).',
+      basis: 'Visualisatiegrenzen: 5000, 1000 en 200 m. Geen beoordeling van vliegminima of officiële waarschuwing.',
       bands: [[5000, '#ffe8a3', 0.35], [1000, '#f59f00', 0.40], [200, '#c92a2a', 0.50]], below: true
     },
     cbh: {
-      basis: 'Wolkenbasis < 1500 ft (457 m), < 1000 ft (305 m), < 500 ft (152 m): gangbare luchtvaartklassen (MVFR/IFR/LIFR). Modelbasis, geen ceiling.',
+      basis: 'Visualisatiegrenzen: 1500, 1000 en 500 ft. Alleen modelwolkenbasis boven grondniveau; geen ceiling of vliegconditieclassificatie.',
       bands: [[457, '#ffe8a3', 0.30], [305, '#f59f00', 0.35], [152, '#c92a2a', 0.45]], below: true
     },
     ceiling: { same: 'cbh' },
@@ -76,7 +76,7 @@
     view: 'both',
     tableMode: 'combined',
     chartHeight: 560,
-    diff: { on: true, t2m: 2, td2m: 2, wspd: 5, gust: 7.5, msl: 2, tcc: 40, vis: 3000, cbh: 300 }  // m/s- of interne eenheden
+    diff: { on: false, t2m: 2, td2m: 2, wspd: 5, gust: 7.5, msl: 2, tcc: 40, vis: 3000, cbh: 300 }  // m/s- of interne eenheden
   };
 
   var REFRESH_MS = 5 * 60 * 1000;   // runs.json opnieuw bekijken (klein bestand, CDN max-age 30 s)
