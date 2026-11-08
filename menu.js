@@ -307,7 +307,9 @@
   }
   const normalize=value=>value.toLocaleLowerCase('nl').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/mos[\s/-]*mix/g,'mosmix').replace(/[^a-z0-9]+/g,' ').trim();
   const searchIndex=new Map(products.map(p=>[p.id,normalize(p.name+' '+p.description+' '+p.keywords+' '+typeNames[p.type]+' '+categories[p.category].name+' '+({radar:'regen buien neerslag',nowcast:'regen buien neerslag verwachting',satelliet:'wolken',bliksem:'onweer ontladingen',actueel:'actueel temperatuur stations vandaag',normalen:'klimaat normaal',droogte:'droogte neerslagtekort'}[p.id]||''))]));
+  const isPlumeSearch=q=>/^(weer)?pluim(en)?$/.test(normalize(q));
   function findResults(q){
+    if(isPlumeSearch(q))return [byId.get('pluim-ens6')].filter(Boolean);
     const synonyms={regen:'neerslag',wolken:'bewolking',temperaturen:'temperatuur'};
     const terms=normalize(q).split(' ').filter(Boolean);
     return products.filter(p=>terms.every(term=>{const txt=searchIndex.get(p.id);return txt.includes(term) || !!synonyms[term]&&txt.includes(synonyms[term]);})).sort((a,b)=>Number(normalize(b.name).includes(normalize(q)))-Number(normalize(a.name).includes(normalize(q))));
@@ -499,6 +501,7 @@
       if(search.value.trim()){
         if(state.page!=='zoeken')searchOrigin=location.hash||'#start';
         if(dialog.open)closeDialog();
+        if(event.key==='Enter'&&isPlumeSearch(search.value)){navigate('#pluim-ens6');return;}
         navigate('#menu/zoeken?q='+encodeURIComponent(search.value.slice(0,180)),{replace:state.page==='zoeken',keepScroll:true});
         main.querySelector('.row-link')?.focus();
       }
