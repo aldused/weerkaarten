@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="Verklein een foto tot minder dan 500 KB, met of zonder naam en woonplaats.">
+<meta name="description" content="Verklein een foto met verliesvrije opslag, met of zonder naam en woonplaats.">
 <title>Ingezonden foto voorbereiden – Weerlab</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -123,7 +123,7 @@ button{cursor:pointer}
 <main class="wrap">
   <section class="intro">
     <h2>Van inzending naar publicatieklare foto</h2>
-    <p>Kies een van de twee opties: alleen de foto verkleinen, of ook naam en woonplaats toevoegen. Je downloadt een JPEG van minder dan 500 KB, met maximaal 1500 pixels aan de langste zijde.</p>
+    <p>Kies een van de twee opties: alleen de foto verkleinen, of ook naam en woonplaats toevoegen. De langste zijde wordt maximaal 1500 pixels. Standaard download je een PNG zonder extra compressieverlies. Alleen bij de compacte JPEG kan de kwaliteit verder afnemen om onder 500 KB te blijven.</p>
   </section>
 
   <fieldset class="mode-picker">
@@ -172,6 +172,15 @@ button{cursor:pointer}
             <div class="field"><label for="photographer">Naam fotograaf</label><input id="photographer" type="text" autocomplete="off" placeholder="Bijv. Tim Zijlstra"></div>
             <div class="field" id="place-field"><label for="place">Woonplaats</label><input id="place" type="text" autocomplete="off" placeholder="Bijv. Anjum"></div>
             <div class="field"><label for="province">Provincie</label><select id="province"><option value="">Wordt automatisch opgezocht</option><option>Drenthe</option><option>Flevoland</option><option>Friesland</option><option>Gelderland</option><option>Groningen</option><option>Limburg</option><option>Noord-Brabant</option><option>Noord-Holland</option><option>Overijssel</option><option>Utrecht</option><option>Zeeland</option><option>Zuid-Holland</option></select><span class="field-hint" id="province-hint">Na de woonplaats verschijnt hier automatisch de provincie.</span></div>
+          </div>
+          <div class="field" style="margin:12px 0">
+            <label for="export-format">Opslagkwaliteit</label>
+            <select id="export-format">
+              <option value="png">PNG · verliesvrij (beste kwaliteit)</option>
+              <option value="jpeg">JPEG · hoge kwaliteit</option>
+              <option value="compact">JPEG · minder dan 500 KB</option>
+            </select>
+            <span class="field-hint">PNG bewaart alle pixels van de verkleinde foto zonder extra verlies. De bestandsgrootte hangt af van de foto.</span>
           </div>
           <button class="download-btn" id="download" type="button" disabled><span aria-hidden="true">↓</span> Download foto</button>
           <p class="download-detail" id="download-detail">Kies een foto en vul naam en woonplaats in</p>
@@ -227,7 +236,8 @@ button{cursor:pointer}
 <script>
 const $=id=>document.getElementById(id);
 const MAX_SIDE=1500;
-const JPEG_QUALITY=.92;
+const JPEG_QUALITY=.98;
+const exportFormat=()=>$('export-format').value;
 const MAX_BYTES=500000;
 let exporting=false;
 const withCaption=()=>document.querySelector('input[name="photo-mode"]:checked').value==='caption';
@@ -560,7 +570,8 @@ function updateDownloadState(){
   const ready=Boolean(state.photo&&(!caption||(name&&place)));
   $('download').disabled=!ready||exporting;
   $('step-check').classList.toggle('complete',ready);
-  $('download-detail').textContent=ready?`JPEG · minder dan 500 KB · maximaal ${state.width} × ${state.height} px`:caption?'Kies een foto en vul naam en woonplaats in':'Kies een foto om te verkleinen';
+  const qualityLabel={png:'PNG · verliesvrije opslag',jpeg:'JPEG · hoge kwaliteit',compact:'JPEG · minder dan 500 KB'}[exportFormat()];
+  $('download-detail').textContent=ready?`${qualityLabel} · ${state.width} × ${state.height} px`:caption?'Kies een foto en vul naam en woonplaats in':'Kies een foto om te verkleinen';
 }
 
 function updateMode(){
@@ -572,6 +583,10 @@ function updateMode(){
   $('step-check').querySelector('.step-number').textContent=caption?'3':'2';
   drawPreview();
   updateDownloadState();
+}
+
+function encodePng(canvas){
+  return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('De foto kon niet worden opgeslagen.')),'image/png'));
 }
 
 function encodeJpeg(canvas,quality){
@@ -613,9 +628,14 @@ async function downloadPhoto(){
     const source=document.createElement('canvas'),preview=$('preview-canvas');
     source.width=preview.width;source.height=preview.height;
     source.getContext('2d').drawImage(preview,0,0);
-    const filename=withCaption()?cleanFileName($('photographer').value)+'.jpg':cleanFileName(state.photoName.replace(/\.[^.]+$/,''))+'-verkleind.jpg';
-    $('download-detail').textContent='Foto verkleinen tot minder dan 500 KB…';
-    const {blob,width,height}=await compressPhoto(source);
+    const format=exportFormat();
+    const extension=format==='png'?'.png':'.jpg';
+    const filename=(withCaption()?cleanFileName($('photographer').value):cleanFileName(state.photoName.replace(/\.[^.]+$/,''))+'-verkleind')+extension;
+    $('download-detail').textContent=format==='compact'?'Foto verkleinen tot minder dan 500 KB…':'Foto opslaan met behoud van kwaliteit…';
+    const {blob,width,height}=format==='compact'?await compressPhoto(source):{
+      blob:format==='png'?await encodePng(source):await encodeJpeg(source,JPEG_QUALITY),
+      width:source.width,height:source.height
+    };
     const url=URL.createObjectURL(blob),link=document.createElement('a');
     link.href=url;link.download=filename;
     document.body.appendChild(link);link.click();link.remove();
@@ -642,6 +662,7 @@ $('place').addEventListener('input',()=>{$('place-field').classList.toggle('need
 $('place').addEventListener('blur',()=>{normaliseNameFields();$('place-field').classList.toggle('needs-input',!$('place').value.trim());drawPreview();updateDownloadState();if($('place').value.trim())lookupProvince($('place').value)});
 $('province').addEventListener('change',()=>{$('province-hint').textContent=$('province').value?`In beeld: ${formatPlace($('place').value)} (${$('province').value})`:'Kies een provincie of pas de woonplaats aan.';drawPreview()});
 $('manual-place').addEventListener('click',focusManualPlace);
+$('export-format').addEventListener('change',updateDownloadState);
 $('download').addEventListener('click',downloadPhoto);
 document.querySelectorAll('input[name="photo-mode"]').forEach(input=>input.addEventListener('change',updateMode));
 updateMode();
