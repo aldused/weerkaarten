@@ -1,5 +1,5 @@
 #!/bin/bash
-# Wordt aangeroepen door nl.edaldus.waarschuwingen.plist (elke 15 min).
+# Wordt aangeroepen door nl.edaldus.waarschuwingen.plist (elke 5 min).
 # Scrapet KNMI waarschuwingen → weerlab/waarschuwingen.json en publiceert
 # alleen naar R2 (data.weerlab.nl) — pagina fetcht daar rechtstreeks.
 set -e
