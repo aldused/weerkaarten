@@ -39,7 +39,7 @@ def rain_rate_to_dbz(rate):
                     10 * np.log10(200 * np.maximum(rate, 0.001) ** 1.6), 0)
 
 
-def hourly_from_accumulation(accumulated):
+def hourly_from_accumulation(accumulated, negative_tolerance=0.02):
     """Difference consecutive hourly GRIB accumulations before byte encoding.
 
     Small negative GRIB packing errors are clipped; a reset or missing field
@@ -47,12 +47,14 @@ def hourly_from_accumulation(accumulated):
     """
     if len(accumulated) < 2 or any(v is None for v in accumulated):
         raise ValueError('Missing precipitation accumulation')
+    if not np.isfinite(negative_tolerance) or not 0 <= negative_tolerance <= 0.05:
+        raise ValueError("Invalid precipitation roundoff tolerance")
     result = []
     for previous, current in zip(accumulated, accumulated[1:]):
         if previous.shape != current.shape:
             raise ValueError('Precipitation grid changed')
         delta = np.asarray(current, dtype=np.float64) - previous
-        if not np.isfinite(delta).all() or np.any(delta < -0.02):
+        if not np.isfinite(delta).all() or np.any(delta < -negative_tolerance):
             raise ValueError('Precipitation accumulation reset or invalid')
         result.append(np.maximum(delta, 0))
     return result

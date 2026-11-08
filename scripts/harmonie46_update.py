@@ -272,7 +272,9 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
         outputs.append(path)
         return path
 
-    hourly_precip = hourly_from_accumulation(series["cum"])
+    # Cy46 source totals contain 1/32 mm downward quantization steps.
+    # Allow at most 0.05 mm; larger resets and missing values still abort.
+    hourly_precip = hourly_from_accumulation(series["cum"], negative_tolerance=0.05)
     hourly_radiation = [
         np.maximum((series["straling"][idx] - series["straling"][idx - 1]) / 3600.0, 0)
         for idx in range(1, len(series["straling"]))
@@ -420,6 +422,14 @@ def main() -> int:
         print(f"GRIB2-tijdstappen: {len(files)}")
         lats, lons, series, temp_profile, wind_profile = read_steps(files)
         outputs = export(run, lats, lons, series, temp_profile, wind_profile)
+        # Modeltijdseries: puntopslag uit dezelfde uitgepakte GRIB2-bestanden (geen tweede download).
+        # Fouten hier raken de kaartpublicatie niet.
+        try:
+            import subprocess
+            subprocess.run(['/usr/local/bin/python3', '-m', 'tijdseries.harmonie', '--cycle', '46', '--grib-dir', str(directory), '--publish'],
+                           cwd='/Users/aldus/KNMI_Project', check=True, timeout=900)
+        except Exception as exc:  # noqa: BLE001
+            print(f'[waarschuwing] modeltijdseries HARMONIE 46 mislukt: {exc}')
     print(f"HARMONIE 46 klaar: {run:%Y-%m-%d %HZ}, {len(outputs)} bestanden")
     return 0
 

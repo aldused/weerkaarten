@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modeltijdseries · Weerlab</title>
+<meta name="description" content="Professionele tijdseries en meteogrammen van ECMWF IFS, HARMONIE 43 en HARMONIE 46 voor elke locatie.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<link rel="stylesheet" href="modeltijdseries/ts.css?v=20261108-1">
+<script>try{if(localStorage.getItem('weerlab-theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
+</head>
+<body>
+<div class="ts-app">
+  <header class="ts-head">
+    <div>
+      <h1>Modeltijdseries</h1>
+      <div class="ts-sub">ECMWF IFS · HARMONIE 43 · HARMONIE 46 — tabel en meteogram voor één locatie</div>
+    </div>
+    <div class="ts-loc">
+      <div class="ts-search">
+        <input id="ts-q" type="search" autocomplete="off" spellcheck="false" placeholder="Plaats, luchthaven, ICAO (EHAM) of coördinaten (52.1, 5.18)" aria-label="Locatie zoeken" role="combobox" aria-controls="ts-ac">
+        <div class="ts-ac" id="ts-ac" role="listbox" hidden></div>
+      </div>
+      <button class="ts-btn ts-ico" id="ts-fav" title="Bewaar als favoriet">☆</button>
+      <button class="ts-btn ts-ico" id="ts-mapbtn" title="Locatie op de kaart aanwijzen">⌖</button>
+    </div>
+    <div class="ts-locinfo" id="ts-locinfo"></div>
+  </header>
+
+  <section class="ts-models" id="ts-models" aria-label="Modellen"></section>
+  <nav class="ts-bar" id="ts-bar" aria-label="Weergave-instellingen"></nav>
+
+  <section class="ts-chartbox" id="ts-chartbox">
+    <div class="ts-chart-top">
+      <div class="ts-legend" id="ts-legend"></div>
+      <span class="ts-hint">scroll = zoom · slepen = verschuiven · dubbelklik = alles</span>
+      <button class="ts-btn" id="ts-zin" title="Inzoomen">+</button>
+      <button class="ts-btn" id="ts-zout" title="Uitzoomen">−</button>
+      <button class="ts-btn" id="ts-full" title="Volledig scherm">⛶</button>
+    </div>
+    <div class="ts-chartwrap" id="ts-chartwrap"><div id="ts-chart"></div></div>
+    <div class="ts-resize" id="ts-resize" title="Sleep om de grafiekhoogte aan te passen"></div>
+  </section>
+
+  <section class="ts-tablebox" id="ts-tablebox">
+    <div class="ts-tablemeta" id="ts-tablemeta"></div>
+    <div id="ts-table"></div>
+  </section>
+
+  <footer class="ts-foot">
+    <div class="ts-disclaimer"><b>Analysehulpmiddel.</b> Ruwe modeluitvoer van het dichtstbijzijnde roosterpunt, zonder correctie of
+      menselijke beoordeling. Geen vervanging voor officiële operationele luchtvaartinformatie (METAR/TAF, KNMI-luchtvaartproducten).</div>
+    <details><summary>Herkomst per parameter en model</summary><div id="ts-prov"></div></details>
+    <details><summary>Kleurgrenzen</summary><div id="ts-colors"></div></details>
+    <details><summary>Werkwijze</summary>
+      <ul>
+        <li><b>Locatie → roosterpunt:</b> per model het dichtstbijzijnde punt van het eigen rooster (HARMONIE ±2 km, ECMWF 0,1°). Geen ruimtelijke interpolatie; coördinaten, afstand, land/zee en hoogte van het punt staan in de modelkaart.</li>
+        <li><b>Tijd:</b> alleen echte modeltijdstappen (HARMONIE elk uur t/m +60; ECMWF 3-uurlijks t/m +144, daarna 6-uurlijks). Lege cellen = het model heeft op dat tijdstip geen uitvoer. Er wordt niets tussen geïnterpoleerd.</li>
+        <li><b>Neerslag:</b> per run het verschil tussen opeenvolgende sommen (dus per uur bij HARMONIE, per 3 of 6 uur bij ECMWF). Kleuren rekenen om naar mm/uur.</li>
+        <li><b>Windstoten:</b> maximum over het voorgaande uitvoervenster (HARMONIE 1 uur, ECMWF 3 of 6 uur).</li>
+        <li><b>Windrichting:</b> meteorologisch (waar de wind vandaan komt) uit u en v; pijlen wijzen met de wind mee.</li>
+        <li><b>Wolkenbasis ≠ ceiling:</b> de basis is wat het model als wolkenbasis levert; Cy43 en Cy46 hanteren daarbij een andere bedekkingsdrempel. Een ceiling levert geen van de bronnen.</li>
+        <li><b>Runs:</b> een tabel of grafiek mengt nooit twee runs van hetzelfde model; de gekozen run staat bij elk model.</li>
+      </ul>
+    </details>
+  </footer>
+</div>
+
+<dialog class="ts-map" id="ts-mapdlg">
+  <div class="ts-map-in">
+    <div class="ts-map-head"><b>Klik op de kaart om een locatie te kiezen</b><button class="ts-btn" id="ts-mapclose">Sluiten</button></div>
+    <div id="ts-mapdiv"></div>
+    <div class="ts-map-foot"><span><i style="background:#1d4ed8"></i>HARMONIE 43/46-domein</span><span><i style="background:#cc0000"></i>ECMWF-tijdseriesdomein</span><span>Ondergrond: Natural Earth · CBS/PDOK · GeoNames</span></div>
+  </div>
+</dialog>
+<div class="ts-toast" id="ts-toast" hidden></div>
+
+<script src="modeltijdseries/ts-core.js?v=20261108-1"></script>
+<script src="modeltijdseries/ts-config.js?v=20261108-1"></script>
+<script src="modeltijdseries/ts-chart.js?v=20261108-1"></script>
+<script src="modeltijdseries/ts-table.js?v=20261108-1"></script>
+<script src="modeltijdseries/ts-app.js?v=20261108-1"></script>
+</body>
+</html>

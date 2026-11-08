@@ -1260,6 +1260,21 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
+    "id": "modeltijdseries",
+    "name": "Modeltijdseries",
+    "description": "ECMWF · HARMONIE 43/46 · tabel + meteogram",
+    "category": "professioneel",
+    "type": "vak",
+    "section": "Analyse",
+    "icon": "meteogram",
+    "href": "index.html#modeltijdseries",
+    "src": "modeltijdseries.html?v=20261108-1",
+    "thumbnail": null,
+    "facets": {},
+    "keywords": "Modeltijdseries tijdserie tijdreeks meteogram tabel ECMWF IFS HARMONIE 43 46 Cy43 Cy46 luchtvaart wolkenbasis zicht mist wind windstoten dauwpunt modelvergelijking locatie ICAO",
+    "restricted": false
+  },
+  {
     "id": "metar",
     "name": "METAR / TAF",
     "description": "Luchthavens",

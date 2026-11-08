@@ -494,6 +494,15 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
                        cwd='/Users/aldus/KNMI_Project', check=True, timeout=600)
     except Exception as _e:
         print(f'   [waarschuwing] sneeuwkaarten mislukt: {_e}')
+
+    # 9. Modeltijdseries (KNMI_Project/tijdseries): puntopslag uit dezelfde uitgepakte GRIB-bestanden,
+    #    geen tweede download. Fouten hier raken de kaartpublicatie niet.
+    print('9. Modeltijdseries HARMONIE 43...')
+    try:
+        subprocess.run(['/usr/local/bin/python3', '-m', 'tijdseries.harmonie', '--cycle', '43', '--grib-dir', tmpdir, '--publish'],
+                       cwd='/Users/aldus/KNMI_Project', check=True, timeout=900)
+    except Exception as _e:
+        print(f'   [waarschuwing] modeltijdseries mislukt: {_e}')
 " 2>&1
 
 status=$?
