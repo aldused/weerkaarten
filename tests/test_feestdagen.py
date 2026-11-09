@@ -32,6 +32,14 @@ class FeestdagenTest(unittest.TestCase):
         self.assertEqual(fd.FEESTDAGEN_DATUMS['2e Paasdag']['2027'], '2027-03-29')
         self.assertEqual(fd.FEESTDAGEN_DATUMS['Koningsdag']['2031'], '2031-04-26')
 
+    def test_november_comparison_dates_and_observations(self):
+        data = json.loads((ROOT/'feestdagen_data.json').read_text())
+        for name, suffix in [('Sint-Maarten', '11-11'), ('Intocht Sinterklaas', '11-14')]:
+            self.assertEqual(fd.FEESTDAGEN_DATUMS[name]['2026'], '2026-'+suffix)
+            rows = data['data']['260'][name]
+            self.assertEqual({r['jaar'] for r in rows if r['jaar'] <= 2025}, set(range(1901, 2026)))
+            self.assertTrue(all(r['datum'] == str(r['jaar'])+'-'+suffix for r in rows))
+
     def test_knmi_missing_trace_and_wind(self):
         rows = fd.parse_etmgeg('# STN,YYYYMMDD,TX,TN,TG,RH,SQ,FG,FXX\n260,20250916,168,,147,-1,45,50,150')
         self.assertEqual(rows['20250916']['FX'], 150)

@@ -101,6 +101,7 @@ def kalender_tot(eindjaar):
             "Hemelvaartsdag": 39, "1e Pinksterdag": 49, "2e Pinksterdag": 50,
         }.items()}
         for naam, maand, dag in [("Nieuwjaarsdag", 1, 1), ("Bevrijdingsdag", 5, 5),
+                                 ("Sint-Maarten", 11, 11), ("Intocht Sinterklaas", 11, 14),
                                  ("Sinterklaas", 12, 5), ("1e Kerstdag", 12, 25),
                                  ("2e Kerstdag", 12, 26), ("Oudejaarsdag", 12, 31)]:
             dagen[naam] = date(jaar, maand, dag).isoformat()
