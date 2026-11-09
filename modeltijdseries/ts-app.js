@@ -18,6 +18,7 @@
       vis: 'ECMWF Open Data bevat geen zicht.', fog: 'Geen zicht in ECMWF Open Data.', cbh: 'ECMWF Open Data bevat geen wolkenbasis.',
       blh: 'Geen grenslaaghoogte in ECMWF Open Data.', wspd50: 'ECMWF Open Data heeft wind op 10 en 100 m, niet op 50 m.'
     },
+    icond2: { tcc: 'Totale bewolking ontbreekt in de native canvasbron; laag, midden en hoog zijn beschikbaar.', cbh: 'Geen wolkenbasis in deze ICON-D2-tijdseriesbron.', blh: 'Geen menglaagdikte in deze bron.', wspd50: 'Geen wind op 50 m in deze bron.', wspd100: 'Geen wind op 100 m in deze bron.', wdir100: 'Geen windrichting op 100 m in deze bron.', prate: 'Geen momentane neerslagintensiteit in deze bron.', ptype: 'Geen neerslagtype in deze bron.' },
     harmonie43: { cape: 'Het P1-pakket van HARMONIE 43 bevat geen CAPE.' },
     harmonie46: { cape: 'Het P1-pakket van HARMONIE 46 bevat geen CAPE.' }
   };
@@ -57,7 +58,7 @@
       .then(function(r) { if(!r.ok) throw Error('HTTP '+r.status); return r.json(); })
       .then(function(feed) { if(!feed.stations) throw Error('Ongeldige waarnemingsfeed'); observations.feed=feed; observations.checked=Date.now(); observations.error=null; })
       .catch(function() { observations.error='Waarnemingen verversen mislukt'; })
-      .then(function() { observations.pending=null; selectObservations(); renderChart(true); });
+      .then(function() { observations.pending=null; selectObservations(); if (!S.models.some(function(m) {return D.loading[m];}) && S.models.every(function(m) {return D.runs[m] || D.feedErr[m];})) renderChart(true); });
     return observations.pending;
   }
 
@@ -490,7 +491,7 @@
   function renderLegend() {
     var ms = modelsWithData(), h = [];
     var obs = observations.selected;
-    var text = obs ? 'KNMI ' + obs.name + ' · ' + nl(obs.km,1) + ' km' : 'Geen KNMI-meetstation binnen 15 km';
+    var text = !observations.feed ? (observations.error || 'Metingen laden…') : obs ? 'KNMI ' + obs.name + ' · ' + nl(obs.km,1) + ' km' : 'Geen KNMI-meetstation binnen 15 km';
     if(obs && obs.last) text += ' · laatste meting ' + C.parts(obs.last,S.tz).day + '-' + C.parts(obs.last,S.tz).month + ' ' + C.parts(obs.last,S.tz).hour + ':' + C.parts(obs.last,S.tz).minute + ' ' + C.tzLabel(obs.last,S.tz) + (Date.now()-obs.last>30*60000 ? ' · verouderd' : '');
     if(obs && !obs.last) text += ' · geen meetreeks beschikbaar';
     if(observations.error) text += ' · ' + observations.error;
@@ -892,6 +893,13 @@
   function toast(msg) { var t = $('#ts-toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 4200); }
 
   // ------------------------------------------------------------ gebeurtenissen
+  function setMouseover(enabled) {
+    chart.setMouseoverEnabled(enabled);
+    var button = $('#ts-mouseover');
+    button.textContent = 'Mouseover ' + (enabled ? 'aan' : 'uit');
+    button.setAttribute('aria-pressed', String(enabled));
+    store('ts_mouseover', enabled);
+  }
   function bind() {
     document.addEventListener('click', function (e) {
       var t = e.target, x;
@@ -946,6 +954,7 @@
       }
       if (t.id === 'ts-mapbtn') { openMap(); return; }
       if (t.id === 'ts-mapclose') { $('#ts-mapdlg').close(); return; }
+      if (t.id === 'ts-mouseover') { setMouseover(!chart.mouseoverEnabled); return; }
       if (t.id === 'ts-full') { var bx = $('#ts-chartbox'); if (document.fullscreenElement) document.exitFullscreen(); else bx.requestFullscreen && bx.requestFullscreen(); return; }
       if (t.id === 'ts-reset') { setPeriod(S.period || 'all'); return; }
       if (t.id === 'ts-zin') { chart.zoom(0.6); return; }
@@ -1024,6 +1033,7 @@
     if (!S.place) S.place = { name: 'De Bilt', lat: 52.1015, lon: 5.1779 };
     table = new TSTable($('#ts-table'));
     chart = new TSChart($('#ts-chart'), { wheelZoom: false });
+    setMouseover(store('ts_mouseover') !== false);
     table.on('hover', function (t) { chart.setHover(t, true); });
     chart.on('hover', function (t) { table.setHover(t); });
     table.on('select', function (t) { selectTime(t, true); });

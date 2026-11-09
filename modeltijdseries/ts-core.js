@@ -22,9 +22,10 @@
   var MODELS = {
     ecmwf: { id: 'ecmwf', label: 'ECMWF IFS', short: 'ECMWF', color: '#32c84a', order: 0 },
     harmonie43: { id: 'harmonie43', label: 'HARMONIE 43', short: 'H43', color: '#1d4ed8', order: 1 },
-    harmonie46: { id: 'harmonie46', label: 'HARMONIE 46', short: 'H46', color: '#9d32cf', order: 2 }
+    harmonie46: { id: 'harmonie46', label: 'HARMONIE 46', short: 'H46', color: '#9d32cf', order: 2 },
+    icond2: { id: 'icond2', label: 'ICON-D2', short: 'ICON-D2', color: '#e07800', order: 3 }
   };
-  var MODEL_IDS = ['ecmwf', 'harmonie43', 'harmonie46'];
+  var MODEL_IDS = ['ecmwf', 'harmonie43', 'harmonie46', 'icond2'];
 
   // ------------------------------------------------------------ eenheden
   var KT = 1.943844492; // m/s → knopen (1 kn = 1852 m/h exact)

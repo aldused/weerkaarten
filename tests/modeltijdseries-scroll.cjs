@@ -1,0 +1,16 @@
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+const ctx={TSCore:require('../modeltijdseries/ts-core.js'),Date};vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../modeltijdseries/ts-chart.js'),'utf8'),ctx);
+const events={},scrollEvents={};let prevented=false,rangeChanges=0;
+const chart={overlay:{style:{},addEventListener:(k,f)=>events[k]=f,getBoundingClientRect:()=>({left:0,top:0}),setPointerCapture(){}},el:{scrollTop:200,addEventListener:(k,f)=>scrollEvents[k]=f},range:[0,36000000],M:{l:84,r:24},W:1000,mouseoverEnabled:true,hoverT:1,hoverY:1,tip:{hidden:false},drawOverlay(){this.tip.hidden=this.hoverT==null;},emit(){},nearestTime:t=>t,t:x=>x,setRange(){rangeChanges++;},zoomAt(){}};
+ctx.TSChart.prototype._bind.call(chart);
+events.wheel({deltaY:100,deltaX:0,preventDefault(){prevented=true;}});
+assert.equal(prevented,false);assert.equal(chart.hoverT,null);assert.equal(chart.tip.hidden,true);
+events.pointerdown({button:0,clientX:300,clientY:300,pointerId:1});
+events.pointermove({clientX:302,clientY:200});assert.equal(chart.el.scrollTop,300);assert.equal(rangeChanges,0);
+events.pointerup({});
+events.pointerdown({button:0,clientX:300,clientY:300,pointerId:1});
+events.pointermove({clientX:400,clientY:302});assert.equal(rangeChanges,1);
+events.pointerup({});
+chart.hoverT=1;scrollEvents.scroll();assert.equal(chart.hoverT,null);assert.equal(chart.tip.hidden,true);
+console.log('PASS verticaal wiel blokkeert browser niet; tooltip sluit; verticaal slepen scrollt; horizontaal slepen verschuift tijdas');

@@ -9,14 +9,14 @@ class Loader extends C.Loader { constructor(){super('/tijdseries-data',{fetch:fe
 const els=new Map(),events={},exportsGenerated=[];
 function el(id){if(!els.has(id))els.set(id,{id,innerHTML:'',textContent:'',hidden:false,value:'',style:{},dataset:{},addEventListener(){},querySelector(){return el('child');},querySelectorAll(){return [];},classList:{add(){},toggle(){}},setAttribute(){},focus(){}});return els.get(id);}
 class Table{constructor(){this.cols=[];this.ev={};}on(k,f){this.ev[k]=f;}render(o){this.cols=o.times;this.rows=o.rows;}setSelected(t){this.sel=t;}setHover(){}scrollTo(){}jumpDay(){} }
-class Chart{constructor(){this.ev={};this.range=null;this.times=[];}on(k,f){this.ev[k]=f;}draw(){}resize(){}setData(d){Object.assign(this,d);if(d.times.length){this.full=[d.times[0],d.times.at(-1)];if(!this.range)this.range=this.full.slice();}else this.full=this.range=null;}setRange(a,b){this.range=[a,b];this.ev.range?.(this.range);}setSelected(t){this.sel=t;}setHover(){}exportSVG(){return '';} }
+class Chart{setMouseoverEnabled(enabled){this.mouseoverEnabled=enabled;}constructor(){this.ev={};this.range=null;this.times=[];}on(k,f){this.ev[k]=f;}draw(){}resize(){}setData(d){Object.assign(this,d);if(d.times.length){this.full=[d.times[0],d.times.at(-1)];if(!this.range)this.range=this.full.slice();}else this.full=this.range=null;}setRange(a,b){this.range=[a,b];this.ev.range?.(this.range);}setSelected(t){this.sel=t;}setHover(){}exportSVG(){return '';} }
 const storage={ts_last:JSON.stringify('loc=52.1015,5.1779,De%20Bilt&r=ecmwf:1999010100&z=1,2&sel=3600000')};
 const ctx={console,TSCore:{...C,Loader},TSTable:Table,TSChart:Chart,document:{body:{appendChild(){}},createElement:()=>({click(){},remove(){}}),readyState:'loading',documentElement:{dataset:{}},querySelector:s=>el(s.slice(1)),querySelectorAll:()=>[],addEventListener:(k,f)=>{(events[k]??=[]).push(f);}},location:{search:'?localData=1',hash:'',origin:'http://localhost',pathname:'/modeltijdseries.html'},history:{replaceState(a,b,h){ctx.location.hash=h;}},localStorage:{getItem:k=>storage[k]??null,setItem:(k,v)=>storage[k]=v},setTimeout,clearTimeout,setInterval(f){periodic.push(f);},requestAnimationFrame:f=>f(),Date,Number,Float64Array,Uint8Array,Map,Set,Promise,URL:{createObjectURL:b=>{exportsGenerated.push(b);return 'blob:test';},revokeObjectURL(){}},Blob,addEventListener(){}};
 ctx.window=ctx; ctx.getComputedStyle=()=>({getPropertyValue:()=>''}); vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(dir,'ts-config.js'),'utf8'),ctx);
 vm.runInContext(fs.readFileSync(path.join(dir,'ts-app.js'),'utf8'),ctx);
 const tick=()=>new Promise(r=>setTimeout(r,25));
-async function settle(){for(let i=0;i<50;i++){await tick();if(!Object.values(ctx.TSApp.D.loading).some(Boolean)&&Object.keys(ctx.TSApp.D.data).length===3)return;}throw Error('load timeout');}
+async function settle(){for(let i=0;i<50;i++){await tick();if(!Object.values(ctx.TSApp.D.loading).some(Boolean)&&Object.keys(ctx.TSApp.D.data).length===C.MODEL_IDS.length)return;}throw Error('load timeout');}
 function change(target){for(const f of events.change||[])f({target});}
 function click(selector,dataset){const target={dataset,closest:s=>s===selector?target:null};for(const f of events.click||[])f({target});}
 (async()=>{
@@ -31,7 +31,13 @@ function click(selector,dataset){const target={dataset,closest:s=>s===selector?t
  const canonicalRuns=JSON.parse(fs.readFileSync(path.join(source,'ecmwf/runs.json')));
  runOverrides.ecmwf={...canonicalRuns,runs:canonicalRuns.runs.slice(1)};
  events.DOMContentLoaded[0]();await settle();
- const A=ctx.TSApp; assert.equal(Object.keys(A.D.data).length,3);assert.equal(A.S.diff.on,false);
+ const A=ctx.TSApp;
+ for(const f of events.click||[])f({target:{id:'ts-mouseover',closest:()=>null}});
+ assert.equal(A.chart().mouseoverEnabled,false);assert.equal(storage.ts_mouseover,'false');
+ for(const f of events.click||[])f({target:{id:'ts-mouseover',closest:()=>null}});
+ assert.equal(A.chart().mouseoverEnabled,true);
+ console.log('PASS mouseover aan/uit en opgeslagen voorkeur');
+ assert.equal(Object.keys(A.D.data).length,C.MODEL_IDS.length);assert.equal(A.S.diff.on,false);
  for(const m of C.MODEL_IDS){let d=A.D.data[m];assert.ok(d.valid.every(Number.isFinite));assert.equal(A.S.runSel[m],'latest');assert.ok(d.series.t2m.v.some(Number.isFinite));}
  assert.ok(A.S.range[0]>Date.parse('2026-01-01'));assert.notEqual(A.S.sel,3600000);
  console.log('PASS opgeslagen oude runs en verlopen tijdvensters worden niet automatisch hersteld');
@@ -46,7 +52,7 @@ function click(selector,dataset){const target={dataset,closest:s=>s===selector?t
  runOverrides.ecmwf={...canonicalRuns,runs:canonicalRuns.runs.slice(1)};await periodic[0]();assert.equal(A.D.data.ecmwf.run.run,canonicalRuns.runs[0].run);assert.match(A.D.feedErr.ecmwf,/teruggevallen/);
  delete runOverrides.ecmwf;await periodic[0]();
  console.log('PASS terugvallend bronoverzicht kan de nieuwere run niet vervangen');
- console.log('PASS echte tegelbestanden van alle drie modellen gedecodeerd');
+ console.log('PASS echte tegelbestanden van alle geselecteerde modellen gedecodeerd');
  let table=A.table();const times=table.cols,rows=table.rows;let er=rows.find(r=>r.kind==='model'&&r.label==='ECMWF IFS');
  times.forEach((t,j)=>{const d=A.D.data.ecmwf,i=d.valid.indexOf(t);if(i<0)assert.equal(er.cells[j][0],'—');else assert.equal(er.cells[j][0],d.series.t2m.v[i].toFixed(1).replace('.',',').replace(/^-/, '−'));});
  console.log('PASS tabeluitlijning: ECMWF alleen op eigen uitvoertijden');

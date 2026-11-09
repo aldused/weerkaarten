@@ -95,6 +95,7 @@
     el.classList.add('ts-chart');
     el.appendChild(this.canvas); el.appendChild(this.overlay); el.appendChild(this.tip);
     this.series = []; this.times = []; this.range = null; this.full = null;
+    this.mouseoverEnabled = this.opts.mouseover !== false;
     this.hoverT = null; this.selT = null; this.listeners = {};
     this.units = { wind: 'kt', height: 'm' }; this.tz = 'local'; this.place = null;
     this.M = { l: 84, r: 24, t: 76, b: 48, gap: 100 };
@@ -266,7 +267,7 @@
         g.line([[x,P.y+P.h],[x,P.y+P.h+5]],th.text,1);
       });
       g.text((x0+x1)/2, P.y+P.h+34, 'Tijd (' + C.tzLabel(r[0], self.tz) + ')', '400 13px Arial', th.text, 'center', 'middle');
-      if (self.series.some(function(s) {return s.observation && belongs(s,P.key);})) g.text(x1-18,P.y+115,'Waarnemingen','700 13px Arial','#111111','right','middle');
+      if (self.series.some(function(s) {return s.observation && belongs(s,P.key);})) g.text(x1-18,P.y+34+C.MODEL_IDS.length*27,'Waarnemingen','700 13px Arial','#111111','right','middle');
       C.MODEL_IDS.forEach(function(m, i) {
         if (!self.series.some(function(s) { return s.model === m && belongs(s, P.key); })) return;
         g.text(x1-18, P.y+34+i*27, C.MODELS[m].short, '700 13px Arial', C.MODELS[m].color, 'right', 'middle');
@@ -384,7 +385,7 @@
     var ctx = this.overlay.getContext('2d'), d = DPR(), th = this.th || theme(), M = this.M, self = this;
     ctx.setTransform(d, 0, 0, d, 0, 0);
     ctx.clearRect(0, 0, this.W, this.H);
-    if (this.hoverT == null || !this.range) { this.tip.hidden = true; return; }
+    if (!this.mouseoverEnabled || this.hoverT == null || !this.range) { this.tip.hidden = true; return; }
     var x = Math.round(this.x(this.hoverT)) + .5;
     if (x < M.l || x > this.W - M.r) { this.tip.hidden = true; return; }
     ctx.strokeStyle = th.axis; ctx.lineWidth = 1; ctx.setLineDash([2, 2]);
@@ -411,6 +412,8 @@
     this.series.forEach(function (s) { (byParam[s.param] = byParam[s.param] || []).push(s); });
     Object.keys(byParam).forEach(function (pid) {
       var P = C.PARAM[pid];
+      var active=self.hoverY == null ? null : self.P.find(function(panel) {return self.hoverY>=panel.y && self.hoverY<=panel.y+panel.h;});
+      if(active && !belongs({param:pid},active.key)) return;
       html.push('<div class="ts-tip-param">' + P.label + (P.unit ? ' · ' + self.unitLabel(P.unit) : '') + '</div>');
       byParam[pid].forEach(function (s) {
         var i = s.t.indexOf(t), v = i >= 0 ? s.v[i] : NaN, txt;
@@ -435,7 +438,14 @@
     this.tip.style.top = ((this.el.scrollTop || 0) + 8) + 'px';
   };
 
+  TSChart.prototype.setMouseoverEnabled = function(enabled) {
+    this.mouseoverEnabled = !!enabled;
+    if (!this.mouseoverEnabled) { this.hoverT=null; this.hoverY=null; this.emit('hover',null); }
+    this.overlay.style.cursor = this.mouseoverEnabled ? 'crosshair' : 'grab';
+    this.drawOverlay();
+  };
   TSChart.prototype.setHover = function (t, silent) {
+    if (!this.mouseoverEnabled) return;
     this.hoverT = t; this.hoverY = null; this.drawOverlay();
     if (!silent) this.emit('hover', t);
   };
@@ -448,11 +458,19 @@
       if (!self.range) return;
       var r = el.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
       if (drag) {
+        var dx=x-drag.x, dy=e.clientY-drag.clientY;
+        if (!drag.mode && Math.max(Math.abs(dx),Math.abs(dy))>4) drag.mode=Math.abs(dy)>Math.abs(dx)?'vertical':'horizontal';
+        if (drag.mode === 'vertical') {
+          drag.moved=true; self.el.scrollTop=drag.scrollTop-dy;
+          self.hoverT=null; self.drawOverlay(); self.emit('hover',null); return;
+        }
+        if (drag.mode !== 'horizontal') return;
         var dt = (drag.x - x) / (self.W - self.M.l - self.M.r) * (drag.r[1] - drag.r[0]);
         if (Math.abs(drag.x - x) > 3) drag.moved = true;
         self.setRange(drag.r[0] + dt, drag.r[1] + dt);
         return;
       }
+      if (!self.mouseoverEnabled || Date.now() < (self.scrollingUntil || 0)) return;
       var t = self.nearestTime(self.t(x));
       self.hoverY = y;
       if (t !== self.hoverT) { self.hoverT = t; self.emit('hover', t); }
@@ -465,7 +483,7 @@
       self.hoverT = self.nearestTime(self.t(e.clientX - r.left));
       self.hoverY = e.clientY - r.top;
       self.drawOverlay();
-      drag = { x: e.clientX - r.left, r: self.range.slice(), moved: false };
+      drag = { x: e.clientX - r.left, clientY:e.clientY, scrollTop:self.el.scrollTop, mode:null, r: self.range.slice(), moved: false };
       el.setPointerCapture(e.pointerId);
     });
     el.addEventListener('pointerup', function (e) {
@@ -475,7 +493,16 @@
     });
     el.addEventListener('pointercancel', function () { drag = null; });
     el.addEventListener('dblclick', function () { if (self.full) self.setRange(self.full[0], self.full[1]); });
+    self.el.addEventListener('scroll', function() {
+      self.scrollingUntil=Date.now()+150;
+      self.hoverT=null; self.hoverY=null; self.drawOverlay(); self.emit('hover',null);
+    }, {passive:true});
     el.addEventListener('wheel', function (e) {
+      if (!(e.ctrlKey || e.metaKey) && Math.abs(e.deltaY)>=Math.abs(e.deltaX)) {
+        self.scrollingUntil=Date.now()+150;
+        self.hoverT=null; self.hoverY=null; self.drawOverlay(); self.emit('hover',null);
+        return; // Laat de browser verticaal scrollen, ook boven de grafiek.
+      }
       if (!self.range) return;
       // Verticaal scrollen laat de pagina met rust tenzij Ctrl/⌘ of horizontaal; Shift/trackpad-horizontaal = schuiven.
       var r = el.getBoundingClientRect(), x = e.clientX - r.left;

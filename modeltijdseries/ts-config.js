@@ -65,11 +65,11 @@
     luchtvaart: { label: 'Luchtvaart', params: ['wdir', 'wspd', 'gust', 'vis', 'fog', 'cbh', 'ceiling', 'tcc', 'lcc', 'mcc', 'hcc', 't2m', 'td2m', 'msl'], units: { wind: 'kt', height: 'ft' } },
     mist: { label: 'Mist en lage bewolking', params: ['t2m', 'td2m', 'spread', 'rh', 'vis', 'fog', 'lcc', 'cbh', 'wspd'] },
     temperatuur: { label: 'Temperatuurvergelijking', params: ['t2m', 'td2m'], tableMode: 'combined' },
-    vergelijking: { label: 'Modelvergelijking', params: ['t2m', 'td2m', 'wspd', 'gust', 'precip', 'tcc', 'msl'], tableMode: 'combined', models: ['ecmwf', 'harmonie43', 'harmonie46'] }
+    vergelijking: { label: 'Modelvergelijking', params: ['t2m', 'td2m', 'wspd', 'gust', 'precip', 'tcc', 'msl'], tableMode: 'combined', models: ['ecmwf', 'harmonie43', 'harmonie46', 'icond2'] }
   };
 
   var DEFAULTS = {
-    models: ['ecmwf', 'harmonie43', 'harmonie46'],
+    models: ['ecmwf', 'harmonie43', 'harmonie46', 'icond2'],
     profile: 'algemeen',
     units: { wind: 'kt', height: 'm' },
     tz: 'local',
@@ -80,7 +80,7 @@
   };
 
   var REFRESH_MS = 5 * 60 * 1000;   // runs.json opnieuw bekijken (klein bestand, CDN max-age 30 s)
-  var STALE_H = { ecmwf: 16, harmonie43: 4, harmonie46: 8 };  // ouder dan dit = "verouderd" (run-leeftijd)
+  var STALE_H = { ecmwf: 16, harmonie43: 4, harmonie46: 8, icond2: 6 };  // ouder dan dit = "verouderd" (run-leeftijd)
 
   root.TSConfig = { COLOR_SCALES: COLOR_SCALES, PROFILES: PROFILES, DEFAULTS: DEFAULTS, REFRESH_MS: REFRESH_MS, STALE_H: STALE_H };
 })(typeof self !== 'undefined' ? self : this);

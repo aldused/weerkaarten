@@ -434,4 +434,6 @@ icon_update_status=$?
 if [ "$icon_update_status" -ne 0 ]; then exit "$icon_update_status"; fi
 bash ecmwf_weerradar/harmonie-publish/publish.sh icond2 || exit 1
 
+/usr/local/bin/python3 scripts/icond2_tijdseries.py --publish || exit 1
+
 echo "$(date): ICON-D2 update klaar"
