@@ -36,6 +36,7 @@
     text: function (x, y, s, font, fill, align, base) {
       var c = this.c; c.font = font; c.fillStyle = fill; c.textAlign = align || 'left'; c.textBaseline = base || 'alphabetic'; c.fillText(s, x, y);
     },
+    verticalText: function (x,y,s,font,fill) { var c=this.c; c.save(); c.translate(x,y); c.rotate(-Math.PI/2); this.text(0,0,s,font,fill,'center','middle'); c.restore(); },
     clip: function (x, y, w, h) { this.c.save(); this.c.beginPath(); this.c.rect(x, y, w, h); this.c.clip(); },
     unclip: function () { this.c.restore(); }
   };
@@ -58,6 +59,7 @@
       var m = /(\d+)\s*(\d+)px\s*(.*)/.exec(font) || [];
       this.o.push('<text x="' + f(x) + '" y="' + f(y) + '" text-anchor="' + anchor + '"' + dy + ' font-weight="' + (m[1] || 400) + '" font-size="' + (m[2] || 11) + '" font-family="' + esc(m[3] || 'sans-serif').replace(/"/g, "'") + '" fill="' + fill + '">' + esc(s) + '</text>');
     },
+    verticalText: function (x,y,s,font,fill) { this.o.push('<g transform="translate('+f(x)+' '+f(y)+') rotate(-90)">'); this.text(0,0,s,font,fill,'center','middle'); this.o.push('</g>'); },
     clip: function (x, y, w, h) { var id = 'c' + (this.clipN++); this.o.push('<clipPath id="' + id + '"><rect x="' + f(x) + '" y="' + f(y) + '" width="' + f(w) + '" height="' + f(h) + '"/></clipPath><g clip-path="url(#' + id + ')">'); this.open++; },
     unclip: function () { if (this.open) { this.o.push('</g>'); this.open--; } },
     toString: function () { return '<svg xmlns="http://www.w3.org/2000/svg" width="' + this.w + '" height="' + this.h + '" viewBox="0 0 ' + this.w + ' ' + this.h + '">' + this.o.join('') + '</svg>'; }
@@ -95,7 +97,7 @@
     this.series = []; this.times = []; this.range = null; this.full = null;
     this.hoverT = null; this.selT = null; this.listeners = {};
     this.units = { wind: 'kt', height: 'm' }; this.tz = 'local'; this.place = null;
-    this.M = { l: 68, r: 24, t: 76, b: 48, gap: 100 };
+    this.M = { l: 84, r: 24, t: 76, b: 48, gap: 100 };
     this._bind();
     var self = this;
     if (root.ResizeObserver) new ResizeObserver(function () { self.resize(); }).observe(el);
@@ -251,11 +253,11 @@
       g.rect(x0, P.y - 27, x1 - x0, 21, th.bg);
       var names = {wdir: 'DD', wind: 'FF & FFx', temp: 'T2m & Td2m', dew: 'Td2m'};
       var place = self.place ? self.place.name : '';
-      var runs = self.series.map(function(s) { return s.run; }).filter(Boolean).sort();
+      var runs = self.series.filter(function(s) { return !s.observation; }).map(function(s) { return s.run; }).filter(Boolean).sort();
       var runLabel = runs.length ? runs[runs.length - 1].replace(/[-:TZ]/g, '').slice(0,10) : '';
       g.text((x0+x1)/2, P.y - 43, place + ' (' + (P.key === 'temp' ? 't2m' : P.key === 'dew' ? 'td2m' : P.key) + ')', '400 14px Arial', th.text, 'center', 'middle');
       g.text((x0+x1)/2, P.y - 23, (names[P.key] || cfg.label) + ' HAR & EC time series ' + place + ' ' + runLabel, '400 18px Arial', th.text, 'center', 'middle');
-      g.text(8, P.y + P.h/2, (names[P.key] || cfg.label) + ' (' + self.unitLabel(cfg.unit) + ')', '400 11px Arial', th.text, 'left', 'middle');
+      g.verticalText(18, P.y + P.h/2, (names[P.key] || cfg.label) + ' (' + self.unitLabel(cfg.unit) + ')', '400 13px Arial', th.text);
       g.strokeRect(x0, P.y, x1 - x0, P.h, th.text);
       ticks.forEach(function(t) {
         var x = self.x(t); if (x < x0 || x > x1) return;
@@ -264,6 +266,7 @@
         g.line([[x,P.y+P.h],[x,P.y+P.h+5]],th.text,1);
       });
       g.text((x0+x1)/2, P.y+P.h+34, 'Tijd (' + C.tzLabel(r[0], self.tz) + ')', '400 13px Arial', th.text, 'center', 'middle');
+      if (self.series.some(function(s) {return s.observation && belongs(s,P.key);})) g.text(x1-18,P.y+115,'Waarnemingen','700 13px Arial','#111111','right','middle');
       C.MODEL_IDS.forEach(function(m, i) {
         if (!self.series.some(function(s) { return s.model === m && belongs(s, P.key); })) return;
         g.text(x1-18, P.y+34+i*27, C.MODELS[m].short, '700 13px Arial', C.MODELS[m].color, 'right', 'middle');
@@ -272,7 +275,7 @@
     // reeksen
     this.P.forEach(function (P) {
       g.clip(x0, P.y, x1 - x0, P.h);
-      var inPanel = self.series.filter(function (s) { return belongs(s, P.key); });
+      var inPanel = self.series.filter(function (s) { return belongs(s, P.key); }).sort(function(a,b) { return Number(!!a.observation)-Number(!!b.observation); });
       var bars = inPanel.filter(function (s) { return C.PARAM[s.param].kind === 'bar'; });
       bars.forEach(function (s, bi) {
         for (var i = 0; i < s.t.length; i++) {
@@ -292,12 +295,13 @@
           for (var i = 0; i < s.t.length; i++) {
             var v = self.conv(s.param, s.v[i]);
             if (!isFinite(v)) { pts.push(null); continue; }
+            if (s.maxGap && prevT != null && s.t[i]-prevT>s.maxGap) pts.push(null);
             if (p.kind === 'dir' && i && Math.abs(v - s.v[i-1]) > 180) pts.push(null);
             pts.push([self.x(s.t[i]), yOf(P.sc, P, v)]);
             prevT = s.t[i];
           }
-          g.line(pts, s.color, 2, P.key === 'dew' ? [] : p.dash);
-          if (s.t.length && (r[1] - r[0]) / HOUR < 80) pts.forEach(function (q) { if (q) g.dot(q[0], q[1], 1.6, s.color); });
+          g.line(pts, s.color, s.observation ? 2.3 : 2, P.key === 'dew' ? [] : p.dash);
+          if (s.t.length && (s.observation || (r[1] - r[0]) / HOUR < 80)) pts.forEach(function (q) { if (q) g.dot(q[0], q[1], s.observation ? 2.2 : 1.6, s.color); });
         } else if (p.kind === 'dir') {
           for (var j = 0; j < s.t.length; j++) {
             var d = s.v[j]; if (!isFinite(d)) continue;
@@ -390,7 +394,7 @@
     this.P.forEach(function (P) {
       self.series.forEach(function (s) {
         var p = C.PARAM[s.param];
-        if (!belongs(s, P.key) || p.kind !== 'line') return;
+        if (!belongs(s, P.key) || p.kind !== 'line' && p.kind !== 'dir') return;
         var i = s.t.indexOf(self.hoverT); if (i < 0) return;
         var v = self.conv(s.param, s.v[i]); if (!isFinite(v)) return;
         ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(x, yOf(P.sc, P, v), 3.2, 0, 7); ctx.fill();
@@ -417,10 +421,10 @@
         else txt = fmtNum(self.conv(pid, v), P.unit === 'wind' && self.units.wind === 'ms' ? 1 : P.unit === 'height' ? 0 : P.dec);
         var win = i >= 0 && s.window && s.window[i];
         var timing = function (tt) { var pp = C.parts(tt, self.tz); return pp.day + '-' + pp.month + ' ' + pp.hour + ':' + pp.minute + ' ' + C.tzLabel(tt, self.tz); };
-        var detail = s.run ? 'run ' + timing(Date.parse(s.run)) : '';
+        var detail = s.observation ? 'KNMI ' + esc(s.station) + ' · ' + fmtNum(s.stationKm,1) + ' km · gemeten ' + timing(t) : s.run ? 'run ' + timing(Date.parse(s.run)) : '';
         if (win) detail += ' · interval ' + timing(t - (win[1] - win[0]) * HOUR) + ' – ' + timing(t) + ' (' + (win[1] - win[0]) + ' uur)';
         if (s.derived) detail += ' · berekend';
-        html.push('<div class="ts-tip-r"><span class="ts-tip-m" style="--c:' + s.color + '">' + C.MODELS[s.model].label + '</span><b>' + txt + '</b></div><div class="ts-tip-detail">' + detail + '</div>');
+        html.push('<div class="ts-tip-r"><span class="ts-tip-m" style="--c:' + s.color + '">' + (s.observation ? 'Waarneming' : C.MODELS[s.model].label) + '</span><b>' + txt + '</b></div><div class="ts-tip-detail">' + detail + '</div>');
       });
     });
     this.tip.innerHTML = html.join('');

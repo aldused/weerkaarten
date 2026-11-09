@@ -45,6 +45,21 @@
   };
   var D = { runs: {}, data: {}, err: {}, loading: {}, checked: {}, feedErr: {} }; // per model
   var table, chart, placesP = null;
+  var observations = {feed:null, selected:null, checked:0, pending:null, error:null};
+  function selectObservations() {
+    observations.selected = window.TSObservations ? TSObservations.select(observations.feed, S.place, Date.now()) : null;
+  }
+  function loadObservations(force) {
+    if (!window.TSObservations || typeof fetch !== 'function') return Promise.resolve();
+    if (observations.pending) return observations.pending;
+    if (!force && observations.checked && Date.now()-observations.checked < CFG.REFRESH_MS) { selectObservations(); return Promise.resolve(); }
+    observations.pending = fetch(LOCAL ? 'actueel.json' : 'https://data.weerlab.nl/actueel.json', {cache:'no-store'})
+      .then(function(r) { if(!r.ok) throw Error('HTTP '+r.status); return r.json(); })
+      .then(function(feed) { if(!feed.stations) throw Error('Ongeldige waarnemingsfeed'); observations.feed=feed; observations.checked=Date.now(); observations.error=null; })
+      .catch(function() { observations.error='Waarnemingen verversen mislukt'; })
+      .then(function() { observations.pending=null; selectObservations(); renderChart(true); });
+    return observations.pending;
+  }
 
   function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
 
@@ -263,6 +278,7 @@
 
   // automatische verversing: alleen runs.json (klein); data pas bij een nieuwe run
   function refresh() {
+    loadObservations(true);
     return Promise.all(C.MODEL_IDS.map(function (m) {
       var before = dataForPlace(m) && dataForPlace(m).key;
       return loadRuns(m).then(function () {
@@ -466,10 +482,19 @@
         series.push({ model: m, param: pid, t: D.data[m].valid, v: ser.v, na: ser.na, window: ser.window, color: C.MODELS[m].color, dash: p.dash, label: p.label, run: D.data[m].run.run, derived: ser.derived || !!(ser.src && ser.src.derived) });
       });
     });
-    return { series: series, times: ms.length ? timesFor(ms) : [], units: S.units, tz: S.tz, place: S.place };
+    var measured = window.TSObservations ? TSObservations.series(observations.selected, S.params) : [];
+    measured = measured.filter(function(s) { return !S.hidden['observations:' + s.param]; });
+    series = series.concat(measured);
+    return { series: series, times: C.unionTimes([ms.length ? timesFor(ms) : []].concat(measured.map(function(s) {return s.t;}))), units: S.units, tz: S.tz, place: S.place };
   }
   function renderLegend() {
     var ms = modelsWithData(), h = [];
+    var obs = observations.selected;
+    var text = obs ? 'KNMI ' + obs.name + ' · ' + nl(obs.km,1) + ' km' : 'Geen KNMI-meetstation binnen 15 km';
+    if(obs && obs.last) text += ' · laatste meting ' + C.parts(obs.last,S.tz).day + '-' + C.parts(obs.last,S.tz).month + ' ' + C.parts(obs.last,S.tz).hour + ':' + C.parts(obs.last,S.tz).minute + ' ' + C.tzLabel(obs.last,S.tz) + (Date.now()-obs.last>30*60000 ? ' · verouderd' : '');
+    if(obs && !obs.last) text += ' · geen meetreeks beschikbaar';
+    if(observations.error) text += ' · ' + observations.error;
+    h.push('<span class="ts-obs-status">● Waarnemingen: ' + esc(text) + ' · doorgetrokken: T/wind · gestreept: dauwpunt/windstoten</span>');
     C.PANEL_ORDER.forEach(function (panel) {
       var selected = S.params.filter(function (pid) { return C.PARAM[pid].panel === panel && ms.some(function (m) { return avail(m, pid); }); });
       if (!selected.length) return;
@@ -681,6 +706,8 @@
     }).catch(function() { $('#ts-stations-list').textContent = 'Stations laden mislukt'; });
   }
   function renderLoc() {
+    selectObservations();
+    loadObservations(false);
     renderStations();
     var p = S.place, isFav = p && favs().some(function (f) { return Math.abs(f.lat - p.lat) < 1e-4 && Math.abs(f.lon - p.lon) < 1e-4; });
     $('#ts-locinfo').innerHTML = p ? '<b>' + esc(p.name) + '</b> · ' + ll(p.lat, p.lon, 4) +
@@ -1021,5 +1048,5 @@
     window.addEventListener('hashchange', function () { readHash(location.hash); renderLoc(); loadAll(); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
-  window.TSApp = { S: S, D: D, exportMeta: exportMeta, tableMatrix: tableMatrix, chart: function () { return chart; }, table: function () { return table; } };
+  window.TSApp = { S: S, D: D, observations: observations, chartData: chartData, exportMeta: exportMeta, tableMatrix: tableMatrix, chart: function () { return chart; }, table: function () { return table; } };
 })();
