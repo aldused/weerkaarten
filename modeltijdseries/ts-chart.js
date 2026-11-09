@@ -12,6 +12,7 @@
 (function (root) {
   'use strict';
   var C = root.TSCore;
+  function belongs(s, panel) { return panel === 'dew' ? s.param === 'td2m' : C.PARAM[s.param].panel === panel; }
   var HOUR = 3600000;
   var DPR = function () { return Math.max(1, Math.min(3, root.devicePixelRatio || 1)); };
 
@@ -94,7 +95,7 @@
     this.series = []; this.times = []; this.range = null; this.full = null;
     this.hoverT = null; this.selT = null; this.listeners = {};
     this.units = { wind: 'kt', height: 'm' }; this.tz = 'local'; this.place = null;
-    this.M = { l: 66, r: 16, t: 48, b: 30, gap: 44 };
+    this.M = { l: 68, r: 24, t: 76, b: 48, gap: 100 };
     this._bind();
     var self = this;
     if (root.ResizeObserver) new ResizeObserver(function () { self.resize(); }).observe(el);
@@ -130,7 +131,7 @@
 
   TSChart.prototype.panelsUsed = function () {
     var used = {}, list = [];
-    this.series.forEach(function (s) { var p = C.PARAM[s.param]; if (p && p.panel) used[p.panel] = true; });
+    this.series.forEach(function (s) { var p = C.PARAM[s.param]; if (p && p.panel) used[p.panel] = true; if (s.param === 'td2m') used.dew = true; });
     C.PANEL_ORDER.forEach(function (k) { if (used[k]) list.push(k); });
     return list;
   };
@@ -139,11 +140,11 @@
     var panels = this.panelsUsed();
     var base = panels.reduce(function (a, k) { return a + C.PANELS[k].h; }, 0) || 1;
     var avail = H - M.t - M.b - M.gap * Math.max(0, panels.length - 1);
-    var minimum = panels.reduce(function (n, k) { return n + (k === 'wdir' ? 94 : 120); }, 0);
+    var minimum = panels.reduce(function (n, k) { return n + 380; }, 0);
     var extra = Math.max(0, avail - minimum);
     var y = M.t, out = [];
     panels.forEach(function (k) {
-      var h = (k === 'wdir' ? 94 : 120) + Math.floor(extra * C.PANELS[k].h / base);
+      var h = 380 + Math.floor(extra * C.PANELS[k].h / base);
       out.push({ key: k, y: y, h: h });
       y += h + M.gap;
     });
@@ -175,7 +176,7 @@
     if (cfg.log) return { lo: cfg.fixed[0], hi: cfg.fixed[1], log: true };
     var lo = Infinity, hi = -Infinity, r = this.range;
     this.series.forEach(function (s) {
-      if (C.PARAM[s.param].panel !== panel) return;
+      if (!belongs(s, panel)) return;
       for (var i = 0; i < s.t.length; i++) {
         if (s.t[i] < r[0] - 6 * HOUR || s.t[i] > r[1] + 6 * HOUR) continue;
         var v = self.conv(s.param, s.v[i]);
@@ -228,7 +229,7 @@
     });
     g.unclip();
     // uurmarkeringen onderaan
-    var span = r[1] - r[0], stepH = span <= 36 * HOUR ? 3 : span <= 72 * HOUR ? 6 : span <= 7 * 24 * HOUR ? 12 : 24;
+    var span = r[1] - r[0], stepH = span <= 72 * HOUR ? 3 : span <= 96 * HOUR ? 6 : span <= 7 * 24 * HOUR ? 12 : 24;
     var ticks = this.hourTicks(stepH);
     this.P.forEach(function (P) {
       var sc = self.scaleFor(P.key), cfg = C.PANELS[P.key];
@@ -242,19 +243,36 @@
         var y = Math.round(yOf(sc, P, v)) + .5;
         g.line([[x0, y], [x1, y]], th.grid, 1);
         var lab = sc.log ? (v >= 1000 ? (v / 1000) + ' km' : v + ' m') : fmtNum(v, sc.step && sc.step < 1 ? (sc.step < 0.1 ? 2 : 1) : 0);
-        if (P.key === 'wdir' && v < 360) lab = C.compass(v) || 'N';
-        if (P.key === 'wdir' && v === 360) lab = 'N';
+        
+        
         g.text(x0 - 6, y, lab, '500 11px ' + th.mono, th.axis, 'right', 'middle');
       });
       ticks.forEach(function (t) { var x = Math.round(self.x(t)) + .5; if (x > x0 && x < x1) g.line([[x, P.y], [x, P.y + P.h]], th.grid, 1); });
       g.rect(x0, P.y - 27, x1 - x0, 21, th.bg);
-      g.text(x0, P.y - 16, cfg.label + ' · ' + self.unitLabel(cfg.unit) + (P.key === 'cbh' || P.key === 'blh' ? ' boven grondniveau' : P.key === 'precip' ? ' per uitvoerinterval' : ''), '700 12px ' + th.font, th.text, 'left', 'middle');
-      g.strokeRect(x0, P.y, x1 - x0, P.h, th.grid);
+      var names = {wdir: 'DD', wind: 'FF & FFx', temp: 'T2m & Td2m', dew: 'Td2m'};
+      var place = self.place ? self.place.name : '';
+      var runs = self.series.map(function(s) { return s.run; }).filter(Boolean).sort();
+      var runLabel = runs.length ? runs[runs.length - 1].replace(/[-:TZ]/g, '').slice(0,10) : '';
+      g.text((x0+x1)/2, P.y - 43, place + ' (' + (P.key === 'temp' ? 't2m' : P.key === 'dew' ? 'td2m' : P.key) + ')', '400 14px Arial', th.text, 'center', 'middle');
+      g.text((x0+x1)/2, P.y - 23, (names[P.key] || cfg.label) + ' HAR & EC time series ' + place + ' ' + runLabel, '400 18px Arial', th.text, 'center', 'middle');
+      g.text(8, P.y + P.h/2, (names[P.key] || cfg.label) + ' (' + self.unitLabel(cfg.unit) + ')', '400 11px Arial', th.text, 'left', 'middle');
+      g.strokeRect(x0, P.y, x1 - x0, P.h, th.text);
+      ticks.forEach(function(t) {
+        var x = self.x(t); if (x < x0 || x > x1) return;
+        g.text(x, P.y + P.h + 16, C.parts(t, self.tz).hour, '400 12px Arial', th.text, 'center', 'middle');
+        g.line([[x,P.y],[x,P.y-5]],th.text,1);
+        g.line([[x,P.y+P.h],[x,P.y+P.h+5]],th.text,1);
+      });
+      g.text((x0+x1)/2, P.y+P.h+34, 'Tijd (' + C.tzLabel(r[0], self.tz) + ')', '400 13px Arial', th.text, 'center', 'middle');
+      C.MODEL_IDS.forEach(function(m, i) {
+        if (!self.series.some(function(s) { return s.model === m && belongs(s, P.key); })) return;
+        g.text(x1-18, P.y+34+i*27, C.MODELS[m].short, '700 13px Arial', C.MODELS[m].color, 'right', 'middle');
+      });
     });
     // reeksen
     this.P.forEach(function (P) {
       g.clip(x0, P.y, x1 - x0, P.h);
-      var inPanel = self.series.filter(function (s) { return C.PARAM[s.param].panel === P.key; });
+      var inPanel = self.series.filter(function (s) { return belongs(s, P.key); });
       var bars = inPanel.filter(function (s) { return C.PARAM[s.param].kind === 'bar'; });
       bars.forEach(function (s, bi) {
         for (var i = 0; i < s.t.length; i++) {
@@ -269,15 +287,16 @@
       });
       inPanel.forEach(function (s) {
         var p = C.PARAM[s.param];
-        if (p.kind === 'line') {
+        if (p.kind === 'line' || p.kind === 'dir') {
           var pts = [], prevT = null;
           for (var i = 0; i < s.t.length; i++) {
             var v = self.conv(s.param, s.v[i]);
             if (!isFinite(v)) { pts.push(null); continue; }
+            if (p.kind === 'dir' && i && Math.abs(v - s.v[i-1]) > 180) pts.push(null);
             pts.push([self.x(s.t[i]), yOf(P.sc, P, v)]);
             prevT = s.t[i];
           }
-          g.line(pts, s.color, 1.8, p.dash);
+          g.line(pts, s.color, 2, P.key === 'dew' ? [] : p.dash);
           if (s.t.length && (r[1] - r[0]) / HOUR < 80) pts.forEach(function (q) { if (q) g.dot(q[0], q[1], 1.6, s.color); });
         } else if (p.kind === 'dir') {
           for (var j = 0; j < s.t.length; j++) {
@@ -289,13 +308,6 @@
       });
       g.unclip();
     });
-    // tijdlabels
-    ticks.forEach(function (t) {
-      var x = self.x(t); if (x < x0 + 8 || x > x1 - 8) return;
-      var pp = C.parts(t, self.tz);
-      g.text(x, self.H - M.b + 14, pp.hour + (stepH >= 24 ? '' : ''), '500 11px ' + th.mono, th.axis, 'center', 'middle');
-    });
-    g.text(M.l - 6, this.H - M.b + 14, C.tzLabel(r[0], this.tz), '700 9px ' + th.font, th.axis, 'right', 'middle');
     var now = Date.now(), nx = self.x(now);
     if (nx >= x0 && nx <= x1) {
       g.line([[nx, M.t - 4], [nx, this.H - M.b]], th.axis, 1, [5, 4]);
@@ -378,7 +390,7 @@
     this.P.forEach(function (P) {
       self.series.forEach(function (s) {
         var p = C.PARAM[s.param];
-        if (p.panel !== P.key || p.kind !== 'line') return;
+        if (!belongs(s, P.key) || p.kind !== 'line') return;
         var i = s.t.indexOf(self.hoverT); if (i < 0) return;
         var v = self.conv(s.param, s.v[i]); if (!isFinite(v)) return;
         ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(x, yOf(P.sc, P, v), 3.2, 0, 7); ctx.fill();

@@ -20,9 +20,9 @@
 
   // Vaste modelkleuren: overal op de pagina dezelfde (knoppen, tabel, grafiek, export).
   var MODELS = {
-    ecmwf: { id: 'ecmwf', label: 'ECMWF IFS', short: 'ECMWF', color: '#cc0000', order: 0 },
+    ecmwf: { id: 'ecmwf', label: 'ECMWF IFS', short: 'ECMWF', color: '#32c84a', order: 0 },
     harmonie43: { id: 'harmonie43', label: 'HARMONIE 43', short: 'H43', color: '#1d4ed8', order: 1 },
-    harmonie46: { id: 'harmonie46', label: 'HARMONIE 46', short: 'H46', color: '#0d9488', order: 2 }
+    harmonie46: { id: 'harmonie46', label: 'HARMONIE 46', short: 'H46', color: '#9d32cf', order: 2 }
   };
   var MODEL_IDS = ['ecmwf', 'harmonie43', 'harmonie46'];
 
@@ -114,10 +114,11 @@
 
   var PANELS = {
     temp: { label: 'Temperatuur', unit: '°C', h: 150 },
+    dew: { label: 'Td2m', unit: '°C', h: 150 },
     spread: { label: 'T − Td', unit: '°C', h: 80, min0: true },
     rh: { label: 'Rel. vochtigheid', unit: '%', h: 80, fixed: [0, 100], ticks: [0, 25, 50, 75, 100] },
     wind: { label: 'Wind', unit: 'wind', h: 140, min0: true },
-    wdir: { label: 'Windrichting', unit: '°', h: 90, fixed: [0, 360], ticks: [0, 90, 180, 270, 360] },
+    wdir: { label: 'Windrichting', unit: '°', h: 90, fixed: [0, 360], ticks: Array.from({length: 13}, function (_, i) { return i * 30; }) },
     msl: { label: 'Luchtdruk', unit: 'hPa', h: 100 },
     precip: { label: 'Neerslag', unit: 'mm', h: 90, min0: true, minMax: 1 },
     prate: { label: 'Intensiteit', unit: 'mm/u', h: 80, min0: true, minMax: 1 },
@@ -127,7 +128,7 @@
     cape: { label: 'CAPE', unit: 'J/kg', h: 80, min0: true, minMax: 100 },
     blh: { label: 'Menglaag', unit: 'height', h: 80, min0: true }
   };
-  var PANEL_ORDER = ['temp', 'spread', 'rh', 'wind', 'wdir', 'msl', 'precip', 'prate', 'cloud', 'cbh', 'vis', 'cape', 'blh'];
+  var PANEL_ORDER = ['wdir', 'wind', 'temp', 'dew', 'spread', 'rh', 'msl', 'precip', 'prate', 'cloud', 'cbh', 'vis', 'cape', 'blh'];
 
   // ------------------------------------------------------------ rooster
   function nearestPoint(man, lat, lon) {

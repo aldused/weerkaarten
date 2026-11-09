@@ -671,7 +671,17 @@
     renderLoc(); renderTable(); renderChart(false); renderContext();
     loadAll().then(function () { setPeriod(72); });
   }
+  function renderStations() {
+    if (typeof fetch !== 'function') return;
+    loadPlaces().then(function(places) {
+      var stations = places.filter(function(p) { return p.cc === 'NL' && p.icao; }).sort(function(a,b) { return a.icao.localeCompare(b.icao); });
+      var list = $('#ts-stations-list');
+      list.innerHTML = stations.map(function(p,i) { return '<button data-station="'+i+'" title="'+esc(p.name)+'" aria-pressed="'+(S.place && Math.abs(S.place.lat-p.lat)<0.015 && Math.abs(S.place.lon-p.lon)<0.015)+'">'+esc(p.icao)+'</button>'; }).join('');
+      list.onclick = function(e) { var button = e.target.closest('[data-station]'); if(button) setPlace(stations[+button.dataset.station]); };
+    }).catch(function() { $('#ts-stations-list').textContent = 'Stations laden mislukt'; });
+  }
   function renderLoc() {
+    renderStations();
     var p = S.place, isFav = p && favs().some(function (f) { return Math.abs(f.lat - p.lat) < 1e-4 && Math.abs(f.lon - p.lon) < 1e-4; });
     $('#ts-locinfo').innerHTML = p ? '<b>' + esc(p.name) + '</b> · ' + ll(p.lat, p.lon, 4) +
       ' · dichtstbijzijnd roosterpunt · geen interpolatie' : 'Geen locatie gekozen';
