@@ -43,7 +43,7 @@
     sel: null,
     period: '72'
   };
-  var D = { runs: {}, data: {}, err: {}, loading: {} }; // per model
+  var D = { runs: {}, data: {}, err: {}, loading: {}, checked: {}, feedErr: {} }; // per model
   var table, chart, placesP = null;
 
   function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
@@ -79,7 +79,7 @@
   var hashTimer = 0;
   function saveHash() {
     clearTimeout(hashTimer);
-    hashTimer = setTimeout(function () { history.replaceState(null, '', '#' + encodeHash()); store('ts_last', encodeHash()); }, 250);
+    hashTimer = setTimeout(function () { history.replaceState(null, '', '#' + encodeHash()); store('ts_last', encodeHash().split('&').filter(function (part) { return !/^(r|follow|z|sel)=/.test(part); }).join('&')); }, 250);
   }
   function readHash(str) {
     var q = {};
@@ -208,8 +208,16 @@
   function placeKey() { return S.place ? S.place.lat.toFixed(4) + ',' + S.place.lon.toFixed(4) : ''; }
   function dataForPlace(m) { return D.data[m] && D.data[m].placeKey === placeKey() ? D.data[m] : null; }
   function loadRuns(m) {
-    return loader.runs(m).then(function (r) { D.runs[m] = r; return r; })
-      .catch(function (e) { D.err[m] = 'Runoverzicht niet bereikbaar (' + e.message + ')'; throw e; });
+    return loader.runs(m).then(function (r) {
+      var previous = D.runs[m], oldRun = previous && previous.runs && previous.runs[0], newRun = r.runs && r.runs[0];
+      D.checked[m] = Date.now();
+      if (oldRun && (!newRun || Date.parse(newRun.run) < Date.parse(oldRun.run) || previous.updated && r.updated && Date.parse(r.updated) < Date.parse(previous.updated))) {
+        D.feedErr[m] = 'Bronoverzicht is teruggevallen of leeg; laatst bekende nieuwere run behouden';
+        return previous;
+      }
+      D.runs[m] = r; D.feedErr[m] = null; return r;
+    })
+      .catch(function (e) { D.feedErr[m] = 'Runoverzicht niet bereikbaar (' + e.message + ')'; throw e; });
   }
   var requests = {}, pending = {};
   function loadModel(m) {
@@ -220,8 +228,8 @@
       if (S.runSel[m] && S.runSel[m] !== 'latest') D.err[m] = 'Gekozen run niet meer in het archief. Kies een beschikbare run.';
       return Promise.resolve();
     }
-    // Eerste keuze vastzetten. Alleen de expliciete optie 'latest' volgt nieuwe runs.
-    if (!S.runSel[m]) S.runSel[m] = run.run;
+    // Standaard nieuwe runs volgen. Alleen een expliciete archiefkeuze wordt vastgezet.
+    if (!S.runSel[m]) S.runSel[m] = 'latest';
     var pk = placeKey(), lat = S.place.lat, lon = S.place.lon;
     var key = run.manifest + '@' + pk;
     if (D.data[m] && D.data[m].key === key) {
@@ -255,20 +263,24 @@
 
   // automatische verversing: alleen runs.json (klein); data pas bij een nieuwe run
   function refresh() {
-    C.MODEL_IDS.forEach(function (m) {
-      var before = D.runs[m] && D.runs[m].runs && D.runs[m].runs[0] && D.runs[m].runs[0].manifest;
-      loadRuns(m).then(function (r) {
-        var now = r.runs && r.runs[0] && r.runs[0].manifest;
-        if (now && now !== before) {
-          renderModels();
-          if (S.models.indexOf(m) >= 0 && (!S.runSel[m] || S.runSel[m] === 'latest')) {
-            loadModel(m).then(function () { renderAll(true); toast('Nieuwe ' + C.MODELS[m].label + '-run geladen: ' + runLabel(r.runs[0].run)); });
-          } else if (before) toast('Nieuwe ' + C.MODELS[m].label + '-run beschikbaar: ' + runLabel(r.runs[0].run));
-        } else renderModels();
-      }).catch(function () { renderModels(); });
-    });
+    return Promise.all(C.MODEL_IDS.map(function (m) {
+      var before = dataForPlace(m) && dataForPlace(m).key;
+      return loadRuns(m).then(function () {
+        if (S.models.indexOf(m) < 0 || S.runSel[m] && S.runSel[m] !== 'latest') return;
+        // Ook een eerdere mislukte download opnieuw proberen als de manifestnaam gelijk bleef.
+        return loadModel(m).then(function () {
+          var d = dataForPlace(m);
+          if (before && d && d.key !== before) toast(C.MODELS[m].label + ': nieuw beschikbare gegevens geladen, run ' + runLabel(d.run.run));
+        });
+      }).catch(function () { /* zichtbaar in modelkaart en actualiteitsmelding */ });
+    })).then(function () { renderAll(true); });
   }
-
+  function latestAll() {
+    S.models.forEach(function (m) { S.runSel[m] = 'latest'; });
+    S.range = null; S.sel = null; S.period = '72';
+    renderAll(true);
+    return refresh().then(function () { setPeriod(72); selectTime(nowTime(), false); });
+  }
   // ------------------------------------------------------------ modelkaarten
   function renderModels() {
     var box = $('#ts-models');
@@ -280,12 +292,14 @@
       if (!on) state = 'Uitgeschakeld';
       else if (D.loading[m]) state = 'Gegevens laden…';
       else if (!d && wanted) state = 'Gegevens niet geladen';
+      else if (D.feedErr[m]) state = D.feedErr[m] + ' · actualiteit niet bevestigd';
       else if (D.err[m]) state = D.err[m];
       else if (d && !d.inside) state = 'Locatie buiten modeldomein';
       else if (run && run.status === 'partial') state = 'Gedeeltelijk beschikbaar';
       var age = run ? (Date.now() - Date.parse(run.run)) / HOUR : 0;
       var newest = r && r.runs && r.runs[0];
-      if (run && age > (CFG.STALE_H[m] || 12)) state += ' · modelrun ' + Math.round(age) + ' uur oud';
+      if (run && age > (CFG.STALE_H[m] || 12)) state = 'VEROUDERDE RUN · ' + state;
+      if (d && d.inside && d.valid[d.valid.length - 1] < Date.now()) state = 'VERWACHTING VERLOPEN · ' + state;
       if (d && wanted && wanted.manifest !== d.run.manifest) state += ' · toont vorige run ' + runLabel(d.run.run, true);
       var details = [];
       if (info.product) details.push(esc(info.product));
@@ -299,12 +313,14 @@
       opts += r && r.runs ? r.runs.map(function (x, i) {
         return '<option value="' + x.run + '"' + (S.runSel[m] !== 'latest' && wanted && wanted.run === x.run ? ' selected' : '') + '>' + runLabel(x.run, true) + (i === 0 ? ' · nieuwste' : '') + '</option>';
       }).join('') : '';
-      var newer = newest && run && Date.parse(newest.run) > Date.parse(run.run);
-      return '<article class="ts-model' + (on ? ' on' : '') + '" style="--mc:' + M.color + '">' +
+      var newer = newest && run && (Date.parse(newest.run) > Date.parse(run.run) || newest.run === run.run && newest.manifest !== run.manifest);
+      var locked = S.runSel[m] && S.runSel[m] !== 'latest';
+      var warning = on && (locked || D.err[m] || D.feedErr[m] || age > (CFG.STALE_H[m] || 12) || d && d.inside && d.valid[d.valid.length - 1] < Date.now());
+      return '<article class="ts-model' + (on ? ' on' : '') + (warning ? ' ts-model-warning' : '') + '" style="--mc:' + M.color + '">' +
         '<button class="ts-mtoggle" data-model="' + m + '" aria-pressed="' + on + '"><span class="box" aria-hidden="true"></span><span>' + M.label + '<small>' + esc(info.cycle || '') + '</small></span></button>' + product +
         '<label class="ts-mrun">Modelrun · UTC<select data-run="' + m + '" aria-label="Modelrun ' + M.label + ' — UTC">' + opts + '</select></label>' +
-        '<div class="ts-mperiod">' + (run ? 'Geldig: ' + fullTime(Date.parse(run.run) + run.leads[0] * HOUR) + ' – ' + fullTime(Date.parse(run.run) + run.leads[1] * HOUR) : 'Voorspellingsperiode niet beschikbaar') + '</div>' +
-        '<div class="ts-mstat" role="status">' + esc(state) + '</div>' +
+        '<div class="ts-mperiod">' + (run ? '<b>Getoonde run: ' + runLabel(run.run) + '</b><br>Runleeftijd: ' + ago(Date.parse(run.run)) + ' · ' + (locked ? 'vastgezet / archief' : 'nieuwste in Weerlab volgen') + '<br>Geldig: ' + fullTime(Date.parse(run.run) + run.leads[0] * HOUR) + ' – ' + fullTime(Date.parse(run.run) + run.leads[1] * HOUR) : 'Voorspellingsperiode niet beschikbaar') + '</div>' +
+        '<div class="ts-mstat" role="status">' + esc(state) + '</div><div class="ts-feedcheck">' + (D.checked[m] ? 'Runoverzicht gecontroleerd: ' + fullTime(D.checked[m]) : 'Runoverzicht nog niet gecontroleerd') + '</div>' +
         (newer ? '<button class="ts-btn" data-newrun="' + m + '">Nieuwe run laden: ' + runLabel(newest.run, true) + '</button>' : '') +
         '<details class="ts-mdetails"><summary>Bron en roosterpunt</summary>' + details.map(function (x) { return '<div>' + x + '</div>'; }).join('') + '</details></article>';
     }).join('');
@@ -313,11 +329,26 @@
   function renderContext() {
     var el = $('#ts-context'); if (!el) return;
     var range = S.range || (chart && chart.range);
+    var locked = S.models.filter(function (m) { return S.runSel[m] && S.runSel[m] !== 'latest'; });
+    var issues = [];
+    S.models.forEach(function (m) {
+      var d = dataForPlace(m), run = d && d.run, r = D.runs[m], name = C.MODELS[m].label;
+      if (D.feedErr[m]) issues.push(name + ': actualiteit niet bevestigd (runoverzicht niet bereikbaar).');
+      if (D.err[m]) issues.push(name + ': ' + D.err[m]);
+      if (run && (Date.now() - Date.parse(run.run)) / HOUR > (CFG.STALE_H[m] || 12)) issues.push(name + ': verouderde run ' + runLabel(run.run) + '.');
+      if (d && d.inside && d.valid[d.valid.length - 1] < Date.now()) issues.push(name + ': voorspellingsperiode is verstreken.');
+      if (run && run.status === 'partial') issues.push(name + ': run nog onvolledig.');
+      if (r && r.last_error) issues.push(name + ': bronverwerking meldt een mislukte update.');
+    });
+    el.classList.toggle('ts-context-warning', locked.length > 0 || issues.length > 0);
     el.innerHTML = '<b>' + (S.place ? esc(S.place.name) : 'Kies een locatie') + '</b>' +
       (range ? '<span>Zichtbare periode: ' + fullTime(range[0]) + ' – ' + fullTime(range[1]) + '</span>' : '') +
       '<span>' + S.models.length + ' modellen geselecteerd · ' + S.params.length + ' parameters</span>' +
       (S.sel != null ? '<span>Geselecteerd: ' + fullTime(S.sel) + '</span>' : '') +
-      '<span class="ts-hint">' + (S.models.some(function (m) { return S.runSel[m] === 'latest'; }) ? 'Nieuwste runs automatisch volgen' : 'Vaste modelruns · nieuwe runs worden gemeld') + '</span>';
+      '<strong class="ts-runmode">' + (locked.length ? 'VASTGEZETTE RUN / ARCHIEF: ' + locked.map(function (m) { return C.MODELS[m].label; }).join(', ') + '. Deze modellen worden niet automatisch bijgewerkt.' : 'Nieuwste beschikbare runs in Weerlab worden automatisch gevolgd.') + '</strong>' +
+      issues.map(function (msg) { return '<strong class="ts-integrity">' + esc(msg) + '</strong>'; }).join('') +
+      '<button class="ts-btn" data-act="latestall">' + (locked.length ? 'Alle modellen naar nieuwste runs' : 'Nu op nieuwe runs controleren') + '</button>' +
+      '<span class="ts-hint">Verschillende modellen kunnen verschillende runtijden hebben. Modeluitvoer; officiële operationele luchtvaartinformatie blijft nodig voor vluchtuitvoering.</span>';
   }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
 
@@ -843,6 +874,7 @@
       }
       if ((x = t.closest('[data-act]'))) {
         var a = x.dataset.act;
+        if (a === 'latestall') { latestAll(); return; }
         if (a === 'now') selectTime(nowTime());
         else if ((a === 'nextday' || a === 'prevday') && chart.range) { var dir = a === 'nextday' ? 1 : -1; chart.setRange(chart.range[0] + dir * 24 * HOUR, chart.range[1] + dir * 24 * HOUR); S.period = null; renderBar(); }
         return;
@@ -886,7 +918,7 @@
     });
     document.addEventListener('change', function (e) {
       var t = e.target;
-      if (t.dataset.run) { S.runSel[t.dataset.run] = t.value; loadModel(t.dataset.run).then(function () { renderAll(true); }); return; }
+      if (t.dataset.run) { S.runSel[t.dataset.run] = t.value; renderContext(); loadModel(t.dataset.run).then(function () { renderAll(true); }); return; }
       if (t.id === 'ts-profile') { applyProfile(t.value); return; }
       if (t.dataset.param) {
         var pid = t.dataset.param, i = S.params.indexOf(pid);
@@ -949,6 +981,9 @@
     var hs = location.hash || ('#' + (store('ts_last') || ''));
     var h = store('ts_chart_h'); if (h) S.chartHeight = h;
     readHash(hs);
+    // Voorkeuren herstellen, maar nooit oude runs of een oud tijdvenster uit browseropslag.
+    // Een expliciete gedeelde URL met r= blijft beschikbaar als duidelijk gemarkeerde archiefweergave.
+    if (!location.hash) { S.runSel = {}; S.range = null; S.sel = null; S.period = '72'; }
     if (!S.place) S.place = { name: 'De Bilt', lat: 52.1015, lon: 5.1779 };
     table = new TSTable($('#ts-table'));
     chart = new TSChart($('#ts-chart'), { wheelZoom: false });
