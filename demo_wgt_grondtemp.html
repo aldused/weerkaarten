@@ -548,7 +548,10 @@ async function laad() {
       vocht: u1(j.statisch.vocht), p24: i2(j.statisch.p24), p7: i2(j.statisch.p7), p30: i2(j.statisch.p30),
       hoogte: i2(j.statisch.hoogte), zee: i2(j.statisch.zee), plaats: j.statisch.plaats};
     // Het echte 2m-nachtminimum is onafhankelijk van het tijdstip van het grasminimum.
+    // Sinds TN-nacht-MOS v4 levert de run het nachtminimum per nacht zelf (lopende nacht: met 10-min-metingen).
+    D.nachten.forEach((n, k) => { if (j.nachten[k].tn) { n.tn = i2(j.nachten[k].tn); n.tnBron = j.nachten[k].tn_bron; } });
     D.nachten.forEach(n => {
+      if (n.tn) return;
       n.tn = new Int16Array(C).fill(-32768);
       for (let c=0;c<C;c++) for (let i=n.i0;i<=n.i1;i++) {
         const v=D.t2[i*C+c]; if(v!==-32768 && (n.tn[c]===-32768 || v<n.tn[c])) n.tn[c]=v;
@@ -557,7 +560,7 @@ async function laad() {
     if (new URLSearchParams(location.search).get("laag") === "tn") {
       staat.laag="tn"; document.title="Minimumtemperatuur 2 m · Weerlab";
       document.querySelector("h1").firstChild.textContent="Minimumtemperatuur 2 m ";
-      document.querySelector(".sub").textContent="Minimumtemperatuur op 2 meter voor de komende nachten: de laagste uurwaarde tussen 18.00 en 09.00 lokale tijd volgens Weerlabs TN-MOS (getraind op de officiële KNMI-TN, bijgestuurd met actuele metingen). Kies Nederland of Zuid-Holland.";
+      document.querySelector(".sub").textContent="Minimumtemperatuur op 2 meter voor de komende nachten: het laagste punt tussen 18.00 en 09.00 lokale tijd volgens Weerlabs TN-nacht-MOS, getraind op het échte nachtminimum uit de KNMI 10-minutenmetingen. In de lopende nacht telt het al gemeten minimum mee. Kies Nederland of Zuid-Holland.";
     }
     [...$("laagSeg").querySelectorAll("button")].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.l===staat.laag)));
     // start op het eerstvolgende hele uur ≥ nu
@@ -741,7 +744,7 @@ function drieNachten() {
     const iso = isoPad(r.vals, 0); if (iso) el("path", {d: iso, class: "iso0", "clip-path": `url(#${cid})`}, sv);
     GEO.provincies.forEach(p => el("path", {d: p.d, class: "prov"}, sv)); el("path", {d: GEO.nl, class: "kust"}, sv);
     const k = document.createElement("div"); k.className = "m-kpi";
-    k.innerHTML = `<span>laagste <b>${fmt(v16(minima[mi]))} °C</b> ${D.plaats[mi]}</span><span>${tn ? "Laagste uurwaarde op 2 m</span><span hidden>" : "vorstkans ≥ 50 %:"} <b>${Math.round(100 * p50 / gebiedCellen().length)} %</b></span>`;
+    k.innerHTML = `<span>laagste <b>${fmt(v16(minima[mi]))} °C</b> ${D.plaats[mi]}</span><span>${tn ? (n.tnBron === "metingen + verwachting" ? "met metingen van vannacht" : "nachtminimum op 2 m") + "</span><span hidden>" : "vorstkans ≥ 50 %:"} <b>${Math.round(100 * p50 / gebiedCellen().length)} %</b></span>`;
     kaart.appendChild(k);
     const lijst = document.createElement("div");
     lijst.innerHTML = `<div class="top10-kop">Top 10 koudste plaatsen</div>` + topLijstHtml(top10(c => v16(minima[c])), LUT.temp);
@@ -799,7 +802,7 @@ function plaatsTabel() {
     t += `<tr><td>${nm}</td>${D.nachten.map(n => { const v = v16((staat.laag === "tn" ? n.tn : n.t10min)[c]); return `<td><span class="sw" style="background:${kl(v)}"></span>${fmt(v)} °C<small>${staat.laag === "tn" ? "2 m" : n.p0[c] + "%"}</small></td>`; }).join("")}</tr>`;
   });
   $("plaatsTabel").innerHTML = t + "</tbody>";
-  $("drieNoot").textContent = staat.laag === "tn" ? `Minimum op 2 m in ${gebiedNaam()}: laagste uurwaarde per nacht (18.00–09.00) volgens TN-MOS v3 (getraind op de officiële KNMI-TN, met bodemsoort, bodemvocht, bewolking/wind over de hele nacht en per-model-afwijkingen), op een rooster van 5 km. Klik op een kolomkop om te sorteren.` : `Alle ${plaatsRijen.length} KNMI-stations met een 10 cm-minimumthermometer: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel rond het station; in laagtes en open veld buiten het meetterrein kan het kouder zijn. Klik op een kolomkop om te sorteren.`;
+  $("drieNoot").textContent = staat.laag === "tn" ? `Minimum op 2 m in ${gebiedNaam()}: nachtminimum (18.00–09.00) volgens TN-nacht-MOS v4: getraind op het échte nachtminimum uit de KNMI 10-minutenmetingen, met bodemsoort, bodemvocht, bewolking/wind over de nacht en per-model-afwijkingen; in de lopende nacht aangevuld met het al gemeten minimum. Rooster van 5 km. Klik op een kolomkop om te sorteren.` : `Alle ${plaatsRijen.length} KNMI-stations met een 10 cm-minimumthermometer: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel rond het station; in laagtes en open veld buiten het meetterrein kan het kouder zijn. Klik op een kolomkop om te sorteren.`;
   $("plaatsTabel").querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
     const k = +th.dataset.k;
     plaatsSort = { kol: k, dir: plaatsSort.kol === k ? -plaatsSort.dir : 1 };
@@ -1059,7 +1062,7 @@ function kpis() {
   let som2 = 0; for (const c of gebiedCellen()) som2 += n.t10min[c] - n.t2min[c]; const vers = som2 / gebiedCellen().length / 10;
   if (staat.laag === "tn") {
     const cells=gebiedCellen().filter(c=>n.tn[c]!==-32768); const mi=cells.reduce((a,c)=>n.tn[c]<n.tn[a]?c:a,cells[0]);
-    k.innerHTML = `<div class="kpi"><div class="l">Laagste 2 m · ${gebiedNaam()}</div><div class="v">${fmt(v16(n.tn[mi]))} °C</div><div class="n">${D.plaats[mi]} · laagste uurwaarde 18.00–09.00</div></div>`;
+    k.innerHTML = `<div class="kpi"><div class="l">Laagste 2 m · ${gebiedNaam()}</div><div class="v">${fmt(v16(n.tn[mi]))} °C</div><div class="n">${D.plaats[mi]} · nachtminimum 18.00–09.00${n.tnBron === "metingen + verwachting" ? " · incl. metingen" : ""}</div></div>`;
     return;
   }
   const kaartje = (l, v, nn) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="n">${nn}</div></div>`;

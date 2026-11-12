@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Temperatuur Rijnmond · Weerlab</title>
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+:root{--ink:var(--wl-color-text,#0f172a);--soft:var(--wl-color-text-muted,#64748b);--accent:var(--wl-color-accent-strong,#035e7a);
+  --deep:var(--wl-color-primary,#00205b);--line:var(--wl-color-border,#e3e8ef);--bg:var(--wl-color-background,#f6f8fb);
+  --card:var(--wl-color-surface,#fff);--tint:var(--wl-color-background-soft,#eef2f7);--font:var(--wl-font-sans,system-ui,sans-serif)}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--font)}
+.wrap{max-width:1240px;margin:0 auto;padding:20px 16px 30px;display:grid;gap:14px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin:0}
+h1{font-size:clamp(24px,3.4vw,34px);font-weight:700;letter-spacing:-.5px;line-height:1.15;margin:4px 0 4px}
+.lead{margin:0;color:var(--soft);max-width:78ch}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.keuze{display:flex;flex-wrap:wrap;gap:6px}
+.keuze button{font:inherit;font-size:14px;font-weight:600;color:var(--ink);background:var(--tint);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;min-height:44px}
+.keuze button[aria-pressed=true]{background:var(--deep);border-color:var(--deep);color:#fff}
+.keuze button:focus-visible,.knop:focus-visible{outline:3px solid var(--wl-color-accent,#2ec4e8);outline-offset:2px}
+.tijd{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.tijd button{display:grid;gap:1px;text-align:left;min-width:104px}
+.tijd button b{font-size:17px;font-variant-numeric:tabular-nums;line-height:1.15}
+.tijd button small{font-size:12px;font-weight:600;opacity:.8}
+.cijfers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cijfer{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.cijfer span{display:block;font-size:11.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)}
+.cijfer b{display:block;font-size:28px;font-weight:700;letter-spacing:-.5px;line-height:1.2;font-variant-numeric:tabular-nums}
+.cijfer small{display:block;color:var(--soft);font-size:13px;line-height:1.4}
+.hoofd{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start}
+.kaart{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#dfe8ea;touch-action:manipulation}
+.kaart canvas{display:block;width:100%;height:auto}
+.laag{position:absolute;inset:0;pointer-events:none}
+.lbl{position:absolute;white-space:nowrap;font-size:12.5px;font-weight:600;line-height:1;color:#fff;text-shadow:0 0 3px rgba(15,23,42,.95),0 0 2px rgba(15,23,42,.95);transform:translateY(-50%)}
+.lbl b{font-weight:800;font-variant-numeric:tabular-nums}
+.lbl::before{content:"";position:absolute;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(15,23,42,.6)}
+.lbl.r{padding-left:10px}.lbl.r::before{left:0}.lbl.l{padding-right:10px}.lbl.l::before{right:0}
+.lbl.ext{font-size:13.5px;font-weight:800;color:#fff;background:var(--deep);border-radius:6px;padding:5px 8px 5px 22px;text-shadow:none}
+.lbl.ext::before{left:7px;width:10px;height:10px;margin-top:-5px;background:#f2c43d;box-shadow:0 0 0 2px #fff}
+.lbl.ext.l{padding:5px 22px 5px 8px}.lbl.ext.l::before{left:auto;right:7px}
+.tip{position:absolute;pointer-events:none;background:rgba(0,32,91,.94);color:#fff;font-size:13px;line-height:1.35;padding:6px 9px;border-radius:7px;white-space:nowrap;transform:translate(-50%,calc(-100% - 12px))}
+.tip b{font-size:15px}
+.laden{position:absolute;inset:0;display:grid;place-items:center;background:rgba(246,248,251,.7);font-weight:600;color:var(--soft)}
+.zij{display:grid;gap:14px}
+.legenda .balk{height:14px;border-radius:4px;margin:8px 0 4px}
+.legenda .ticks{position:relative;height:18px;font-size:12px;color:var(--soft);font-variant-numeric:tabular-nums}
+.legenda .ticks span{position:absolute;transform:translateX(-50%)}
+h2{font-size:15px;margin:0;letter-spacing:0}
+.top ol{margin:8px 0 0;padding:0;list-style:none;font-size:14px;font-variant-numeric:tabular-nums}
+.top li{display:grid;grid-template-columns:20px 12px minmax(0,1fr) auto;gap:6px;align-items:center;border-bottom:1px solid var(--tint);padding:5px 0}
+.top li:last-child{border-bottom:0}
+.top .nr{color:var(--soft);text-align:right}.top .sw{width:12px;height:12px;border-radius:3px}
+.top .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acties{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.knop{font:inherit;font-size:14px;font-weight:600;color:var(--ink);background:var(--tint);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;min-height:40px}
+.noot{font-size:13px;color:var(--soft);margin:0;line-height:1.5;max-width:90ch}
+.badge{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;background:var(--wl-color-primary-soft,#eff6ff);color:var(--deep);border:1px solid var(--line);vertical-align:middle;margin-left:6px}
+.fout{background:#fdecec;border:1px solid #f3b9b9;color:#8a1f1f;border-radius:10px;padding:10px 14px;font-size:14px}
+@media(max-width:960px){.hoofd{grid-template-columns:1fr}.zij{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.cijfers{grid-template-columns:1fr}.zij{grid-template-columns:1fr}.cijfer b{font-size:24px}.lbl{font-size:10.5px}.lbl.ext{font-size:11.5px}.tijd button{min-width:92px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <header>
+  <p class="eyebrow">Temperatuur · regio Rijnmond</p>
+  <h1 id="kop">Minimumtemperatuur Rijnmond</h1>
+  <p class="lead" id="lead">Verwachting van Weerlabs eigen MOS voor het Rijnmondgebied.</p>
+ </header>
+ <section class="panel" aria-label="Kaart kiezen">
+  <div class="keuze" id="lagen" role="group" aria-label="Kaartlaag">
+   <button type="button" data-l="tn" aria-pressed="true">Minimum · nacht</button>
+   <button type="button" data-l="tx" aria-pressed="false">Maximum · dag</button>
+   <button type="button" data-l="gras" aria-pressed="false">Minimum aan de grond</button>
+   <button type="button" data-l="kans" aria-pressed="false">Kans op vorst aan de grond</button>
+  </div>
+  <div class="keuze tijd" id="tijden" role="group" aria-label="Nacht of dag"></div>
+ </section>
+ <div class="fout" id="fout" role="alert" hidden></div>
+ <div class="cijfers" aria-live="polite">
+  <div class="cijfer"><span>In Rotterdam</span><b id="rtmWaarde">–</b><small id="rtmNoot">&nbsp;</small></div>
+  <div class="cijfer"><span id="extKop">Koudste in Rijnmond</span><b id="extWaarde">–</b><small id="extNoot">&nbsp;</small></div>
+  <div class="cijfer"><span>Verwachting</span><b id="perKop" style="font-size:18px;line-height:1.35">–</b><small id="perNoot">&nbsp;</small></div>
+ </div>
+ <div class="hoofd">
+  <div class="kaart" id="kaart">
+   <canvas id="cv" aria-label="Temperatuurkaart van de regio Rijnmond"></canvas>
+   <div class="laag" id="labels"></div>
+   <div class="tip" id="tip" hidden></div>
+   <div class="laden" id="laden">Kaart laden…</div>
+  </div>
+  <aside class="zij">
+   <section class="panel top"><h2 id="topKop">Top 10 koudste plaatsen</h2><ol id="top"></ol></section>
+   <section class="panel legenda"><h2 id="legKop">Temperatuur (°C)</h2><div class="balk" id="balk"></div><div class="ticks" id="ticks"></div>
+    <p class="noot" style="margin-top:6px">Beweeg over de kaart of tik erop voor de waarde op die plek.</p></section>
+  </aside>
+ </div>
+ <div class="acties">
+  <p class="noot" id="bron"></p>
+  <button type="button" class="knop" id="png">Kaart opslaan (PNG)</button>
+ </div>
+</div>
+
+<script id="plaatsen" type="application/json">[["Rotterdam",4.4792,51.9225],["Dordrecht",4.6736,51.81],["Schiedam",4.3889,51.9192],["Spijkenisse",4.3292,51.845],["Vlaardingen",4.3417,51.9125],["Capelle aan den IJssel",4.5778,51.9292],["Zwijndrecht",4.6333,51.8175],["Ridderkerk",4.6028,51.8725],["Barendrecht",4.5347,51.8567],["Hoogvliet",4.3625,51.8633],["Gorinchem",4.9724,51.8365],["Maassluis",4.25,51.9233],["Papendrecht",4.6875,51.8317],["Krimpen aan den IJssel",4.6028,51.9167],["Sliedrecht",4.7764,51.8208],["Oud-Beijerland",4.4125,51.8242],["Hellevoetsluis",4.1333,51.8333],["Hendrik-Ido-Ambacht",4.6389,51.8442],["Berkel en Rodenrijs",4.4787,51.9931],["Alblasserdam",4.6611,51.8658],["Rhoon",4.4222,51.8575],["Middelharnis",4.1653,51.7575],["Bergschenhoek",4.4986,51.99],["Hoek van Holland",4.1333,51.9775],["Brielle",4.1625,51.9017],["Rozenburg",4.2486,51.9042],["Maasvlakte",4.03,51.955],["Rockanje",4.0708,51.8717],["Ouddorp",3.9347,51.8108],["Sommelsdijk",4.15,51.7617],["Stellendam",4.0306,51.8092],["Oude-Tonge",4.2139,51.6928],["Zuid-Beijerland",4.3694,51.7525],["Numansdorp",4.4375,51.7325],["Strijen",4.5514,51.7442],["'s-Gravendeel",4.6181,51.7792],["Puttershoek",4.5686,51.8061],["Heinenoord",4.4783,51.8275],["Poortugaal",4.3944,51.8597],["Zuidland",4.2569,51.8222],["Abbenbroek",4.2422,51.8492],["Oostvoorne",4.0986,51.9122],["Nieuwerkerk aan den IJssel",4.6144,51.9661],["Bleiswijk",4.5319,52.0114],["Lekkerkerk",4.6819,51.8983],["Krimpen aan de Lek",4.6283,51.8942],["Nieuw-Lekkerland",4.6903,51.8853],["Hardinxveld-Giessendam",4.8361,51.8267],["Giessenburg",4.8906,51.8497],["Arkel",4.9953,51.8647],["Bleskensgraaf",4.7836,51.8739],["Groot-Ammers",4.8236,51.9236],["Schoonhoven",4.8533,51.9475],["Bergambacht",4.7858,51.9311],["Stolwijk",4.7717,51.9736],["Ammerstol",4.8069,51.9278],["Zevenhuizen",4.5811,52.0147],["Rotterdam Airport",4.437,51.957],["Pernis",4.3889,51.8889],["Europoort",4.17,51.94],["Dirksland",4.1,51.7494],["Herkingen",4.0883,51.7106],["Goedereede",3.9794,51.8183],["Melissant",4.0692,51.7631],["Nieuwe-Tonge",4.1681,51.7139],["Den Bommel",4.2861,51.7164],["Ooltgensplaat",4.3464,51.6831],["Klaaswaal",4.4458,51.7697],["Mijnsheerenland",4.4861,51.7986],["Maasdam",4.5578,51.7892],["Westmaas",4.4744,51.7875],["Piershil",4.3133,51.7947],["Nieuw-Beijerland",4.3436,51.8139],["Goudswaard",4.2775,51.7953],["Heenvliet",4.2428,51.8656],["Zwartewaal",4.2189,51.8797],["Tinte",4.1269,51.8847],["Dubbeldam",4.7111,51.7989],["Heerjansdam",4.5639,51.8364],["Ouderkerk aan den IJssel",4.6367,51.9319],["Moordrecht",4.6681,51.9858],["Noordeloos",4.9442,51.9039],["Meerkerk",4.9939,51.9172],["Hoornaar",4.9475,51.8769],["Molenaarsgraaf",4.8347,51.8789],["Streefkerk",4.7439,51.8989],["Langerak",4.8742,51.9336],["Nieuwpoort",4.8725,51.9356],["Haastrecht",4.7756,52.0008],["Vlist",4.8194,51.9797],["Schelluinen",4.9281,51.8433],["Boven-Hardinxveld",4.8789,51.8253]]</script>
+<script src="accumulatie_core.js?v=20261028"></script>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var C = window.AccuCore, RK = C.REGIOKAART;
+  var LOKAAL = ["localhost", "127.0.0.1"].indexOf(location.hostname) >= 0;
+  var DATA = LOKAAL ? "wgt/" : "https://data.weerlab.nl/";
+  var GEBIED = (LOKAAL ? "accumulatie_data/" : "https://data.weerlab.nl/accumulatie/") + "raster/rijnmond.geojson";
+  var PLAATSEN = JSON.parse($("plaatsen").textContent).map(function (p) { return { naam: p[0], lon: p[1], lat: p[2] }; });
+  var AMS = "Europe/Amsterdam";
+  var dagKort = new Intl.DateTimeFormat("nl-NL", { weekday: "short", day: "numeric", timeZone: AMS });
+  var dagLang = new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: AMS });
+  var klok = new Intl.DateTimeFormat("nl-NL", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: AMS });
+  var fmt = function (v, d) { return (v == null || !isFinite(v)) ? "–" : v.toFixed(d == null ? 1 : d).replace(".", ",").replace("-", "−"); };
+
+  // ── kleurschalen ──
+  var SCHALEN = {
+    // minima: zelfde schaal als de landelijke minimumkaart; maxima: 10 °C groen, 15 geel, 20 oranje, 25 rood
+    min: [[-12,"#084594"],[-9,"#1565c0"],[-6,"#1e88e5"],[-3,"#42a5f5"],[-1,"#90caf9"],[0,"#b2dfdb"],[3,"#2e8b57"],[6,"#66bb6a"],[9,"#cddc39"],[12,"#ffeb3b"],[15,"#fbc02d"],[18,"#f57f17"],[21,"#ef6c00"],[25,"#d84315"],[30,"#8e1b0e"]],
+    max: [[-12,"#084594"],[-6,"#1e88e5"],[-2,"#90caf9"],[1,"#b2dfdb"],[4,"#80cbc4"],[7,"#66bb6a"],[10,"#2e9e44"],[13,"#9ccc65"],[15,"#fdd835"],[18,"#fbc02d"],[20,"#fb8c00"],[23,"#f4511e"],[25,"#e53935"],[30,"#b71c1c"],[36,"#4a0a0a"]],
+    kans: [[0,"#f8fafc"],[5,"#ede9fe"],[15,"#ddd6fe"],[30,"#c4b5fd"],[50,"#8b5cf6"],[70,"#6d28d9"],[90,"#4c1d95"],[100,"#2e1065"]]
+  };
+  function hex(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+  function maakLut(stops, n) {
+    var s = stops.map(function (x) { return [x[0], hex(x[1])]; }), lo = s[0][0], hi = s[s.length - 1][0], lut = new Uint8ClampedArray(n * 3);
+    for (var i = 0; i < n; i++) {
+      var v = lo + (hi - lo) * i / (n - 1), j = 0; while (j < s.length - 2 && v > s[j + 1][0]) j++;
+      var f = Math.max(0, Math.min(1, (v - s[j][0]) / (s[j + 1][0] - s[j][0])));
+      for (var k = 0; k < 3; k++) lut[i * 3 + k] = s[j][1][k] + (s[j + 1][1][k] - s[j][1][k]) * f;
+    }
+    return { lut: lut, lo: lo, hi: hi, n: n };
+  }
+  var LUT = { min: maakLut(SCHALEN.min, 1024), max: maakLut(SCHALEN.max, 1024), kans: maakLut(SCHALEN.kans, 1024) };
+  function kleurIdx(lu, v) { return Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)))); }
+  function kleur(lu, v) { var k = kleurIdx(lu, v) * 3; return "rgb(" + lu.lut[k] + "," + lu.lut[k + 1] + "," + lu.lut[k + 2] + ")"; }
+
+  var LAGEN = {
+    tn:   { kop: "Minimumtemperatuur Rijnmond", lut: "min", hoog: false, pct: false, tijd: "nacht", veld: "tn", ext: "Koudste in Rijnmond", top: "Top 10 koudste plaatsen", leg: "Minimum op 2 m (°C)",
+            lead: "Laagste temperatuur op 1,5 m tussen 18.00 en 09.00 uur. Weerlabs eigen MOS, getraind op het échte nachtminimum uit KNMI-metingen; in de lopende nacht telt het al gemeten minimum mee." },
+    tx:   { kop: "Maximumtemperatuur Rijnmond", lut: "max", hoog: true, pct: false, tijd: "dag", veld: "txmax", ext: "Warmste in Rijnmond", top: "Top 10 warmste plaatsen", leg: "Maximum op 2 m (°C)",
+            lead: "Hoogste temperatuur op 1,5 m per dag (TX-MOS, getraind op de officiële KNMI-maxima)." },
+    gras: { kop: "Minimum aan de grond · Rijnmond", lut: "min", hoog: false, pct: false, tijd: "nacht", veld: "t10min", ext: "Koudste in Rijnmond", top: "Top 10 koudste plaatsen", leg: "Minimum op 10 cm (°C)",
+            lead: "Laagste temperatuur vlak boven het gras (10 cm) tussen 18.00 en 09.00 uur: bepalend voor vorst aan de grond en bevroren autoruiten." },
+    kans: { kop: "Kans op vorst aan de grond · Rijnmond", lut: "kans", hoog: true, pct: true, tijd: "nacht", veld: "p0", ext: "Hoogste kans in Rijnmond", top: "Top 10 hoogste kans", leg: "Kans op < 0 °C op 10 cm (%)",
+            lead: "Kans dat de temperatuur op 10 cm hoogte tussen 18.00 en 09.00 uur onder nul komt." }
+  };
+  var S = { laag: "tn", ti: { nacht: 0, dag: 0 }, N: null, T: null, G: null, veld: null, pins: [], rooster: null, cellVan: null, naast: null };
+
+  // ── decoderen ──
+  function dec(b, T) { var s = atob(b), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new T(u.buffer); }
+  function waarden(laag, item) {
+    var L = LAGEN[laag], ruw = item[L.veld]; if (!ruw) return null;
+    if (L.pct) { var a = dec(ruw, Uint8Array), o = new Float32Array(a.length); for (var i = 0; i < a.length; i++) o[i] = a[i]; return o; }
+    var q = dec(ruw, Int16Array), f = new Float32Array(q.length); for (var k = 0; k < q.length; k++) f[k] = q[k] === -32768 ? NaN : q[k] / 10; return f;
+  }
+
+  // ── rooster: cel per roosterpunt, dichtstbijzijnde geldige cel voor punten buiten het land ──
+  function bouwRooster(g) {
+    var NY = g.ny, NX = g.nx, n = g.iy.length, cv = new Int32Array(NY * NX).fill(-1);
+    for (var c = 0; c < n; c++) cv[g.iy[c] * NX + g.ix[c]] = c;
+    var naast = new Int32Array(NY * NX);
+    for (var y = 0; y < NY; y++) for (var x = 0; x < NX; x++) {
+      var i = y * NX + x; if (cv[i] >= 0) { naast[i] = cv[i]; continue; }
+      var best = -1, bd = 1e9;
+      for (var c2 = 0; c2 < n; c2++) { var dy = g.iy[c2] - y, dx = (g.ix[c2] - x) * 0.98, d = dy * dy + dx * dx; if (d < bd) { bd = d; best = c2; } }
+      naast[i] = bd <= 9 ? best : -1;                       // hooguit 3 cellen (15 km) doortrekken
+    }
+    S.rooster = g; S.naast = naast;
+  }
+  function fracRooster(lon, lat) { var g = S.rooster; return [(lat - g.lat0) / g.dlat, (lon - g.lon0) / g.dlon]; }
+  function waardeOp(veld, lon, lat) {
+    var g = S.rooster, f = fracRooster(lon, lat), y0 = Math.floor(f[0]), x0 = Math.floor(f[1]);
+    if (y0 < 0 || x0 < 0 || y0 + 1 >= g.ny || x0 + 1 >= g.nx) return NaN;
+    var ty = f[0] - y0, tx = f[1] - x0, NX = g.nx, som = 0, w = 0;
+    [[y0, x0, (1 - ty) * (1 - tx)], [y0, x0 + 1, (1 - ty) * tx], [y0 + 1, x0, ty * (1 - tx)], [y0 + 1, x0 + 1, ty * tx]].forEach(function (h) {
+      var c = S.naast[h[0] * NX + h[1]]; if (c < 0) return; var v = veld[c]; if (!isFinite(v)) return; som += v * h[2]; w += h[2];
+    });
+    return w > 0.2 ? som / w : NaN;
+  }
+
+  // ── kaartgeometrie op de regiokaart-ondergrond (RD) ──
+  function bronPx(lon, lat) { var r = C.wgsNaarRd(lon, lat); return [(r[0] - RK.x0) / RK.m, (RK.y1 - r[1]) / RK.m]; }
+  function pad(ctx, geo, s, ox, oy) {
+    ctx.beginPath();
+    geo.features.forEach(function (f) {
+      var g = f.geometry, polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+      polys.forEach(function (poly) { poly.forEach(function (ring) {
+        ring.forEach(function (c, i) { var q = bronPx(c[0], c[1]); var X = (q[0] - ox) * s, Y = (q[1] - oy) * s; if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); });
+        ctx.closePath();
+      }); });
+    });
+  }
+  function bouwGeometrie(img, geo) {
+    var W = RK.b, H = RK.h, c = document.createElement("canvas"); c.width = W; c.height = H;
+    var x = c.getContext("2d", { willReadFrequently: true });
+    x.fillStyle = "#fff"; pad(x, geo, 1, 0, 0); x.fill("evenodd");
+    var md = x.getImageData(0, 0, W, H).data, x0 = W, x1 = 0, y0 = H, y1 = 0;
+    for (var i = 0; i < W * H; i++) if (md[i * 4 + 3] > 127) { var px = i % W, py = (i / W) | 0; if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py; }
+    var m = Math.round(0.035 * (x1 - x0));
+    x0 = Math.max(0, x0 - m); x1 = Math.min(W - 1, x1 + m); y0 = Math.max(0, y0 - m); y1 = Math.min(H - 1, y1 + m);
+    var w = x1 - x0 + 1, h = y1 - y0 + 1, n = w * h;
+    var binnen = new Uint8Array(n); for (var p0 = 0; p0 < n; p0++) binnen[p0] = md[((y0 + ((p0 / w) | 0)) * W + x0 + p0 % w) * 4 + 3] > 127 ? 1 : 0;
+    x.clearRect(0, 0, W, H); x.drawImage(img, 0, 0, W, H);
+    var bd = x.getImageData(x0, y0, w, h);
+    var fy = new Float32Array(n), fx = new Float32Array(n), alfa = new Float32Array(n);
+    for (var yy = 0; yy < h; yy++) for (var xx = 0; xx < w; xx++) {
+      var p = yy * w + xx, ll = C.rdNaarWgs(RK.x0 + (x0 + xx + 0.5) * RK.m, RK.y1 - (y0 + yy + 0.5) * RK.m), f = fracRooster(ll[0], ll[1]);
+      fy[p] = f[0]; fx[p] = f[1];
+      var q = p * 4, water = bd.data[q + 2] > bd.data[q + 1] + 15;
+      alfa[p] = binnen[p] ? (water ? 0.45 : 0.88) : 0.30;
+    }
+    S.G = { x0: x0, y0: y0, w: w, h: h, basis: bd, fy: fy, fx: fx, alfa: alfa, binnen: binnen, geo: geo };
+    var cv = $("cv"); cv.width = w; cv.height = h;
+    S.pins = PLAATSEN.map(function (pl) { var q = bronPx(pl.lon, pl.lat), X = q[0] - x0, Y = q[1] - y0; return { naam: pl.naam, lon: pl.lon, lat: pl.lat, x: X, y: Y, in: X >= 0 && Y >= 0 && X < w && Y < h && binnen[Math.floor(Y) * w + Math.floor(X)] === 1 }; }).filter(function (q) { return q.in; });
+  }
+
+  // ── tekenen ──
+  function teken() {
+    var G = S.G, L = LAGEN[S.laag], lu = LUT[L.lut], veld = S.veld, g = S.rooster, NX = g.nx, NY = g.ny;
+    var cv = $("cv"), ctx = cv.getContext("2d"), img = new ImageData(new Uint8ClampedArray(G.basis.data), G.w, G.h), d = img.data;
+    for (var p = 0; p < G.w * G.h; p++) {
+      var f0 = G.fy[p], f1 = G.fx[p], y0 = Math.floor(f0), x0 = Math.floor(f1);
+      if (y0 < 0 || x0 < 0 || y0 + 1 >= NY || x0 + 1 >= NX) continue;
+      var ty = f0 - y0, tx = f1 - x0, som = 0, w = 0, c, v;
+      c = S.naast[y0 * NX + x0]; if (c >= 0 && isFinite(v = veld[c])) { som += v * (1 - ty) * (1 - tx); w += (1 - ty) * (1 - tx); }
+      c = S.naast[y0 * NX + x0 + 1]; if (c >= 0 && isFinite(v = veld[c])) { som += v * (1 - ty) * tx; w += (1 - ty) * tx; }
+      c = S.naast[(y0 + 1) * NX + x0]; if (c >= 0 && isFinite(v = veld[c])) { som += v * ty * (1 - tx); w += ty * (1 - tx); }
+      c = S.naast[(y0 + 1) * NX + x0 + 1]; if (c >= 0 && isFinite(v = veld[c])) { som += v * ty * tx; w += ty * tx; }
+      if (w < 0.2) continue;
+      var li = kleurIdx(lu, som / w) * 3, al = G.alfa[p], q = p * 4;
+      d[q] = d[q] * (1 - al) + lu.lut[li] * al; d[q + 1] = d[q + 1] * (1 - al) + lu.lut[li + 1] * al; d[q + 2] = d[q + 2] * (1 - al) + lu.lut[li + 2] * al;
+    }
+    ctx.putImageData(img, 0, 0);
+    ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(15,23,42,.55)"; ctx.lineWidth = 5; pad(ctx, G.geo, 1, G.x0, G.y0); ctx.stroke();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.6; pad(ctx, G.geo, 1, G.x0, G.y0); ctx.stroke();
+  }
+
+  // ── waarden per plaats, labels, top 10 ──
+  function tekst(v) { return LAGEN[S.laag].pct ? Math.round(v) + " %" : fmt(v) + " °C"; }
+  function kort(v) { return LAGEN[S.laag].pct ? Math.round(v) + "%" : fmt(v) + "°"; }
+  function plaatsWaarden() {
+    S.pins.forEach(function (p) { p.v = waardeOp(S.veld, p.lon, p.lat); });
+    var L = LAGEN[S.laag], ok = S.pins.filter(function (p) { return isFinite(p.v); });
+    return ok.slice().sort(function (a, b) { return L.hoog ? b.v - a.v : a.v - b.v; });
+  }
+  function labels(gesorteerd) {
+    var laag = $("labels"), cv = $("cv"), sch = cv.clientWidth / S.G.w; laag.innerHTML = "";
+    if (!sch) return;
+    var bezet = [], smal = cv.clientWidth < 620, maxN = smal ? 14 : 34;
+    var ext = gesorteerd[0], rtm = S.pins.find(function (p) { return p.naam === "Rotterdam"; });
+    var volg = [];                                         // eerst het uiterste en Rotterdam, dan op lijstvolgorde (grootste plaatsen eerst)
+    if (ext) volg.push([ext, true]); if (rtm && rtm !== ext) volg.push([rtm, false]);
+    S.pins.forEach(function (p) { if (p !== ext && p !== rtm && isFinite(p.v)) volg.push([p, false]); });
+    var n = 0;
+    volg.forEach(function (it) {
+      if (n >= maxN) return;
+      var p = it[0], isExt = it[1], el = document.createElement("div"), X = p.x * sch, Y = p.y * sch;
+      el.className = "lbl r" + (isExt ? " ext" : ""); el.innerHTML = p.naam + " <b>" + kort(p.v) + "</b>";
+      el.style.left = X + "px"; el.style.top = Y + "px"; laag.appendChild(el);
+      var bw = el.offsetWidth, bh = el.offsetHeight + 4, links = X + bw + 6 > cv.clientWidth;
+      if (links) { el.className = el.className.replace(" r", " l"); el.style.left = (X - bw) + "px"; }
+      var box = { x0: links ? X - bw : X - 4, x1: links ? X + 4 : X + bw, y0: Y - bh / 2, y1: Y + bh / 2 };
+      var botst = bezet.some(function (b) { return box.x0 < b.x1 + 4 && box.x1 > b.x0 - 4 && box.y0 < b.y1 + 1 && box.y1 > b.y0 - 1; });
+      if (botst && !isExt) { laag.removeChild(el); return; }
+      bezet.push(box); n++;
+    });
+  }
+  function top10(gesorteerd) {
+    var L = LAGEN[S.laag], lu = LUT[L.lut];
+    $("top").innerHTML = gesorteerd.slice(0, 10).map(function (p, i) {
+      return '<li><span class="nr">' + (i + 1) + '</span><span class="sw" style="background:' + kleur(lu, p.v) + '"></span><span class="nm" title="' + p.naam + '">' + p.naam + "</span><b>" + tekst(p.v) + "</b></li>";
+    }).join("") || '<li style="display:block">Geen waarden beschikbaar.</li>';
+  }
+  function legenda() {
+    var L = LAGEN[S.laag], lu = LUT[L.lut], lo, hi;
+    if (L.pct) { lo = 0; hi = 100; } else {
+      var vs = S.pins.map(function (p) { return p.v; }).filter(isFinite), mn = Math.min.apply(null, vs), mx = Math.max.apply(null, vs);
+      lo = Math.floor((mn - 4) / 2) * 2; hi = Math.ceil((mx + 4) / 2) * 2;
+    }
+    var st = []; for (var i = 0; i <= 24; i++) { var v = lo + (hi - lo) * i / 24; st.push(kleur(lu, v) + " " + (i / 24 * 100).toFixed(1) + "%"); }
+    $("balk").style.background = "linear-gradient(90deg," + st.join(",") + ")";
+    var stap = L.pct ? 25 : (hi - lo) / 4 <= 2 ? 2 : Math.ceil((hi - lo) / 4 / 2) * 2, t = "";
+    for (var w = lo; w <= hi + 1e-6; w += stap) t += '<span style="left:' + ((w - lo) / (hi - lo) * 100) + '%">' + fmt(w, 0) + "</span>";
+    $("ticks").innerHTML = t; $("legKop").textContent = L.leg;
+  }
+
+  // ── tijdknoppen en kopcijfers ──
+  function items() { return LAGEN[S.laag].tijd === "nacht" ? S.N.nachten : S.T.dagen; }
+  function itemLabel(it, i) {
+    if (LAGEN[S.laag].tijd === "nacht") { var s = new Date(it.start), e = new Date(it.eind); return dagKort.format(s) + " → " + dagKort.format(e); }
+    var d = new Date(it.label + "T12:00:00Z"); return i === 0 ? "vandaag" : dagKort.format(d);
+  }
+  function bouwTijden() {
+    var L = LAGEN[S.laag], wrap = $("tijden"), lijst = items(), key = L.tijd; wrap.innerHTML = "";
+    if (S.ti[key] >= lijst.length) S.ti[key] = 0;
+    lijst.forEach(function (it, i) {
+      var veld = waarden(S.laag, it), b = document.createElement("button"); b.type = "button";
+      b.setAttribute("aria-pressed", String(i === S.ti[key]));
+      var v = NaN; if (veld && S.pins.length) { var vs = S.pins.map(function (p) { return waardeOp(veld, p.lon, p.lat); }).filter(isFinite); if (vs.length) v = L.hoog ? Math.max.apply(null, vs) : Math.min.apply(null, vs); }
+      b.innerHTML = "<b>" + (L.pct ? (isFinite(v) ? Math.round(v) + " %" : "–") : fmt(v) + "°") + "</b><small>" + itemLabel(it, i) + (it.onvolledig ? " (rest)" : "") + "</small>";
+      b.onclick = function () { S.ti[key] = i; ververs(); };
+      wrap.appendChild(b);
+    });
+  }
+  function ververs() {
+    var L = LAGEN[S.laag], lijst = items(), it = lijst[S.ti[L.tijd]];
+    $("kop").textContent = L.kop; $("lead").textContent = L.lead; $("extKop").textContent = L.ext; $("topKop").textContent = L.top;
+    [].forEach.call($("lagen").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.l === S.laag)); });
+    bouwTijden();
+    S.veld = it ? waarden(S.laag, it) : null;
+    if (!S.veld) { $("fout").textContent = "Voor deze keuze is nu geen verwachting beschikbaar."; $("fout").hidden = false; return; }
+    $("fout").hidden = true;
+    teken();
+    var srt = plaatsWaarden(); labels(srt); top10(srt); legenda();
+    var rtm = S.pins.find(function (p) { return p.naam === "Rotterdam"; }), ext = srt[0];
+    $("rtmWaarde").textContent = rtm ? tekst(rtm.v) : "–";
+    $("rtmNoot").textContent = L.tijd === "nacht" ? "nacht " + itemLabel(it) : dagLang.format(new Date(it.label + "T12:00:00Z"));
+    $("extWaarde").textContent = ext ? tekst(ext.v) : "–"; $("extNoot").textContent = ext ? "bij " + ext.naam : "";
+    var meting = L.tijd === "nacht" && it.tn_bron === "metingen + verwachting" && S.laag === "tn";
+    $("perKop").innerHTML = (L.tijd === "nacht" ? "Nacht " + itemLabel(it) : dagLang.format(new Date(it.label + "T12:00:00Z"))) + (meting ? '<span class="badge">met metingen van vannacht</span>' : "");
+    var bron = L.tijd === "nacht" ? S.N : S.T, onz = it.buiten_training ? " · verder dan 60 uur vooruit: minder zeker" : "";
+    $("perNoot").textContent = "berekend " + klok.format(new Date(bron.gemaakt_utc)) + " · " + it.n_modellen + " weermodellen" + onz;
+    $("bron").textContent = "Bron: Weerlab-MOS (HARMONIE, ICON-D2, ECMWF IFS en AIFS; verder vooruit ook ICON-EU en GFS), statistisch gecorrigeerd met KNMI-metingen. " +
+      "Rekenrooster 5 km, vloeiend ingekleurd; binnen een wijk of polder kan het plaatselijk 1–2 °C verschillen. " +
+      (S.laag === "tn" ? "Gemiddelde afwijking van het nachtminimum voor de komende nacht: ongeveer 0,8 °C." : "");
+  }
+
+  // ── aanwijzen ──
+  function aanwijzen(e) {
+    var cv = $("cv"), r = cv.getBoundingClientRect(), sch = S.G.w / r.width, X = (e.clientX - r.left) * sch, Y = (e.clientY - r.top) * sch, tip = $("tip");
+    if (X < 0 || Y < 0 || X >= S.G.w || Y >= S.G.h || !S.veld) { tip.hidden = true; return; }
+    var ll = C.rdNaarWgs(RK.x0 + (S.G.x0 + X) * RK.m, RK.y1 - (S.G.y0 + Y) * RK.m), v = waardeOp(S.veld, ll[0], ll[1]);
+    if (!isFinite(v)) { tip.hidden = true; return; }
+    var best = null, bd = 1e9; S.pins.forEach(function (p) { var d = (p.x - X) * (p.x - X) + (p.y - Y) * (p.y - Y); if (d < bd) { bd = d; best = p; } });
+    var km = Math.sqrt(bd) * RK.m / 1000;
+    tip.innerHTML = "<b>" + tekst(v) + "</b><br>" + (best ? (km < 1.2 ? best.naam : "bij " + best.naam) : "");
+    tip.style.left = (e.clientX - r.left) + "px"; tip.style.top = (e.clientY - r.top) + "px"; tip.hidden = false;
+  }
+  $("kaart").addEventListener("pointermove", aanwijzen);
+  $("kaart").addEventListener("pointerdown", aanwijzen);
+  $("kaart").addEventListener("pointerleave", function () { $("tip").hidden = true; });
+  $("lagen").addEventListener("click", function (e) { var b = e.target.closest("button"); if (!b) return; S.laag = b.dataset.l; ververs(); });
+  var rs; window.addEventListener("resize", function () { clearTimeout(rs); rs = setTimeout(function () { if (S.veld) labels(plaatsWaarden()); }, 120); });
+
+  // ── PNG ──
+  $("png").onclick = function () {
+    var cv = $("cv"), c = document.createElement("canvas"), kopH = 64; c.width = cv.width; c.height = cv.height + kopH;
+    var x = c.getContext("2d"), L = LAGEN[S.laag], it = items()[S.ti[L.tijd]], sch = cv.width / cv.clientWidth;
+    x.fillStyle = "#00205b"; x.fillRect(0, 0, c.width, kopH); x.fillStyle = "#fff"; x.font = "700 24px system-ui,sans-serif"; x.textBaseline = "middle";
+    x.fillText(L.kop + " · " + (L.tijd === "nacht" ? "nacht " + itemLabel(it) : dagLang.format(new Date(it.label + "T12:00:00Z"))), 18, 24);
+    x.font = "500 15px system-ui,sans-serif"; x.fillText("weerlab.nl · berekend " + klok.format(new Date((L.tijd === "nacht" ? S.N : S.T).gemaakt_utc)), 18, 48);
+    x.drawImage(cv, 0, kopH);
+    [].forEach.call($("labels").children, function (el) {
+      var X = parseFloat(el.style.left) * sch, Y = parseFloat(el.style.top) * sch + kopH, links = el.classList.contains("l"), ext = el.classList.contains("ext");
+      var t = el.textContent, fs = (ext ? 14 : 13) * sch; x.font = (ext ? "800 " : "600 ") + fs + "px system-ui,sans-serif";
+      var w = x.measureText(t).width, tx = links ? X + el.offsetWidth * sch - w - (ext ? 22 : 10) * sch : X + (ext ? 22 : 10) * sch;
+      if (ext) { x.fillStyle = "#00205b"; x.fillRect(X, Y - 13 * sch, el.offsetWidth * sch, 26 * sch); }
+      else { x.lineWidth = 3 * sch; x.strokeStyle = "rgba(15,23,42,.85)"; x.strokeText(t, tx, Y); }
+      x.fillStyle = "#fff"; x.fillText(t, tx, Y);
+      var dx = links ? X + el.offsetWidth * sch - (ext ? 12 : 3) * sch : X + (ext ? 12 : 3) * sch;
+      x.beginPath(); x.arc(dx, Y, (ext ? 5 : 3) * sch, 0, 7); x.fillStyle = ext ? "#f2c43d" : "#fff"; x.fill();
+    });
+    var a = document.createElement("a"); a.download = "temperatuur_rijnmond_" + S.laag + "_" + it.label + ".png"; a.href = c.toDataURL("image/png"); a.click();
+  };
+
+  // ── start ──
+  function haalJson(u) { return fetch(u, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("De temperatuurverwachting is tijdelijk niet bereikbaar (" + r.status + ")."); return r.json(); }); }
+  var basis = new Promise(function (res, rej) { var im = new Image(); im.crossOrigin = "anonymous"; im.onload = function () { res(im); }; im.onerror = function () { rej(new Error("De kaart kon niet worden geladen.")); }; im.src = "rijnmond_regiokaart.png"; });
+  function laad(eerste) {
+    return Promise.all([haalJson(DATA + "wgt_nachten.json"), haalJson(DATA + "wgt_tx_dagen.json")]).then(function (r) {
+      S.N = r[0]; S.T = r[1];
+      if (!S.rooster) bouwRooster(S.N.rooster);
+      return r;
+    });
+  }
+  Promise.all([laad(true), fetch(GEBIED).then(function (r) { if (!r.ok) throw new Error("Het kaartgebied kon niet worden geladen."); return r.json(); }), basis]).then(function (r) {
+    bouwGeometrie(r[2], r[1]);
+    var l = new URLSearchParams(location.search).get("laag"); if (l && LAGEN[l]) S.laag = l;
+    $("laden").hidden = true; ververs();
+    setInterval(function () { laad(false).then(ververs).catch(function () {}); }, 10 * 60 * 1000);   // elke 10 min verversen; bij een fout blijft de laatste kaart staan
+  }).catch(function (e) { $("laden").hidden = true; $("fout").textContent = e.message; $("fout").hidden = false; });
+})();
+</script>
+</body>
+</html>
