@@ -1409,7 +1409,7 @@ const MENU_PRODUCTS = [
     "section": "Experimenten",
     "icon": "studio",
     "href": "index.html#beta",
-    "src": "beta.html?v=20261101-europa-verwijderd",
+    "src": "beta.html?v=20261112-wegdek",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",
