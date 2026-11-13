@@ -139,25 +139,28 @@ dt{color:var(--muted)}dd{margin:0;font-family:var(--mono);text-align:right;white
 const LOKAAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || location.protocol === "file:";
 const BASE = LOKAAL ? "wgt/" : "https://data.weerlab.nl/";
 // TN-nacht-MOS v4 (sinds 08-11-2026 live op de kaart): toets op het échte nachtminimum 18.00-09.00 lokaal.
-let TNN = null;
-async function tnnBlok() {
+const NACHTVERI = {};
+async function tnnBlok(prod) {
   try {
-    if (!TNN) { const r = await fetch(BASE + "wgt_tnn_verificatie.json?t=" + Date.now(), {cache: "no-cache"}); if (!r.ok) return; TNN = await r.json(); }
-    if (staat.prod !== "tn") return;
+    const bestand = prod === "tn" ? "wgt_tnn_verificatie.json" : "wgt_t10n_verificatie.json";
+    if (!NACHTVERI[prod]) { const r = await fetch(BASE + bestand + "?t=" + Date.now(), {cache: "no-cache"}); if (!r.ok) return; NACHTVERI[prod] = await r.json(); }
+    if (staat.prod !== prod) return;
+    const TNN = NACHTVERI[prod], tn = prod === "tn";
     const f = v => v == null ? "–" : v.toFixed(2).replace(".", ",").replace("-", "−");
     const rij = (naam, d, kol) => `<tr><td>${naam}</td>${kol.map(k => `<td style="text-align:right;font-variant-numeric:tabular-nums">${f(d?.[k]?.rmse)}</td>`).join("")}</tr>`;
     const kol = ["nacht_mos", "nacht_mos_cel", "mix", "icon_d2", "harmonie_nl", "ecmwf_ifs"];
-    const kop = ["Nacht-MOS v4", "cel zonder station", "modelmix", "ICON-D2", "HARMONIE", "ECMWF IFS"];
+    const kop = [tn ? "Nacht-MOS v4" : "T10-nacht-MOS", "cel zonder station", "modelmix", "ICON-D2", "HARMONIE", "ECMWF IFS"];
     const oud = TNN.komende_nacht_vs_oud || {};
     const lop = Object.entries(TNN.lopende_nacht || {});
     $("veriMelding").innerHTML = `<div class="noot" style="border:1px solid var(--border,#2a3a55);border-radius:8px;padding:10px 12px;margin:0 0 12px">
-      <b>Op de kaart draait sinds 8 november TN-nacht-MOS v4</b>, getraind en getoetst op het échte nachtminimum (18.00–09.00 lokaal, KNMI 10-minutenmetingen) — periode ${TNN.periode}. RMSE in °C:
+      <b>${tn ? "Op de kaart draait sinds 8 november TN-nacht-MOS v4" : "Op de kaart draait sinds 13 november T10-nacht-MOS"}</b>, getraind en getoetst op het échte nachtminimum ${tn ? "op 1,5 m" : "op 10 cm"} (18.00–09.00 lokaal, KNMI 10-minutenmetingen) — periode ${TNN.periode}. RMSE in °C:
       <div class="scroll"><table class="tabel" style="margin-top:8px"><thead><tr><th>Termijn</th>${kop.map(k => `<th style="text-align:right">${k}</th>`).join("")}</tr></thead><tbody>
       ${Object.entries(TNN.per_lead || {}).map(([l, d]) => rij(l, d, kol)).join("")}${rij("alle termijnen", TNN.totaal, kol)}
       ${rij("laatste 30 dagen", TNN.laatste_30d, kol)}</tbody></table></div>
-      Komende nacht, zelfde gevallen: oud product (v3, getraind op etmaal-TN) <b>${f(oud.v3?.rmse)}</b> (bias ${f(oud.v3?.bias)}) → nacht-MOS v4 <b>${f(oud.nacht_mos?.rmse)}</b> (bias ${f(oud.nacht_mos?.bias)}).
+      ${tn ? "Komende nacht, zelfde gevallen: oud product (v3, getraind op etmaal-TN)" : "Alle termijnen, zelfde gevallen: oud product (minimum van de 6-uursvensters)"} <b>${f(oud.v3?.rmse)}</b> (bias ${f(oud.v3?.bias)}) → nieuw <b>${f(oud.nacht_mos?.rmse)}</b> (bias ${f(oud.nacht_mos?.bias)}).
+      ${TNN.vorstkans ? `<br>Kans op grondvorst: Brier-skill ${Math.round(100 * TNN.vorstkans.skill)} % t.o.v. klimatologie; ${TNN.vorstkans.betrouwbaarheid.map(b => `verwacht ${Math.round(100 * b.verwacht)} % → gemeten ${Math.round(100 * b.gemeten)} %`).join(" · ")}.` : ""}
       ${lop.length ? `<br>Lopende nacht met metingen (trap 2), RMSE per uur: ${lop.filter((_, i) => i % 2 === 1).map(([u, v]) => `${u} ${f(v.trap2)}`).join(" · ")} (zonder metingen ${f(lop[0][1].basis)}).` : ""}
-      <br>De tabel hieronder is de oude toets op het officiële etmaal-TN (00–24 UT) en blijft ter vergelijking staan.</div>`;
+      <br>De tabel hieronder is de oude toets ${tn ? "op het officiële etmaal-TN (00–24 UT)" : "op de 6-uurs T10N-vensters"} en blijft ter vergelijking staan.</div>`;
   } catch (e) { /* geen blok: de bestaande tabel blijft bruikbaar */ }
 }
 const $ = id => document.getElementById(id);
@@ -298,7 +301,7 @@ function veri() {
   const P = V[staat.prod];
   if (!P) { $("veriMelding").innerHTML = `<p class="melding">Voor deze grootheid is nog geen verificatie berekend.</p>`; ["veriTabel", "regioTabel", "sitTabel", "leadTabel"].forEach(i => $(i).innerHTML = ""); $("maandGrafiek").innerHTML = ""; return; }
   $("veriMelding").innerHTML = "";
-  if (staat.prod === "tn") tnnBlok();
+  if (staat.prod === "tn" || staat.prod === "nacht") tnnBlok(staat.prod);
   const L = P.labels || {}, sys = systemen(staat.prod);
   const blok = staat.per === "totaal" ? P.totaal : P[staat.per]?.totaal;
   const naam = k => L[k] || k;
