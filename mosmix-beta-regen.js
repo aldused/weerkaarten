@@ -61,7 +61,7 @@
     loading = true;
     status.textContent = 'MOSMIX ophalen…';
     try {
-      const response = await fetch('mosmix_uurlijks_nl.json', { cache: 'no-cache' });
+      const response = await fetch('https://data.weerlab.nl/mosmix_uurlijks_nl.json', { cache: 'no-cache' });
       if (!response.ok) throw new Error(response.status);
       const result = await response.json();
       const names = Object.keys(result.data).filter(name => Array.isArray(result.data[name].tijden_utc) && Array.isArray(result.data[name].RR1c));
