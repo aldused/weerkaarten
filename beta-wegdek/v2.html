@@ -161,6 +161,14 @@ footer a{color:inherit}
 <li><b>Risico</b>: <span class="tag r3">vorst</span> wegdek ≤ 0 °C · <span class="tag r2">kritiek</span> ≤ 1 °C of RWS-verwachting ≤ 0 °C · <span class="tag r1">let op</span> ≤ 3 °C of verwachting ≤ 1 °C · <span class="tag rijp">rijp</span> wegdek ≤ 0,5 °C en onder het dauwpunt. Indicatief; strooiacties en zout zijn niet bekend.</li>
 </ul></details>
 
+<dialog id="saltDetails" aria-labelledby="saltTitle">
+  <h2 id="saltTitle">Strooistatistiek Rijkswaterstaat</h2>
+  <p id="saltTotals"></p>
+  <p id="saltSeason"></p>
+  <p id="saltUpdated"></p>
+  <p>Klik op een oranje route voor het tijdvak van die route.</p>
+  <form method="dialog"><button>Sluiten</button></form>
+</dialog>
 <footer>Bron: <a href="https://www.rijkswaterstaatstrooit.nl/" target="_blank" rel="noopener">Rijkswaterstaat</a> · KNMI · Kaart: Kadaster/PDOK · Wegen: NWB/PDOK · <a href="index.html">vorige versie</a></footer>
 </div>
 
@@ -266,6 +274,7 @@ function initMap(){
   map=L.map('map',{zoomControl:true,attributionControl:true,preferCanvas:false,minZoom:6,maxZoom:15}).setView([52.15,5.3],7);
   L.tileLayer('https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{z}/{x}/{y}.png',{maxZoom:19,attribution:'Kaart: <a href="https://www.pdok.nl">Kadaster/PDOK</a>'}).addTo(map);
   map.on('zoomend',drawMarkers);
+  map.on('click',showTrailDetails);
   map.createPane('trail');map.getPane('trail').style.zIndex=350;map.getPane('trail').style.pointerEvents='none';
   map.createPane('trucks');map.getPane('trucks').style.zIndex=640;
   trucksLayer=L.layerGroup().addTo(map);
@@ -282,6 +291,36 @@ function drawTrail(){
   if(!on){if(trailLayer){trailLayer.remove();trailLayer=null;trailKey=null}return}
   if(key!==trailKey){trailLayer&&trailLayer.remove();trailLayer=new TrailGrid({pts:sr.trail,color:'rgba(224,112,0,.55)',pane:'trail',updateWhenZooming:false}).addTo(map);trailKey=key}
   trailLayer.getContainer().style.opacity=step>=NOBS-1?1:.35; // route geldt voor het laatste tijdstip
+}
+const strooiDatum=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'});
+function strooiTijd(value){
+  const time=new Date(value);
+  return value&&Number.isFinite(+time)?strooiDatum.format(time):'onbekend';
+}
+function showTrailDetails(event){
+  if(!trailLayer)return;
+  const sr=D.strooi,z=map.getZoom(),click=map.project(event.latlng,z);
+  const radius=Math.max(4,320*Math.pow(2,z)/96379*.55);
+  for(let i=0;i<sr.trail.length;i+=2){
+    const point=L.latLng(sr.trail[i+1]/1e4,sr.trail[i]/1e4);
+    if(map.project(point,z).distanceTo(click)>radius)continue;
+    const end=new Date(sr.trail_t);
+    const period=sr.trail_t&&Number.isFinite(+end)
+      ? strooiTijd(new Date(+end-6*60*60*1000))+' – '+strooiTijd(end)
+      : 'Afgelopen 6 uur volgens Rijkswaterstaat';
+    L.popup().setLatLng(event.latlng).setContent(
+      '<strong>Gestrooide route</strong><br>'+period+'<br>Exact strooitijdstip onbekend.'
+    ).openOn(map);
+    return;
+  }
+}
+function showSaltTotals(){
+  const st=D.strooi?.stats;if(!st)return;
+  const value=(n,unit)=>Number.isFinite(n)?new Intl.NumberFormat('nl-NL',{maximumFractionDigits:1}).format(n)+' '+unit:'onbekend';
+  $('#saltTotals').textContent='Vandaag: '+value(st.dailySaltUsed,'kg')+' zout · '+value(st.dailyDistance,'km');
+  $('#saltSeason').textContent='Dit seizoen: '+value(st.seasonalSaltUsed,'kg')+' zout · '+value(st.seasonalDistance,'km');
+  $('#saltUpdated').textContent='Statistiek opgehaald: '+strooiTijd(st.fetched);
+  $('#saltDetails').showModal();
 }
 function truckFrame(i){
   const sr=D&&D.strooi;if(!sr||!sr.trucks)return null;
@@ -385,9 +424,9 @@ function drawSummary(){
     ['Gemiddeld',fmt(mean)+' °C',fall?`snelste daling ${fmt(fall.d1)} °C/u`:'',fall&&fall.id],
   ];
   const stt=sr&&sr.stats;
-  if(stt)kp.splice(4,0,['Gestrooid vandaag',stt.dailySaltUsed?fmt(stt.dailySaltUsed/1000,0)+' ton':'geen zout',(ng?ng+' wagens strooien nu · ':'')+(stt.dailySaltUsed?fmt(stt.dailyDistance,0)+' km · ':'')+'seizoen '+fmt((stt.seasonalSaltUsed||0)/1000,0)+' ton',null]);
-  $('#kpis').innerHTML=kp.map(([l,v,s,id])=>`<div class="card kpi">${id?`<button data-id="${id}" title="Toon meetpunt">`:'<div>'}<div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div>${id?'</button>':'</div>'}</div>`).join('');
-  $('#kpis').querySelectorAll('button[data-id]').forEach(b=>b.onclick=()=>select(b.dataset.id,true));
+  if(stt)kp.splice(4,0,['Gestrooid vandaag',stt.dailySaltUsed?fmt(stt.dailySaltUsed/1000,0)+' ton':'geen zout',(ng?ng+' wagens strooien nu · ':'')+(stt.dailySaltUsed?fmt(stt.dailyDistance,0)+' km · ':'')+'seizoen '+fmt((stt.seasonalSaltUsed||0)/1000,0)+' ton','salt']);
+  $('#kpis').innerHTML=kp.map(([l,v,s,id])=>`<div class="card kpi">${id?`<button data-id="${id}" title="${id==='salt'?'Toon strooistatistiek':'Toon meetpunt'}">`:'<div>'}<div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div>${id?'</button>':'</div>'}</div>`).join('');
+  $('#kpis').querySelectorAll('button[data-id]').forEach(b=>b.onclick=()=>b.dataset.id==='salt'?showSaltTotals():select(b.dataset.id,true));
 }
 
 // ---- sparkline ----
