@@ -4,7 +4,7 @@ const byId = id => document.getElementById(id);
 const map = byId('map');
 const canvas = map.querySelector('canvas');
 const context = canvas.getContext('2d');
-const maximum = byId('maximum');
+const markers = byId('maximum-markers');
 const maximumSummary = byId('maximum-summary');
 const number = new Intl.NumberFormat('nl-NL', {maximumFractionDigits: 2});
 const dateLabel = new Intl.DateTimeFormat('nl-NL', {timeZone: 'Europe/Amsterdam', dateStyle: 'long'});
@@ -20,17 +20,26 @@ async function request(url) {
   return response;
 }
 
+let nationalGeometry;
+function loadNational() {
+  nationalGeometry ??= request('demo_wgt_grondtemp.html')
+    .then(response => response.text())
+    .then(html => JSON.parse(html.split('/*GEO-START*/const GEO=')[1].split(';/*GEO-END*/')[0]))
+    .then(geo => ({geo, land: new Path2D(geo.nl)}))
+    .catch(error => { nationalGeometry = null; throw error; });
+  return nationalGeometry;
+}
+
 const backgrounds = {
   async Nederland() {
-    const html = await (await request('demo_wgt_grondtemp.html')).text();
-    const geo = JSON.parse(html.split('/*GEO-START*/const GEO=')[1].split(';/*GEO-END*/')[0]);
+    const {geo, land} = await loadNational();
     const [lon0, lat1, cosine, scale] = geo.proj;
-    const land = new Path2D(geo.nl);
     const neighbours = geo.buren.map(country => new Path2D(country.d));
     const provinces = geo.provincies.map(province => new Path2D(province.d));
     return {
       width: geo.w, height: geo.h,
       lonlat: (x, y) => [lon0 + x / (cosine * scale), lat1 - y / scale],
+      onLand: (x, y) => context.isPointInPath(land, x, y, 'evenodd'),
       base(ctx) {
         ctx.fillStyle = '#d6e7f3';
         ctx.fillRect(0, 0, geo.w, geo.h);
@@ -52,10 +61,35 @@ const backgrounds = {
     const img = new Image();
     img.src = 'rijnmond_regiokaart.png';
     await img.decode();
-    const {REGIOKAART: rd, rdNaarWgs} = window.AccuCore;
+    const {geo, land} = await loadNational();
+    const [lon0, lat1, cosine, scale] = geo.proj;
+    const base = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+      ? 'accumulatie_data/' : 'https://data.weerlab.nl/accumulatie/';
+    const region = await (await request(base + 'raster/rijnmond.geojson')).json();
+    const {REGIOKAART: rd, rdNaarWgs, wgsNaarRd} = window.AccuCore;
+    const boundary = new Path2D();
+    for (const {geometry} of region.features) {
+      const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+      for (const polygon of polygons) {
+        for (const ring of polygon) {
+          ring.forEach(([lon, lat], i) => {
+            const [east, north] = wgsNaarRd(lon, lat);
+            const x = (east - rd.x0) / rd.m;
+            const y = (rd.y1 - north) / rd.m;
+            if (i === 0) boundary.moveTo(x, y);
+            else boundary.lineTo(x, y);
+          });
+          boundary.closePath();
+        }
+      }
+    }
     return {
       width: rd.b, height: rd.h,
       lonlat: (x, y) => rdNaarWgs(rd.x0 + x * rd.m, rd.y1 - y * rd.m),
+      onLand(x, y, lon, lat) {
+        return context.isPointInPath(boundary, x, y, 'evenodd') &&
+          context.isPointInPath(land, (lon - lon0) * cosine * scale, (lat1 - lat) * scale, 'evenodd');
+      },
       base: ctx => ctx.drawImage(img, 0, 0, rd.b, rd.h)
     };
   }
@@ -66,7 +100,7 @@ async function chooseRegion() {
   const name = byId('region').value;
   map.classList.toggle('landelijk', name === 'Nederland');
   geometry = null;
-  maximum.hidden = true;
+  markers.replaceChildren();
   maximumSummary.textContent = '';
   context.clearRect(0, 0, canvas.width, canvas.height);
   byId('point').textContent = 'Klik op de kaart voor de neerslagsom op die plek.';
@@ -92,7 +126,7 @@ const rasterContext = raster.getContext('2d');
 function paint() {
   if (!geometry) return;
   const {width, height} = geometry;
-  maximum.hidden = true;
+  markers.replaceChildren();
   maximumSummary.textContent = '';
   geometry.base(context);
   if (forecast && selected.length) {
@@ -102,21 +136,24 @@ function paint() {
     }
     if (geometry.forecast !== forecast) {
       geometry.cells = new Int32Array(width * height);
+      geometry.landCells = new Map();
       for (let y = 0, i = 0; y < height; y++) {
         for (let x = 0; x < width; x++, i++) {
           const [lon, lat] = geometry.lonlat(x + 0.5, y + 0.5);
-          geometry.cells[i] = forecast.cell(lat, lon);
+          const cell = forecast.cell(lat, lon);
+          geometry.cells[i] = cell;
+          if (cell >= 0 && !geometry.landCells.has(cell) && geometry.onLand(x + 0.5, y + 0.5, lon, lat)) {
+            geometry.landCells.set(cell, {x: x + 0.5, y: y + 0.5});
+          }
         }
       }
       geometry.forecast = forecast;
     }
     const frame = rasterContext.createImageData(width, height);
     const colors = new Map();
-    let wettest;
     geometry.cells.forEach((cell, i) => {
       if (!colors.has(cell)) {
         const sum = forecast.sum(selected, cell);
-        if (sum >= palette[0][0] && (!wettest || sum > wettest.sum)) wettest = {sum, i};
         const color = palette.findLast(([minimum]) => sum >= minimum);
         colors.set(cell, color ? [...color.slice(1), 156] : Number.isNaN(sum) ? [100, 105, 115, 110] : null);
       }
@@ -125,18 +162,32 @@ function paint() {
     });
     rasterContext.putImageData(frame, 0, 0);
     context.drawImage(raster, 0, 0);
-    if (wettest) {
-      const x = wettest.i % width + 0.5;
-      const y = Math.floor(wettest.i / width) + 0.5;
-      const [lon, lat] = geometry.lonlat(x, y);
-      const amount = number.format(wettest.sum) + ' mm';
-      maximum.style.left = x / width * 100 + '%';
-      maximum.style.top = y / height * 100 + '%';
-      maximum.classList.toggle('links', x > width / 2);
-      maximum.querySelector('b').textContent = amount;
-      maximum.hidden = false;
-      maximumSummary.textContent = (selected.length < activePeriodHours ? 'Hoogste deelsom op de kaart' : 'Hoogste neerslagsom op de kaart') +
-        ' · ' + amount + ' bij ' + number.format(lat) + '° NB, ' + number.format(lon) + '° OL';
+    const ranked = [...geometry.landCells].map(([cell, point]) =>
+      ({...point, sum: forecast.sum(selected, cell)}))
+      .filter(point => point.sum >= palette[0][0]).sort((a, b) => b.sum - a.sum);
+    const top = [];
+    for (const point of ranked) {
+      if (top.every(other => Math.hypot((point.x - other.x) / width, (point.y - other.y) / height) >= 0.12)) {
+        top.push(point);
+        if (top.length === 3) break;
+      }
+    }
+    const entries = top.map(({x, y, sum}, index) => {
+      const rank = index + 1;
+      const amount = number.format(sum) + ' mm';
+      const marker = document.createElement('span');
+      marker.className = 'maximum' + (x > width / 2 ? ' links' : '');
+      marker.style.left = x / width * 100 + '%';
+      marker.style.top = y / height * 100 + '%';
+      const label = document.createElement('b');
+      label.textContent = rank + '. ' + amount;
+      marker.append(label);
+      markers.append(marker);
+      return label.textContent;
+    });
+    if (entries.length) {
+      maximumSummary.textContent = (selected.length < activePeriodHours ? 'Hoogste deelsommen' : 'Hoogste neerslagsommen') +
+        ' boven land · ' + entries.join(' · ');
     }
   }
   geometry.lines?.(context);
