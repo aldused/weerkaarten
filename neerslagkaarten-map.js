@@ -126,11 +126,13 @@ const backgrounds = {
     const pixels = backdropContext.getImageData(0, 0, rd.b, rd.h);
     for (let i = 0; i < pixels.data.length; i += 4) {
       const [red, green, blue] = [pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]];
-      // Pale green land, with the original relief and waterways retained.
-      const weight = Math.max(0, Math.min(0.83, (green - Math.max(red, blue)) / 40));
-      pixels.data[i] = red + (240 - red) * weight;
-      pixels.data[i + 1] = green + (251 - green) * weight;
-      pixels.data[i + 2] = blue + (232 - blue) * weight;
+      if (green > Math.max(red, blue)) {
+        // Neutral land shades retain the contrast between the original greens.
+        const shade = Math.round(194 + green * 0.25);
+        pixels.data[i] = shade;
+        pixels.data[i + 1] = shade;
+        pixels.data[i + 2] = shade;
+      }
     }
     backdropContext.putImageData(pixels, 0, 0);
     return {
