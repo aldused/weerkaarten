@@ -260,6 +260,9 @@ download.onclick = () => {
     const ctx = exportCanvas.getContext('2d');
     ctx.fillStyle = '#0d1420';
     ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    ctx.fillStyle = '#00205b';
+    ctx.fillRect(0, 0, exportCanvas.width, 80);
+    ctx.fillRect(0, canvas.height + 80, exportCanvas.width, 62);
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 27px system-ui';
     const region = byId('region').value;
@@ -294,7 +297,9 @@ download.onclick = () => {
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = '#c2cfe1';
     ctx.font = '16px system-ui';
-    ctx.fillText(byId('source').textContent, 20, canvas.height + 119, canvas.width - 40);
+    ctx.fillText(byId('source').textContent, 20, canvas.height + 103, canvas.width - 40);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('weerlab.nl · Ed Aldus', 20, canvas.height + 126);
     exportCanvas.toBlob(blob => {
       if (!blob) {
         status.textContent = 'De kaart kon niet worden opgeslagen.';
