@@ -61,6 +61,13 @@ function readForecast(meta, buffer) {
     return y >= 0 && y < rows && x >= 0 && x < cols ? y * cols + x : -1;
   }
 
+  function coordinates(index) {
+    return [
+      grid.lon_min + (index % cols) * (grid.lon_max - grid.lon_min) / (cols - 1),
+      grid.lat_min + Math.floor(index / cols) * (grid.lat_max - grid.lat_min) / (rows - 1)
+    ];
+  }
+
   function sum(selected, index) {
     if (index < 0 || !selected.length) return NaN;
     let amount = 0;
@@ -68,7 +75,7 @@ function readForecast(meta, buffer) {
     return amount;
   }
 
-  return {run, hours, cell, sum};
+  return {run, hours, cell, coordinates, sum};
 }
 
 if (typeof module !== 'undefined') module.exports = {readForecast, localTime, dayparts, periodFor};

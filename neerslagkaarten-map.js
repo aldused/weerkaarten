@@ -63,6 +63,7 @@ const backgrounds = {
     return {
       width: geo.w, height: geo.h,
       lonlat: (x, y) => [lon0 + x / (cosine * scale), lat1 - y / scale],
+      xy: (lon, lat) => [(lon - lon0) * cosine * scale, (lat1 - lat) * scale],
       onLand: (x, y) => context.isPointInPath(land, x, y, 'evenodd'),
       base(ctx) {
         ctx.fillStyle = '#d6e7f3';
@@ -110,6 +111,10 @@ const backgrounds = {
     return {
       width: rd.b, height: rd.h,
       lonlat: (x, y) => rdNaarWgs(rd.x0 + x * rd.m, rd.y1 - y * rd.m),
+      xy(lon, lat) {
+        const [east, north] = wgsNaarRd(lon, lat);
+        return [(east - rd.x0) / rd.m, (rd.y1 - north) / rd.m];
+      },
       onLand(x, y, lon, lat) {
         return context.isPointInPath(boundary, x, y, 'evenodd') &&
           context.isPointInPath(land, (lon - lon0) * cosine * scale, (lat1 - lat) * scale, 'evenodd');
@@ -154,26 +159,34 @@ function paint() {
   maximumSummary.textContent = '';
   geometry.base(context);
   if (forecast && selected.length) {
-    if (raster.width !== width || raster.height !== height) {
-      raster.width = width;
-      raster.height = height;
+    const rasterWidth = Math.min(width, 800);
+    const rasterHeight = Math.round(height * rasterWidth / width);
+    if (raster.width !== rasterWidth || raster.height !== rasterHeight) {
+      raster.width = rasterWidth;
+      raster.height = rasterHeight;
     }
     if (geometry.forecast !== forecast) {
-      geometry.cells = new Int32Array(width * height);
+      geometry.cells = new Int32Array(rasterWidth * rasterHeight);
       geometry.landCells = new Map();
-      for (let y = 0, i = 0; y < height; y++) {
-        for (let x = 0; x < width; x++, i++) {
-          const [lon, lat] = geometry.lonlat(x + 0.5, y + 0.5);
+      const visibleCells = new Set();
+      for (let y = 0, i = 0; y < rasterHeight; y++) {
+        for (let x = 0; x < rasterWidth; x++, i++) {
+          const [lon, lat] = geometry.lonlat((x + 0.5) * width / rasterWidth, (y + 0.5) * height / rasterHeight);
           const cell = forecast.cell(lat, lon);
           geometry.cells[i] = cell;
-          if (cell >= 0 && !geometry.landCells.has(cell) && geometry.onLand(x + 0.5, y + 0.5, lon, lat)) {
-            geometry.landCells.set(cell, {x: x + 0.5, y: y + 0.5});
-          }
+          if (cell >= 0) visibleCells.add(cell);
+        }
+      }
+      for (const cell of visibleCells) {
+        const [lon, lat] = forecast.coordinates(cell);
+        const [x, y] = geometry.xy(lon, lat);
+        if (x >= 0 && y >= 0 && x < width && y < height && geometry.onLand(x, y, lon, lat)) {
+          geometry.landCells.set(cell, {x, y});
         }
       }
       geometry.forecast = forecast;
     }
-    const frame = rasterContext.createImageData(width, height);
+    const frame = rasterContext.createImageData(rasterWidth, rasterHeight);
     const colors = new Map();
     geometry.cells.forEach((cell, i) => {
       if (!colors.has(cell)) {
@@ -185,7 +198,8 @@ function paint() {
       if (color) frame.data.set(color, i * 4);
     });
     rasterContext.putImageData(frame, 0, 0);
-    context.drawImage(raster, 0, 0);
+    context.imageSmoothingEnabled = false;
+    context.drawImage(raster, 0, 0, width, height);
     const ranked = [...geometry.landCells].map(([cell, point]) =>
       ({...point, sum: forecast.sum(selected, cell)}))
       .filter(point => point.sum >= palette[0][0]).sort((a, b) => b.sum - a.sum);
@@ -237,6 +251,7 @@ canvas.addEventListener('click', event => {
 });
 
 function update() {
+  if (!forecast) return;
   const period = periodFor(byId('date').value, Number(byId('part').value), forecast.hours);
   selected = period.hours;
   activePeriodHours = period.expected;
@@ -248,9 +263,15 @@ function update() {
       ' (' + selected.length + ' van ' + period.expected + ' uur)' : ' · ' + selected.length + ' uur'
     : ' · Geen verwachting beschikbaar');
   byId('point').textContent = 'Klik op de kaart voor de neerslagsom op die plek.';
-  paint();
+  requestAnimationFrame(paint);
 }
 
+const [today, currentTime] = localTime.format(Date.now()).split(' ');
+const initialDay = Date.parse(today + 'T12:00:00Z');
+const initialDates = [0, 1, 2].map(offset => new Date(initialDay + offset * 24 * HOUR));
+byId('date').replaceChildren(...initialDates.map(date => new Option(dateLabel.format(date), date.toISOString().slice(0, 10))));
+byId('part').replaceChildren(...dayparts.map((name, i) => new Option(name + ' uur', i)));
+byId('part').value = Math.floor(Number(currentTime.slice(0, 2)) / 6);
 byId('date').onchange = update;
 byId('part').onchange = update;
 byId('region').onchange = chooseRegion;
@@ -285,43 +306,41 @@ async function load() {
   if (JSON.stringify(meta) !== JSON.stringify(after)) throw new Error('Modelrun wisselde tijdens laden');
   const next = readForecast(meta, buffer);
   if (next.hours.at(-1).end <= Date.now()) throw new Error('Modelrun is verlopen');
-  const [date, time] = localTime.format(Date.now()).split(' ');
+  const date = localTime.format(Date.now()).slice(0, 10);
   const oldDate = byId('date').value;
   const dates = [...new Set(next.hours.map(hour => localTime.format(hour.start).slice(0, 10)))];
   forecast = next;
   byId('date').replaceChildren(...dates.map(value => new Option(dateLabel.format(new Date(value + 'T12:00:00Z')), value)));
   byId('date').value = dates.includes(oldDate) ? oldDate : dates.includes(date) ? date : dates[0];
-  if (!oldDate) {
-    byId('part').replaceChildren(...dayparts.map((name, i) => new Option(name + ' uur', i)));
-    const startClock = byId('date').value === date ? time : localTime.format(next.run).slice(-5);
-    byId('part').value = Math.floor(Number(startClock.slice(0, 2)) / 6);
-  }
-  byId('date').disabled = false;
-  byId('part').disabled = false;
   byId('source').textContent = 'KNMI HARMONIE Cy46 · Run ' + localTime.format(next.run) +
     ' · Bijgewerkt ' + meta.bijgewerkt + ' · Exportrooster circa 2 × 2 km in Nederland.';
   update();
 }
 
+let refreshTimer;
 async function refresh() {
+  clearTimeout(refreshTimer);
+  const retry = byId('retry');
+  retry.hidden = true;
   try {
     await load();
   } catch (error) {
     if (!forecast || forecast.hours.at(-1).end <= Date.now()) {
       forecast = null;
       selected = [];
-      for (const id of ['date', 'part']) byId(id).disabled = true;
       byId('source').textContent = '';
-      byId('status').textContent = 'Geen actuele modelgegevens beschikbaar.';
+      byId('status').textContent = 'Modelgegevens konden niet worden geladen.';
       byId('point').textContent = '';
       paint();
     } else {
       update();
       byId('status').textContent += ' · Verversen mislukt.';
     }
+    retry.hidden = false;
     console.warn('HARMONIE-neerslagkaart', error);
   } finally {
-    setTimeout(refresh, 15 * 60 * 1000);
+    refreshTimer = setTimeout(refresh, 15 * 60 * 1000);
   }
 }
+byId('retry').onclick = refresh;
 refresh();
