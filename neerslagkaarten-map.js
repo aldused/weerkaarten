@@ -455,9 +455,9 @@ for (const [label, color] of bins) {
 async function load() {
   const base = new URLSearchParams(location.search).get('bron') === 'lokaal'
     ? './' : 'https://harmonie-data.weerlab.nl/';
-  const metadataUrl = base + 'harmonie46_canvas_meta.json';
+  const metadataUrl = base + 'harmonie_canvas_meta.json';
   const meta = await (await request(metadataUrl)).json();
-  const file = await request(base + 'harmonie46_data_neerslag.bin?v=' + encodeURIComponent(meta.run_utc));
+  const file = await request(base + 'harmonie_data_neerslag.bin?v=' + encodeURIComponent(meta.run_utc));
   const buffer = await file.arrayBuffer();
   const after = await (await request(metadataUrl)).json();
   if (JSON.stringify(meta) !== JSON.stringify(after)) throw new Error('Modelrun wisselde tijdens laden');
@@ -469,7 +469,7 @@ async function load() {
   forecast = next;
   byId('date').replaceChildren(...dates.map(value => new Option(dateLabel.format(new Date(value + 'T12:00:00Z')), value)));
   byId('date').value = dates.includes(oldDate) ? oldDate : dates.includes(date) ? date : dates[0];
-  byId('source').textContent = 'KNMI HARMONIE Cy46 · Run ' + localTime.format(next.run) +
+  byId('source').textContent = 'KNMI HARMONIE Cy43 · Run ' + localTime.format(next.run) +
     ' · Bijgewerkt ' + meta.bijgewerkt + ' · Exportrooster circa 2 × 2 km in Nederland.';
   update();
 }
