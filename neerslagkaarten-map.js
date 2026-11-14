@@ -129,31 +129,7 @@ const backgrounds = {
         return context.isPointInPath(boundary, x, y, 'evenodd') &&
           context.isPointInPath(land, (lon - lon0) * cosine * scale, (lat1 - lat) * scale, 'evenodd');
       },
-      base: ctx => ctx.drawImage(img, 0, 0),
-      lines(ctx) {
-        const cities = [
-          ['Rotterdam', 4.4792, 51.9225], ['Dordrecht', 4.6736, 51.81],
-          ['Vlaardingen', 4.3417, 51.9125], ['Spijkenisse', 4.3292, 51.845],
-          ['Brielle', 4.1625, 51.9017], ['Hellevoetsluis', 4.1333, 51.8333],
-          ['Oud-Beijerland', 4.4125, 51.8242], ['Middelharnis', 4.1653, 51.7575]
-        ];
-        ctx.save();
-        ctx.font = '600 25px system-ui';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#233848';
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 5;
-        ctx.lineJoin = 'round';
-        for (const [name, lon, lat] of cities) {
-          const [x, y] = this.xy(lon, lat);
-          ctx.beginPath();
-          ctx.arc(x, y, 4, 0, 2 * Math.PI);
-          ctx.fill();
-          ctx.strokeText(name, x + 10, y);
-          ctx.fillText(name, x + 10, y);
-        }
-        ctx.restore();
-      }
+      base: ctx => ctx.drawImage(img, 0, 0)
     };
   }
 };
