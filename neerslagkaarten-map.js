@@ -4,6 +4,7 @@ const byId = id => document.getElementById(id);
 const map = byId('map');
 const canvas = map.querySelector('canvas');
 const context = canvas.getContext('2d');
+const rainOpacity = 0.52;
 const markers = byId('maximum-markers');
 const download = byId('png');
 const maximumSummary = byId('maximum-summary');
@@ -203,7 +204,7 @@ function paint() {
       if (!colors.has(cell)) {
         const sum = forecast.sum(selected, cell);
         const color = palette.findLast(([minimum]) => sum >= minimum);
-        colors.set(cell, color ? [...color.slice(1), 112] : Number.isNaN(sum) ? [100, 105, 115, 110] : null);
+        colors.set(cell, color ? [...color.slice(1), Math.round(255 * rainOpacity)] : Number.isNaN(sum) ? [100, 105, 115, 110] : null);
       }
       const color = colors.get(cell);
       if (color) frame.data.set(color, i * 4);
@@ -233,13 +234,9 @@ function paint() {
       label.textContent = amount + (place ? ' · bij ' + place : '');
       marker.append(label);
       markers.append(marker);
-      const bounds = map.getBoundingClientRect();
-      const box = label.getBoundingClientRect();
-      const shiftX = Math.max(bounds.left - box.left + 4, 0) - Math.max(box.right - bounds.right + 4, 0);
-      const shiftY = Math.max(bounds.top - box.top + 4, 0) - Math.max(box.bottom - bounds.bottom + 4, 0);
-      label.style.translate = shiftX + 'px ' + shiftY + 'px';
       return label.textContent;
     });
+    positionLabels();
     if (entries.length) {
       maximumSummary.textContent = (selected.length < activePeriodHours ? 'Hoogste deelsommen' : 'Hoogste neerslagsommen') +
         ' boven land · ' + entries.join(' · ');
@@ -247,6 +244,45 @@ function paint() {
   }
   geometry.lines?.(context);
 }
+
+function positionLabels() {
+  const bounds = map.getBoundingClientRect();
+  const dots = [...markers.children].map(marker => marker.getBoundingClientRect());
+  const occupied = [...dots];
+  [...markers.children].forEach((marker, index) => {
+    const label = marker.querySelector('b');
+    label.hidden = false;
+    label.style.translate = 'none';
+    const box = label.getBoundingClientRect();
+    const dot = dots[index];
+    const centerX = (dot.left + dot.right) / 2;
+    const centerY = (dot.top + dot.bottom) / 2;
+    const gap = 6;
+    const left = dot.left - box.width - gap;
+    const right = dot.right + gap;
+    const above = dot.top - box.height - gap;
+    const below = dot.bottom + gap;
+    const middle = centerY - box.height / 2;
+    const sides = centerX > bounds.left + bounds.width / 2 ? [left, right] : [right, left];
+    const candidates = [
+      ...sides.flatMap(x => [[x, middle], [x, above], [x, below]]),
+      [centerX - box.width / 2, above], [centerX - box.width / 2, below]
+    ];
+    for (const [x, y] of candidates) {
+      const tx = Math.max(bounds.left + gap, Math.min(x, bounds.right - box.width - gap));
+      const ty = Math.max(bounds.top + gap, Math.min(y, bounds.bottom - box.height - gap));
+      const rect = {left: tx, top: ty, right: tx + box.width, bottom: ty + box.height};
+      if (rect.right > bounds.right - gap || rect.bottom > bounds.bottom - gap ||
+          occupied.some(other => rect.left < other.right + gap && rect.right + gap > other.left &&
+            rect.top < other.bottom + gap && rect.bottom + gap > other.top)) continue;
+      label.style.translate = (tx - box.left) + 'px ' + (ty - box.top) + 'px';
+      occupied.push(rect);
+      return;
+    }
+    label.hidden = true;
+  });
+}
+new ResizeObserver(positionLabels).observe(map);
 
 download.onclick = () => {
   const status = byId('download-status');
@@ -285,6 +321,7 @@ download.onclick = () => {
       ctx.arc(x, y, 5.5 * scale, 0, 2 * Math.PI);
       ctx.fill();
       ctx.stroke();
+      if (label.hidden) continue;
       const left = (box.left - bounds.left) * scale;
       const top = (box.top - bounds.top) * scale + 80;
       ctx.fillRect(left, top, box.width * scale, box.height * scale);
@@ -370,7 +407,7 @@ const bins = [
   ['Droog / spoor (<0,01)', 'transparent'],
   ...palette.map(([min, r, g, b], idx) => [
     number.format(min) + (palette[idx + 1] ? '–<' + number.format(palette[idx + 1][0]) : '+'),
-    'rgba(' + [r, g, b, 0.44].join(',') + ')'
+    'rgba(' + [r, g, b, rainOpacity].join(',') + ')'
   ]),
   ['Geen data', 'rgba(100,105,115,.43)']
 ];

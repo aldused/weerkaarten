@@ -20,8 +20,8 @@ function periodFor(date, part, hours) {
     hours: hours.filter(hour => hour.start >= start && hour.end <= end)};
 }
 const palette = [
-  [0.01, 88, 175, 235], [0.2, 32, 119, 205], [1, 38, 155, 104],
-  [2, 222, 182, 27], [5, 227, 104, 35], [10, 189, 48, 76], [20, 127, 43, 156]
+  [0.01, 113, 184, 222], [0.2, 36, 104, 180], [1, 20, 133, 100],
+  [2, 244, 193, 41], [5, 229, 104, 27], [10, 173, 32, 59], [20, 82, 32, 121]
 ];
 
 function readForecast(meta, buffer) {
