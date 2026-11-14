@@ -125,14 +125,12 @@ const backgrounds = {
     backdropContext.drawImage(img, 0, 0, rd.b, rd.h);
     const pixels = backdropContext.getImageData(0, 0, rd.b, rd.h);
     for (let i = 0; i < pixels.data.length; i += 4) {
-      const [red, green, blue] = [pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]];
-      if (green > Math.max(red, blue)) {
-        // Neutral land shades retain the contrast between the original greens.
-        const shade = Math.round(194 + green * 0.25);
-        pixels.data[i] = shade;
-        pixels.data[i + 1] = shade;
-        pixels.data[i + 2] = shade;
-      }
+      const green = pixels.data[i + 1];
+      const blue = pixels.data[i + 2];
+      const water = Math.max(0, Math.min(1, (blue - green - 5) / 27));
+      pixels.data[i] = 255 - 58 * water;
+      pixels.data[i + 1] = 255 - 29 * water;
+      pixels.data[i + 2] = 255 - 11 * water;
     }
     backdropContext.putImageData(pixels, 0, 0);
     return {
@@ -146,7 +144,31 @@ const backgrounds = {
         return context.isPointInPath(boundary, x, y, 'evenodd') &&
           context.isPointInPath(land, (lon - lon0) * cosine * scale, (lat1 - lat) * scale, 'evenodd');
       },
-      base: ctx => ctx.drawImage(backdrop, 0, 0)
+      base: ctx => ctx.drawImage(backdrop, 0, 0),
+      lines(ctx) {
+        const cities = [
+          ['Rotterdam', 4.4792, 51.9225], ['Dordrecht', 4.6736, 51.81],
+          ['Vlaardingen', 4.3417, 51.9125], ['Spijkenisse', 4.3292, 51.845],
+          ['Brielle', 4.1625, 51.9017], ['Hellevoetsluis', 4.1333, 51.8333],
+          ['Oud-Beijerland', 4.4125, 51.8242], ['Middelharnis', 4.1653, 51.7575]
+        ];
+        ctx.save();
+        ctx.font = '600 25px system-ui';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#233848';
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 5;
+        ctx.lineJoin = 'round';
+        for (const [name, lon, lat] of cities) {
+          const [x, y] = this.xy(lon, lat);
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeText(name, x + 10, y);
+          ctx.fillText(name, x + 10, y);
+        }
+        ctx.restore();
+      }
     };
   }
 };
@@ -477,11 +499,20 @@ async function load() {
   const next = readForecast(meta, buffer);
   if (next.hours.at(-1).end <= Date.now()) throw new Error('Modelrun is verlopen');
   const date = localTime.format(Date.now()).slice(0, 10);
+  const firstLoad = !forecast;
   const oldDate = byId('date').value;
   const dates = [...new Set(next.hours.map(hour => localTime.format(hour.start).slice(0, 10)))];
   forecast = next;
   byId('date').replaceChildren(...dates.map(value => new Option(dateLabel.format(new Date(value + 'T12:00:00Z')), value)));
   byId('date').value = dates.includes(oldDate) ? oldDate : dates.includes(date) ? date : dates[0];
+  const part = byId('part');
+  if (firstLoad && part.value !== 'all' &&
+      !periodFor(byId('date').value, Number(part.value), next.hours).hours.length) {
+    const first = next.hours.find(hour => hour.end > Date.now()) ?? next.hours[0];
+    const [firstDate, clock] = localTime.format(first.start).split(' ');
+    byId('date').value = firstDate;
+    part.value = String(Math.floor(Number(clock.slice(0, 2)) / 6));
+  }
   byId('source').textContent = 'KNMI HARMONIE Cy43 · Run ' + localTime.format(next.run) +
     ' · Bijgewerkt ' + meta.bijgewerkt + ' · Exportrooster circa 2 × 2 km in Nederland.';
   update();
