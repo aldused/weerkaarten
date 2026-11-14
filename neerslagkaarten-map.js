@@ -231,7 +231,7 @@ function paint() {
     context.drawImage(raster, 0, 0, width, height);
     const ranked = [...geometry.landCells].map(([cell, point]) =>
       ({...point, sum: forecast.sum(selected, cell)}))
-      .filter(point => point.sum >= palette[0][0]).sort((a, b) => b.sum - a.sum);
+      .filter(point => point.sum >= 0.01).sort((a, b) => b.sum - a.sum);
     const top = [];
     for (const point of ranked) {
       if (top.every(other => Math.hypot((point.x - other.x) / width, (point.y - other.y) / height) >= 0.12)) {
@@ -309,13 +309,24 @@ download.onclick = () => {
     const scale = canvas.width / bounds.width;
     const exportCanvas = document.createElement('canvas');
     exportCanvas.width = canvas.width;
-    exportCanvas.height = canvas.height + 206;
+    let extraHeight = 0;
     const ctx = exportCanvas.getContext('2d');
+    ctx.font = '16px system-ui';
+    let rowWidth = 20;
+    for (const [label] of bins) {
+      const itemWidth = ctx.measureText(label).width + 38;
+      if (rowWidth + itemWidth > canvas.width - 20) {
+        extraHeight += 23;
+        rowWidth = 20;
+      }
+      rowWidth += itemWidth;
+    }
+    exportCanvas.height = canvas.height + 206 + extraHeight;
     ctx.fillStyle = '#0d1420';
     ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
     ctx.fillStyle = '#00205b';
     ctx.fillRect(0, 0, exportCanvas.width, 80);
-    ctx.fillRect(0, canvas.height + 80, exportCanvas.width, 126);
+    ctx.fillRect(0, canvas.height + 80, exportCanvas.width, 126 + extraHeight);
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 27px system-ui';
     const region = byId('region').value;
@@ -369,9 +380,9 @@ download.onclick = () => {
       ctx.fillText(label, legendX + 20, legendY);
       legendX += itemWidth;
     }
-    ctx.fillText(byId('source').textContent, 20, canvas.height + 174, canvas.width - 40);
+    ctx.fillText(byId('source').textContent, 20, canvas.height + 174 + extraHeight, canvas.width - 40);
     ctx.fillStyle = '#fff';
-    ctx.fillText('weerlab.nl · Ed Aldus', 20, canvas.height + 196);
+    ctx.fillText('weerlab.nl · Ed Aldus', 20, canvas.height + 196 + extraHeight);
     exportCanvas.toBlob(blob => {
       if (!blob) {
         status.textContent = 'De kaart kon niet worden opgeslagen.';
@@ -439,7 +450,7 @@ chooseRegion();
 const legend = byId('legend');
 legend.append('Neerslagsom (mm)');
 const bins = [
-  ['Droog / spoor (<0,01)', 'transparent'],
+  ['Minder dan 0,3 mm', 'transparent'],
   ...palette.map(([min, r, g, b], idx) => [
     number.format(min) + (palette[idx + 1] ? '–<' + number.format(palette[idx + 1][0]) : '+'),
     'rgba(' + [r, g, b, rainOpacity].join(',') + ')'

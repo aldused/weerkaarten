@@ -19,11 +19,13 @@ function periodFor(date, part, hours) {
   return {start, end, expected: (end - start) / HOUR,
     hours: hours.filter(hour => hour.start >= start && hour.end <= end)};
 }
-// Weerlab's vierluik colours, grouped into classes for accumulated mm.
+// Accumulation classes in mm, based on the supplied Weerplaza reference.
 const palette = [
-  [0.01, 116, 182, 228], [0.2, 70, 150, 212], [1, 30, 110, 186],
-  [2, 12, 72, 146], [5, 48, 168, 42], [10, 248, 232, 0],
-  [20, 255, 84, 0], [40, 221, 0, 0]
+  [0.3, 172, 249, 255], [0.5, 131, 248, 255], [1, 91, 245, 255],
+  [2, 43, 236, 255], [3, 8, 207, 247], [5, 23, 184, 242],
+  [10, 31, 153, 248], [15, 35, 98, 248], [20, 255, 255, 90],
+  [30, 255, 234, 15], [40, 255, 197, 0], [50, 255, 165, 0],
+  [75, 255, 139, 0], [100, 255, 111, 0], [150, 247, 70, 11]
 ];
 
 function readForecast(meta, buffer) {
