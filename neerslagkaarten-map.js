@@ -5,6 +5,7 @@ const map = byId('map');
 const canvas = map.querySelector('canvas');
 const context = canvas.getContext('2d');
 const markers = byId('maximum-markers');
+const download = byId('png');
 const maximumSummary = byId('maximum-summary');
 const number = new Intl.NumberFormat('nl-NL', {maximumFractionDigits: 2});
 const dateLabel = new Intl.DateTimeFormat('nl-NL', {timeZone: 'Europe/Amsterdam', dateStyle: 'long'});
@@ -129,6 +130,7 @@ async function chooseRegion() {
   const name = byId('region').value;
   map.classList.toggle('landelijk', name === 'Nederland');
   geometry = null;
+  download.disabled = true;
   markers.replaceChildren();
   maximumSummary.textContent = '';
   context.clearRect(0, 0, canvas.width, canvas.height);
@@ -157,6 +159,7 @@ function paint() {
   const {width, height} = geometry;
   markers.replaceChildren();
   maximumSummary.textContent = '';
+  download.disabled = !forecast || !selected.length;
   geometry.base(context);
   if (forecast && selected.length) {
     const rasterWidth = Math.min(width, 800);
@@ -210,8 +213,7 @@ function paint() {
         if (top.length === 3) break;
       }
     }
-    const entries = top.map(({x, y, sum}, index) => {
-      const rank = index + 1;
+    const entries = top.map(({x, y, sum}) => {
       const amount = number.format(sum) + ' mm';
       const marker = document.createElement('span');
       marker.className = 'maximum' + (x > width / 2 ? ' links' : '');
@@ -220,7 +222,7 @@ function paint() {
       const label = document.createElement('b');
       const [lon, lat] = geometry.lonlat(x, y);
       const place = nearestPlace(lon, lat);
-      label.textContent = rank + '. ' + amount + (place ? ' · bij ' + place : '');
+      label.textContent = amount + (place ? ' · bij ' + place : '');
       marker.append(label);
       markers.append(marker);
       const bounds = map.getBoundingClientRect();
@@ -237,6 +239,70 @@ function paint() {
   }
   geometry.lines?.(context);
 }
+
+download.onclick = () => {
+  const status = byId('download-status');
+  status.textContent = '';
+  try {
+    const bounds = canvas.getBoundingClientRect();
+    const scale = canvas.width / bounds.width;
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height + 142;
+    const ctx = exportCanvas.getContext('2d');
+    ctx.fillStyle = '#0d1420';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 27px system-ui';
+    const region = byId('region').value;
+    ctx.fillText('Neerslagsom · ' + region + ' (mm)', 20, 35);
+    ctx.font = '16px system-ui';
+    ctx.fillText(byId('status').textContent, 20, 62, canvas.width - 40);
+    ctx.drawImage(canvas, 0, 80);
+    for (const marker of markers.children) {
+      const dot = marker.getBoundingClientRect();
+      const label = marker.querySelector('b');
+      const box = label.getBoundingClientRect();
+      const x = (dot.left + dot.width / 2 - bounds.left) * scale;
+      const y = (dot.top + dot.height / 2 - bounds.top) * scale + 80;
+      ctx.fillStyle = '#121d30';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3 * scale;
+      ctx.beginPath();
+      ctx.arc(x, y, 5.5 * scale, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+      const left = (box.left - bounds.left) * scale;
+      const top = (box.top - bounds.top) * scale + 80;
+      ctx.fillRect(left, top, box.width * scale, box.height * scale);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold ' + 13 * scale + 'px system-ui';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label.textContent, left + 7 * scale, top + box.height * scale / 2,
+        Math.max(1, (box.width - 14) * scale));
+    }
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#c2cfe1';
+    ctx.font = '16px system-ui';
+    ctx.fillText(byId('source').textContent, 20, canvas.height + 119, canvas.width - 40);
+    exportCanvas.toBlob(blob => {
+      if (!blob) {
+        status.textContent = 'De kaart kon niet worden opgeslagen.';
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = ['neerslag', region.toLowerCase(), byId('date').value,
+        dayparts[Number(byId('part').value)].replace('–', '-')].join('_') + '.png';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }, 'image/png');
+  } catch (error) {
+    status.textContent = 'De kaart kon niet worden opgeslagen.';
+    console.warn(error);
+  }
+};
 
 canvas.addEventListener('click', event => {
   if (!geometry || !forecast) return;
