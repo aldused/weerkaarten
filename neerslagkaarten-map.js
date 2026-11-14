@@ -94,7 +94,7 @@ const backgrounds = {
   },
   async Rijnmond() {
     const img = new Image();
-    img.src = 'rijnmond_regiokaart.png';
+    img.src = 'rijnmond_regiokaart_wit.png';
     await img.decode();
     const {geo, land} = await loadNational();
     const [lon0, lat1, cosine, scale] = geo.proj;
@@ -118,21 +118,6 @@ const backgrounds = {
         }
       }
     }
-    const backdrop = document.createElement('canvas');
-    backdrop.width = rd.b;
-    backdrop.height = rd.h;
-    const backdropContext = backdrop.getContext('2d');
-    backdropContext.drawImage(img, 0, 0, rd.b, rd.h);
-    const pixels = backdropContext.getImageData(0, 0, rd.b, rd.h);
-    for (let i = 0; i < pixels.data.length; i += 4) {
-      const green = pixels.data[i + 1];
-      const blue = pixels.data[i + 2];
-      const water = Math.max(0, Math.min(1, (blue - green - 5) / 27));
-      pixels.data[i] = 255 - 58 * water;
-      pixels.data[i + 1] = 255 - 29 * water;
-      pixels.data[i + 2] = 255 - 11 * water;
-    }
-    backdropContext.putImageData(pixels, 0, 0);
     return {
       width: rd.b, height: rd.h,
       lonlat: (x, y) => rdNaarWgs(rd.x0 + x * rd.m, rd.y1 - y * rd.m),
@@ -144,7 +129,7 @@ const backgrounds = {
         return context.isPointInPath(boundary, x, y, 'evenodd') &&
           context.isPointInPath(land, (lon - lon0) * cosine * scale, (lat1 - lat) * scale, 'evenodd');
       },
-      base: ctx => ctx.drawImage(backdrop, 0, 0),
+      base: ctx => ctx.drawImage(img, 0, 0),
       lines(ctx) {
         const cities = [
           ['Rotterdam', 4.4792, 51.9225], ['Dordrecht', 4.6736, 51.81],
