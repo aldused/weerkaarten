@@ -307,13 +307,13 @@ download.onclick = () => {
     const scale = canvas.width / bounds.width;
     const exportCanvas = document.createElement('canvas');
     exportCanvas.width = canvas.width;
-    exportCanvas.height = canvas.height + 142;
+    exportCanvas.height = canvas.height + 206;
     const ctx = exportCanvas.getContext('2d');
     ctx.fillStyle = '#0d1420';
     ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
     ctx.fillStyle = '#00205b';
     ctx.fillRect(0, 0, exportCanvas.width, 80);
-    ctx.fillRect(0, canvas.height + 80, exportCanvas.width, 62);
+    ctx.fillRect(0, canvas.height + 80, exportCanvas.width, 126);
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 27px system-ui';
     const region = byId('region').value;
@@ -349,9 +349,27 @@ download.onclick = () => {
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = '#c2cfe1';
     ctx.font = '16px system-ui';
-    ctx.fillText(byId('source').textContent, 20, canvas.height + 103, canvas.width - 40);
+    ctx.fillText('Neerslagsom (mm)', 20, canvas.height + 102);
+    let legendX = 20;
+    let legendY = canvas.height + 126;
+    for (const [label, color] of bins) {
+      const itemWidth = ctx.measureText(label).width + 38;
+      if (legendX + itemWidth > canvas.width - 20) {
+        legendX = 20;
+        legendY += 23;
+      }
+      ctx.fillStyle = color;
+      ctx.fillRect(legendX, legendY - 12, 15, 13);
+      ctx.strokeStyle = '#8895a7';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(legendX, legendY - 12, 15, 13);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, legendX + 20, legendY);
+      legendX += itemWidth;
+    }
+    ctx.fillText(byId('source').textContent, 20, canvas.height + 174, canvas.width - 40);
     ctx.fillStyle = '#fff';
-    ctx.fillText('weerlab.nl · Ed Aldus', 20, canvas.height + 126);
+    ctx.fillText('weerlab.nl · Ed Aldus', 20, canvas.height + 196);
     exportCanvas.toBlob(blob => {
       if (!blob) {
         status.textContent = 'De kaart kon niet worden opgeslagen.';
