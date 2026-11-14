@@ -450,7 +450,7 @@ chooseRegion();
 const legend = byId('legend');
 legend.append('Neerslagsom (mm)');
 const bins = [
-  ['Minder dan 0,3 mm', 'transparent'],
+  ['Minder dan 0,5 mm', 'transparent'],
   ...palette.map(([min, r, g, b], idx) => [
     number.format(min) + (palette[idx + 1] ? '–<' + number.format(palette[idx + 1][0]) : '+'),
     'rgba(' + [r, g, b, rainOpacity].join(',') + ')'

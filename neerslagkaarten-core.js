@@ -19,13 +19,12 @@ function periodFor(date, part, hours) {
   return {start, end, expected: (end - start) / HOUR,
     hours: hours.filter(hour => hour.start >= start && hour.end <= end)};
 }
-// Accumulation classes in mm, based on the supplied Weerplaza reference.
+// Accumulation classes (mm) matching the supplied HARMONIE reference.
 const palette = [
-  [0.3, 172, 249, 255], [0.5, 131, 248, 255], [1, 91, 245, 255],
-  [2, 43, 236, 255], [3, 8, 207, 247], [5, 23, 184, 242],
-  [10, 31, 153, 248], [15, 35, 98, 248], [20, 255, 255, 90],
-  [30, 255, 234, 15], [40, 255, 197, 0], [50, 255, 165, 0],
-  [75, 255, 139, 0], [100, 255, 111, 0], [150, 247, 70, 11]
+  [0.5, 177, 216, 248], [1, 133, 190, 249], [2, 77, 157, 219],
+  [5, 38, 124, 181], [10, 35, 177, 74], [15, 175, 203, 26],
+  [20, 244, 218, 0], [30, 248, 160, 0], [40, 243, 75, 26],
+  [50, 206, 18, 45], [75, 137, 10, 96], [100, 82, 0, 81]
 ];
 
 function readForecast(meta, buffer) {
