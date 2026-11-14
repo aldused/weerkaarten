@@ -118,6 +118,21 @@ const backgrounds = {
         }
       }
     }
+    const backdrop = document.createElement('canvas');
+    backdrop.width = rd.b;
+    backdrop.height = rd.h;
+    const backdropContext = backdrop.getContext('2d');
+    backdropContext.drawImage(img, 0, 0, rd.b, rd.h);
+    const pixels = backdropContext.getImageData(0, 0, rd.b, rd.h);
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      const [red, green, blue] = [pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]];
+      // Pale green land, with the original relief and waterways retained.
+      const weight = Math.max(0, Math.min(0.83, (green - Math.max(red, blue)) / 40));
+      pixels.data[i] = red + (240 - red) * weight;
+      pixels.data[i + 1] = green + (251 - green) * weight;
+      pixels.data[i + 2] = blue + (232 - blue) * weight;
+    }
+    backdropContext.putImageData(pixels, 0, 0);
     return {
       width: rd.b, height: rd.h,
       lonlat: (x, y) => rdNaarWgs(rd.x0 + x * rd.m, rd.y1 - y * rd.m),
@@ -129,7 +144,7 @@ const backgrounds = {
         return context.isPointInPath(boundary, x, y, 'evenodd') &&
           context.isPointInPath(land, (lon - lon0) * cosine * scale, (lat1 - lat) * scale, 'evenodd');
       },
-      base: ctx => ctx.drawImage(img, 0, 0, rd.b, rd.h)
+      base: ctx => ctx.drawImage(backdrop, 0, 0)
     };
   }
 };
