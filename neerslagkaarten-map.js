@@ -9,6 +9,14 @@ const download = byId('png');
 const maximumSummary = byId('maximum-summary');
 const number = new Intl.NumberFormat('nl-NL', {maximumFractionDigits: 2});
 const dateLabel = new Intl.DateTimeFormat('nl-NL', {timeZone: 'Europe/Amsterdam', dateStyle: 'long'});
+const periodDate = new Intl.DateTimeFormat('nl-NL', {
+  timeZone: 'Europe/Amsterdam', weekday: 'long', day: 'numeric', month: 'long'
+});
+function formatBoundary(time) {
+  const clock = localTime.format(time).slice(-5);
+  return periodDate.format(time) + ' ' + (clock.endsWith(':00') ? clock.slice(0, 2) : clock) + ' uur';
+}
+
 let forecast;
 let selected = [];
 let activePeriodHours;
@@ -195,7 +203,7 @@ function paint() {
       if (!colors.has(cell)) {
         const sum = forecast.sum(selected, cell);
         const color = palette.findLast(([minimum]) => sum >= minimum);
-        colors.set(cell, color ? [...color.slice(1), 156] : Number.isNaN(sum) ? [100, 105, 115, 110] : null);
+        colors.set(cell, color ? [...color.slice(1), 112] : Number.isNaN(sum) ? [100, 105, 115, 110] : null);
       }
       const color = colors.get(cell);
       if (color) frame.data.set(color, i * 4);
@@ -255,6 +263,8 @@ download.onclick = () => {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 27px system-ui';
     const region = byId('region').value;
+    const part = byId('part').value;
+    const date = part === 'all' ? localTime.format(forecast.run).slice(0, 10) : byId('date').value;
     ctx.fillText('Neerslagsom · ' + region + ' (mm)', 20, 35);
     ctx.font = '16px system-ui';
     ctx.fillText(byId('status').textContent, 20, 62, canvas.width - 40);
@@ -293,8 +303,8 @@ download.onclick = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = ['neerslag', region.toLowerCase(), byId('date').value,
-        dayparts[Number(byId('part').value)].replace('–', '-')].join('_') + '.png';
+      link.download = ['neerslag', region.toLowerCase(), date,
+        part === 'all' ? 'hele-run' : dayparts[Number(part)].replace('–', '-')].join('_') + '.png';
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
     }, 'image/png');
@@ -317,15 +327,20 @@ canvas.addEventListener('click', event => {
 });
 
 function update() {
+  const part = byId('part').value;
+  const all = part === 'all';
+  byId('date').disabled = all;
   if (!forecast) return;
-  const period = periodFor(byId('date').value, Number(byId('part').value), forecast.hours);
+  const hours = forecast.hours;
+  const period = all
+    ? {start: hours[0].start, end: hours.at(-1).end, hours, expected: hours.length}
+    : periodFor(byId('date').value, Number(part), hours);
   selected = period.hours;
   activePeriodHours = period.expected;
-  const format = time => localTime.format(time);
-  const windowLabel = format(period.start) + ' – ' + format(period.end) + ' (Nederlandse tijd)';
+  const windowLabel = 'Neerslag: ' + formatBoundary(period.start) + ' tot ' + formatBoundary(period.end);
   const partial = selected.length < period.expected;
   byId('status').textContent = windowLabel + (selected.length
-    ? partial ? ' · Deelsom voor ' + format(selected[0].start) + ' – ' + format(selected.at(-1).end) +
+    ? partial ? ' · Deelsom voor ' + formatBoundary(selected[0].start) + ' tot ' + formatBoundary(selected.at(-1).end) +
       ' (' + selected.length + ' van ' + period.expected + ' uur)' : ' · ' + selected.length + ' uur'
     : ' · Geen verwachting beschikbaar');
   byId('point').textContent = 'Klik op de kaart voor de neerslagsom op die plek.';
@@ -336,7 +351,8 @@ const [today, currentTime] = localTime.format(Date.now()).split(' ');
 const initialDay = Date.parse(today + 'T12:00:00Z');
 const initialDates = [0, 1, 2].map(offset => new Date(initialDay + offset * 24 * HOUR));
 byId('date').replaceChildren(...initialDates.map(date => new Option(dateLabel.format(date), date.toISOString().slice(0, 10))));
-byId('part').replaceChildren(...dayparts.map((name, i) => new Option(name + ' uur', i)));
+byId('part').replaceChildren(...dayparts.map((name, i) => new Option(name + ' uur', i)),
+  new Option('Hele modelrun', 'all'));
 byId('part').value = Math.floor(Number(currentTime.slice(0, 2)) / 6);
 byId('date').onchange = update;
 byId('part').onchange = update;
@@ -349,7 +365,7 @@ const bins = [
   ['Droog / spoor (<0,01)', 'transparent'],
   ...palette.map(([min, r, g, b], idx) => [
     number.format(min) + (palette[idx + 1] ? '–<' + number.format(palette[idx + 1][0]) : '+'),
-    'rgba(' + [r, g, b, 0.61].join(',') + ')'
+    'rgba(' + [r, g, b, 0.44].join(',') + ')'
   ]),
   ['Geen data', 'rgba(100,105,115,.43)']
 ];
