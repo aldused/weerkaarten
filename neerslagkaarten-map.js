@@ -20,6 +20,30 @@ async function request(url) {
   return response;
 }
 
+let places = [];
+request('plaatsen_lookup.json')
+  .then(response => response.json())
+  .then(data => {
+    places = data.plaatsen.filter(place => place.land === 'NL' &&
+      Number.isFinite(place.lat) && Number.isFinite(place.lon));
+    paint();
+  })
+  .catch(error => console.warn('Plaatsnamen niet beschikbaar', error));
+
+function nearestPlace(lon, lat) {
+  const longitudeScale = Math.cos(lat * Math.PI / 180);
+  let nearest;
+  let minDistance = Infinity;
+  for (const place of places) {
+    const distance = (place.lat - lat) ** 2 + ((place.lon - lon) * longitudeScale) ** 2;
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearest = place;
+    }
+  }
+  return nearest?.naam;
+}
+
 let nationalGeometry;
 function loadNational() {
   nationalGeometry ??= request('demo_wgt_grondtemp.html')
@@ -180,9 +204,16 @@ function paint() {
       marker.style.left = x / width * 100 + '%';
       marker.style.top = y / height * 100 + '%';
       const label = document.createElement('b');
-      label.textContent = rank + '. ' + amount;
+      const [lon, lat] = geometry.lonlat(x, y);
+      const place = nearestPlace(lon, lat);
+      label.textContent = rank + '. ' + amount + (place ? ' · bij ' + place : '');
       marker.append(label);
       markers.append(marker);
+      const bounds = map.getBoundingClientRect();
+      const box = label.getBoundingClientRect();
+      const shiftX = Math.max(bounds.left - box.left + 4, 0) - Math.max(box.right - bounds.right + 4, 0);
+      const shiftY = Math.max(bounds.top - box.top + 4, 0) - Math.max(box.bottom - bounds.bottom + 4, 0);
+      label.style.translate = shiftX + 'px ' + shiftY + 'px';
       return label.textContent;
     });
     if (entries.length) {
