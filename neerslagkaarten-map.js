@@ -4,10 +4,13 @@ const byId = id => document.getElementById(id);
 const map = byId('map');
 const canvas = map.querySelector('canvas');
 const context = canvas.getContext('2d');
+const maximum = byId('maximum');
+const maximumSummary = byId('maximum-summary');
 const number = new Intl.NumberFormat('nl-NL', {maximumFractionDigits: 2});
 const dateLabel = new Intl.DateTimeFormat('nl-NL', {timeZone: 'Europe/Amsterdam', dateStyle: 'long'});
 let forecast;
 let selected = [];
+let activePeriodHours;
 let geometry;
 let mapRequest = 0;
 
@@ -63,6 +66,8 @@ async function chooseRegion() {
   const name = byId('region').value;
   map.classList.toggle('landelijk', name === 'Nederland');
   geometry = null;
+  maximum.hidden = true;
+  maximumSummary.textContent = '';
   context.clearRect(0, 0, canvas.width, canvas.height);
   byId('point').textContent = 'Klik op de kaart voor de neerslagsom op die plek.';
   byId('background-status').textContent = 'Kaartondergrond laden…';
@@ -87,6 +92,8 @@ const rasterContext = raster.getContext('2d');
 function paint() {
   if (!geometry) return;
   const {width, height} = geometry;
+  maximum.hidden = true;
+  maximumSummary.textContent = '';
   geometry.base(context);
   if (forecast && selected.length) {
     if (raster.width !== width || raster.height !== height) {
@@ -105,9 +112,11 @@ function paint() {
     }
     const frame = rasterContext.createImageData(width, height);
     const colors = new Map();
+    let wettest;
     geometry.cells.forEach((cell, i) => {
       if (!colors.has(cell)) {
         const sum = forecast.sum(selected, cell);
+        if (sum >= palette[0][0] && (!wettest || sum > wettest.sum)) wettest = {sum, i};
         const color = palette.findLast(([minimum]) => sum >= minimum);
         colors.set(cell, color ? [...color.slice(1), 156] : Number.isNaN(sum) ? [100, 105, 115, 110] : null);
       }
@@ -116,6 +125,19 @@ function paint() {
     });
     rasterContext.putImageData(frame, 0, 0);
     context.drawImage(raster, 0, 0);
+    if (wettest) {
+      const x = wettest.i % width + 0.5;
+      const y = Math.floor(wettest.i / width) + 0.5;
+      const [lon, lat] = geometry.lonlat(x, y);
+      const amount = number.format(wettest.sum) + ' mm';
+      maximum.style.left = x / width * 100 + '%';
+      maximum.style.top = y / height * 100 + '%';
+      maximum.classList.toggle('links', x > width / 2);
+      maximum.querySelector('b').textContent = amount;
+      maximum.hidden = false;
+      maximumSummary.textContent = (selected.length < activePeriodHours ? 'Hoogste deelsom op de kaart' : 'Hoogste neerslagsom op de kaart') +
+        ' · ' + amount + ' bij ' + number.format(lat) + '° NB, ' + number.format(lon) + '° OL';
+    }
   }
   geometry.lines?.(context);
 }
@@ -135,6 +157,7 @@ canvas.addEventListener('click', event => {
 function update() {
   const period = periodFor(byId('date').value, Number(byId('part').value), forecast.hours);
   selected = period.hours;
+  activePeriodHours = period.expected;
   const format = time => localTime.format(time);
   const windowLabel = format(period.start) + ' – ' + format(period.end) + ' (Nederlandse tijd)';
   const partial = selected.length < period.expected;
