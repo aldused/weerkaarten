@@ -5,7 +5,20 @@ const localTime = new Intl.DateTimeFormat('sv-SE', {
   day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
 });
 const HOUR = 3600000;
-const dayparts = ['Nacht', 'Ochtend', 'Middag', 'Avond'];
+const dayparts = ['00–06', '06–12', '12–18', '18–06'];
+function periodFor(date, part, hours) {
+  const midnight = Date.parse(date + 'T00:00:00Z');
+  function boundary(offset) {
+    const nominal = midnight + offset * HOUR;
+    const wall = new Date(nominal).toISOString().slice(0, 16);
+    return [1, 2].map(delta => nominal - delta * HOUR)
+      .find(time => localTime.format(time).replace(' ', 'T') === wall);
+  }
+  const start = boundary(part * 6);
+  const end = boundary(part === 3 ? 30 : (part + 1) * 6);
+  return {start, end, expected: (end - start) / HOUR,
+    hours: hours.filter(hour => hour.start >= start && hour.end <= end)};
+}
 const palette = [
   [0.01, 88, 175, 235], [0.2, 32, 119, 205], [1, 38, 155, 104],
   [2, 222, 182, 27], [5, 227, 104, 35], [10, 189, 48, 76], [20, 127, 43, 156]
@@ -33,20 +46,13 @@ function readForecast(meta, buffer) {
 
   const bytes = new Uint8Array(buffer, 16);
   const values = Float64Array.from({length: 256}, (_, code) => (code / field.scale) ** field.power);
-  const periods = new Map();
   const hours = Array.from({length: steps}, (_, index) => {
     const start = run + index * HOUR;
     const end = start + HOUR;
     if (localTime.format(end).replace(' ', 'T') !== meta.tijden[index]) {
       throw new Error('De geldigheidstijden komen niet overeen met de modelrun');
     }
-    const [date, time] = localTime.format(start).split(' ');
-    const part = Math.floor(Number(time.slice(0, 2)) / 6);
-    const key = date + '/' + part;
-    if (!periods.has(key)) periods.set(key, {key, date, part, hours: []});
-    const hour = {index, start, end};
-    periods.get(key).hours.push(hour);
-    return hour;
+    return {index, start, end};
   });
 
   function cell(lat, lon) {
@@ -55,14 +61,14 @@ function readForecast(meta, buffer) {
     return y >= 0 && y < rows && x >= 0 && x < cols ? y * cols + x : -1;
   }
 
-  function rate(selected, index) {
+  function sum(selected, index) {
     if (index < 0 || !selected.length) return NaN;
     let amount = 0;
     for (const hour of selected) amount += values[bytes[hour.index * rows * cols + index]];
-    return amount / selected.length;
+    return amount;
   }
 
-  return {run, hours, periods, cell, rate};
+  return {run, hours, cell, sum};
 }
 
-if (typeof module !== 'undefined') module.exports = {readForecast, localTime, dayparts};
+if (typeof module !== 'undefined') module.exports = {readForecast, localTime, dayparts, periodFor};
