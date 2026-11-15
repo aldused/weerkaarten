@@ -7,7 +7,7 @@ const context = canvas.getContext('2d');
 const rainOpacity = 0.52;
 const markers = byId('maximum-markers');
 const download = byId('png');
-const maximumSummary = byId('maximum-summary');
+let pickedPoint;
 const number = new Intl.NumberFormat('nl-NL', {maximumFractionDigits: 2});
 const dateLabel = new Intl.DateTimeFormat('nl-NL', {timeZone: 'Europe/Amsterdam', dateStyle: 'long'});
 const periodDate = new Intl.DateTimeFormat('nl-NL', {
@@ -20,7 +20,6 @@ function formatBoundary(time) {
 
 let forecast;
 let selected = [];
-let activePeriodHours;
 let geometry;
 let mapRequest = 0;
 
@@ -137,11 +136,11 @@ const backgroundCache = new Map();
 async function chooseRegion() {
   const id = ++mapRequest;
   const name = byId('region').value;
+  pickedPoint = null;
   map.classList.toggle('landelijk', name === 'Nederland');
   geometry = null;
   download.disabled = true;
   markers.replaceChildren();
-  maximumSummary.textContent = '';
   context.clearRect(0, 0, canvas.width, canvas.height);
   byId('point').textContent = 'Klik op de kaart voor de neerslagsom op die plek.';
   byId('background-status').textContent = 'Kaartondergrond laden…';
@@ -167,7 +166,6 @@ function paint() {
   if (!geometry) return;
   const {width, height} = geometry;
   markers.replaceChildren();
-  maximumSummary.textContent = '';
   download.disabled = !forecast || !selected.length;
   geometry.base(context);
   if (forecast && selected.length) {
@@ -179,21 +177,11 @@ function paint() {
     }
     if (geometry.forecast !== forecast) {
       geometry.cells = new Int32Array(rasterWidth * rasterHeight);
-      geometry.landCells = new Map();
-      const visibleCells = new Set();
       for (let y = 0, i = 0; y < rasterHeight; y++) {
         for (let x = 0; x < rasterWidth; x++, i++) {
           const [lon, lat] = geometry.lonlat((x + 0.5) * width / rasterWidth, (y + 0.5) * height / rasterHeight);
           const cell = forecast.cell(lat, lon);
           geometry.cells[i] = cell;
-          if (cell >= 0) visibleCells.add(cell);
-        }
-      }
-      for (const cell of visibleCells) {
-        const [lon, lat] = forecast.coordinates(cell);
-        const [x, y] = geometry.xy(lon, lat);
-        if (x >= 0 && y >= 0 && x < width && y < height && geometry.onLand(x, y, lon, lat)) {
-          geometry.landCells.set(cell, {x, y});
         }
       }
       geometry.forecast = forecast;
@@ -212,36 +200,8 @@ function paint() {
     rasterContext.putImageData(frame, 0, 0);
     context.imageSmoothingEnabled = false;
     context.drawImage(raster, 0, 0, width, height);
-    const ranked = [...geometry.landCells].map(([cell, point]) =>
-      ({...point, sum: forecast.sum(selected, cell)}))
-      .filter(point => point.sum >= 0.01).sort((a, b) => b.sum - a.sum);
-    const top = [];
-    for (const point of ranked) {
-      if (top.every(other => Math.hypot((point.x - other.x) / width, (point.y - other.y) / height) >= 0.12)) {
-        top.push(point);
-        if (top.length === 3) break;
-      }
-    }
-    const entries = top.map(({x, y, sum}) => {
-      const amount = number.format(sum) + ' mm';
-      const marker = document.createElement('span');
-      marker.className = 'maximum' + (x > width / 2 ? ' links' : '');
-      marker.style.left = x / width * 100 + '%';
-      marker.style.top = y / height * 100 + '%';
-      const label = document.createElement('b');
-      const [lon, lat] = geometry.lonlat(x, y);
-      const place = nearestPlace(lon, lat);
-      label.textContent = amount + (place ? ' · bij ' + place : '');
-      marker.append(label);
-      markers.append(marker);
-      return label.textContent;
-    });
-    positionLabels();
-    if (entries.length) {
-      maximumSummary.textContent = (selected.length < activePeriodHours ? 'Hoogste deelsommen' : 'Hoogste neerslagsommen') +
-        ' boven land · ' + entries.join(' · ');
-    }
   }
+  drawSelection();
   geometry.lines?.(context);
 }
 
@@ -385,16 +345,42 @@ download.onclick = () => {
   }
 };
 
+function drawSelection() {
+  const detail = byId('point');
+  detail.textContent = 'Klik of tik op de kaart voor de plaatsnaam en neerslagsom.';
+  if (!pickedPoint || !forecast) return;
+  const cell = forecast.cell(pickedPoint.lat, pickedPoint.lon);
+  const sum = forecast.sum(selected, cell);
+  if (!Number.isFinite(sum)) {
+    detail.textContent = 'Voor dit punt is in het gekozen tijdvak geen neerslagsom beschikbaar.';
+    return;
+  }
+  const [lon, lat] = forecast.coordinates(cell);
+  const [x, y] = geometry.xy(lon, lat);
+  const place = nearestPlace(lon, lat);
+  const coordinates = lat.toFixed(3) + '° NB, ' + lon.toFixed(3) + '° OL';
+  const caption = number.format(sum) + ' mm' + (place ? ' · bij ' + place : ' · ' + coordinates);
+  detail.textContent = place ? caption + ' · ' + coordinates : caption;
+  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return;
+  const marker = document.createElement('span');
+  marker.className = 'maximum';
+  marker.style.left = x / canvas.width * 100 + '%';
+  marker.style.top = y / canvas.height * 100 + '%';
+  const label = document.createElement('b');
+  label.textContent = caption;
+  marker.append(label);
+  markers.append(marker);
+  positionLabels();
+}
+
 canvas.addEventListener('click', event => {
   if (!geometry || !forecast) return;
   const rect = canvas.getBoundingClientRect();
   const [lon, lat] = geometry.lonlat(
     (event.clientX - rect.left) * canvas.width / rect.width,
     (event.clientY - rect.top) * canvas.height / rect.height);
-  const sum = forecast.sum(selected, forecast.cell(lat, lon));
-  byId('point').textContent = Number.isFinite(sum)
-    ? number.format(sum) + ' mm · ' + lat.toFixed(3) + '° NB, ' + lon.toFixed(3) + '° OL'
-    : 'Op deze plaats en in dit tijdvak is geen modelwaarde beschikbaar.';
+  pickedPoint = {lon, lat};
+  paint();
 });
 
 function update() {
@@ -407,7 +393,6 @@ function update() {
     ? {start: hours[0].start, end: hours.at(-1).end, hours, expected: hours.length}
     : periodFor(byId('date').value, Number(part), hours);
   selected = period.hours;
-  activePeriodHours = period.expected;
   const windowLabel = 'Neerslag: ' + formatBoundary(period.start) + ' tot ' + formatBoundary(period.end);
   const partial = selected.length < period.expected;
   byId('status').textContent = windowLabel + (selected.length
