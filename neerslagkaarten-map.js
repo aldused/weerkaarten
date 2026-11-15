@@ -7,7 +7,7 @@ const context = canvas.getContext('2d');
 const rainOpacity = 0.52;
 const markers = byId('maximum-markers');
 const download = byId('png');
-let pickedPoint;
+const pickedPoints = new Map();
 const number = new Intl.NumberFormat('nl-NL', {maximumFractionDigits: 2});
 const dateLabel = new Intl.DateTimeFormat('nl-NL', {timeZone: 'Europe/Amsterdam', dateStyle: 'long'});
 const periodDate = new Intl.DateTimeFormat('nl-NL', {
@@ -136,7 +136,6 @@ const backgroundCache = new Map();
 async function chooseRegion() {
   const id = ++mapRequest;
   const name = byId('region').value;
-  pickedPoint = null;
   map.classList.toggle('landelijk', name === 'Nederland');
   geometry = null;
   download.disabled = true;
@@ -347,29 +346,39 @@ download.onclick = () => {
 
 function drawSelection() {
   const detail = byId('point');
-  detail.textContent = 'Klik of tik op de kaart voor de plaatsnaam en neerslagsom.';
-  if (!pickedPoint || !forecast) return;
-  const cell = forecast.cell(pickedPoint.lat, pickedPoint.lon);
-  const sum = forecast.sum(selected, cell);
-  if (!Number.isFinite(sum)) {
-    detail.textContent = 'Voor dit punt is in het gekozen tijdvak geen neerslagsom beschikbaar.';
-    return;
+  detail.textContent = 'Klik of tik op een roosterpunt om het vast te zetten. Klik opnieuw op hetzelfde punt om het te verwijderen.';
+  if (!forecast) return;
+  const list = byId('pinned-points');
+  list.replaceChildren();
+  for (const [key, point] of pickedPoints) {
+    const cell = forecast.cell(point.lat, point.lon);
+    const sum = forecast.sum(selected, cell);
+    const [x, y] = geometry.xy(point.lon, point.lat);
+    const place = nearestPlace(point.lon, point.lat);
+    const coordinates = point.lat.toFixed(3) + '° NB, ' + point.lon.toFixed(3) + '° OL';
+    const caption = (Number.isFinite(sum) ? number.format(sum) + ' mm' : 'Geen gegevens') +
+      ' · ' + (place ? 'bij ' + place : coordinates);
+    const item = document.createElement('li');
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Verwijder';
+    remove.setAttribute('aria-label', 'Verwijder punt ' + (place ?? coordinates));
+    remove.onclick = () => {
+      pickedPoints.delete(key);
+      paint();
+    };
+    item.append(caption + ' ', remove);
+    list.append(item);
+    if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) continue;
+    const marker = document.createElement('span');
+    marker.className = 'maximum';
+    marker.style.left = x / canvas.width * 100 + '%';
+    marker.style.top = y / canvas.height * 100 + '%';
+    const label = document.createElement('b');
+    label.textContent = caption;
+    marker.append(label);
+    markers.append(marker);
   }
-  const [lon, lat] = forecast.coordinates(cell);
-  const [x, y] = geometry.xy(lon, lat);
-  const place = nearestPlace(lon, lat);
-  const coordinates = lat.toFixed(3) + '° NB, ' + lon.toFixed(3) + '° OL';
-  const caption = number.format(sum) + ' mm' + (place ? ' · bij ' + place : ' · ' + coordinates);
-  detail.textContent = place ? caption + ' · ' + coordinates : caption;
-  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return;
-  const marker = document.createElement('span');
-  marker.className = 'maximum';
-  marker.style.left = x / canvas.width * 100 + '%';
-  marker.style.top = y / canvas.height * 100 + '%';
-  const label = document.createElement('b');
-  label.textContent = caption;
-  marker.append(label);
-  markers.append(marker);
   positionLabels();
 }
 
@@ -379,7 +388,12 @@ canvas.addEventListener('click', event => {
   const [lon, lat] = geometry.lonlat(
     (event.clientX - rect.left) * canvas.width / rect.width,
     (event.clientY - rect.top) * canvas.height / rect.height);
-  pickedPoint = {lon, lat};
+  const cell = forecast.cell(lat, lon);
+  if (cell < 0) return;
+  const [gridLon, gridLat] = forecast.coordinates(cell);
+  const key = gridLon.toFixed(6) + ',' + gridLat.toFixed(6);
+  if (pickedPoints.has(key)) pickedPoints.delete(key);
+  else pickedPoints.set(key, {lon: gridLon, lat: gridLat});
   paint();
 });
 
