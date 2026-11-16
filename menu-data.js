@@ -237,8 +237,8 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "modelkaarten",
-    "name": "Weerkaarten Nederland",
-    "description": "Vergelijk temperatuur, regen, wind en wolken",
+    "name": "Modelkaarten Benelux",
+    "description": "Significant weer, temperatuur, wind, neerslagsom en zon-minuten",
     "category": "verwachting",
     "type": "kaarten",
     "section": "",
@@ -246,15 +246,7 @@ const MENU_PRODUCTS = [
     "href": "index.html#weerkaarten-modelkaarten",
     "thumbnail": "thumbs/modelkaarten_temp.webp",
     "facets": {
-      "veld": [
-        "temp",
-        "neerslag",
-        "wind",
-        "bewolking",
-        "onweer",
-        "hoogte",
-        "druk"
-      ],
+      "veld": [ "significant", "temp", "neerslag", "wind" ],
       "model": [
         "harmonie",
         "harmonie46",
