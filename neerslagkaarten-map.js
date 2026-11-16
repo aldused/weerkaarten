@@ -334,7 +334,7 @@ download.onclick = () => {
       const link = document.createElement('a');
       link.href = url;
       link.download = ['neerslag', region.toLowerCase(), date,
-        part === 'all' ? 'hele-run' : dayparts[Number(part)].replace('–', '-')].join('_') + '.png';
+        part === 'custom' ? 'eigen-periode' : part === 'all' ? 'hele-run' : dayparts[Number(part)].replace('–', '-')].join('_') + '.png';
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
     }, 'image/png');
@@ -400,12 +400,26 @@ canvas.addEventListener('click', event => {
 function update() {
   const part = byId('part').value;
   const all = part === 'all';
-  byId('date').disabled = all;
+  const custom = part === 'custom';
+  byId('date').disabled = all || custom;
+  byId('custom-period').hidden = !custom;
   if (!forecast) return;
   const hours = forecast.hours;
-  const period = all
+  let period = all
     ? {start: hours[0].start, end: hours.at(-1).end, hours, expected: hours.length}
-    : periodFor(byId('date').value, Number(part), hours);
+    : custom ? null : periodFor(byId('date').value, Number(part), hours);
+  if (custom) {
+    const start = Number(byId('period-start').value);
+    const end = Number(byId('period-end').value);
+    if (!(end > start)) {
+      selected = [];
+      byId('status').textContent = 'Kies een eindtijd na de begintijd.';
+      requestAnimationFrame(paint);
+      return;
+    }
+    period = {start, end, expected: (end - start) / HOUR,
+      hours: hours.filter(hour => hour.start >= start && hour.end <= end)};
+  }
   selected = period.hours;
   const windowLabel = 'Neerslag: ' + formatBoundary(period.start) + ' tot ' + formatBoundary(period.end);
   const partial = selected.length < period.expected;
@@ -422,7 +436,9 @@ const initialDay = Date.parse(today + 'T12:00:00Z');
 const initialDates = [0, 1, 2].map(offset => new Date(initialDay + offset * 24 * HOUR));
 byId('date').replaceChildren(...initialDates.map(date => new Option(dateLabel.format(date), date.toISOString().slice(0, 10))));
 byId('part').replaceChildren(...dayparts.map((name, i) => new Option(name + ' uur', i)),
-  new Option('Hele modelrun', 'all'));
+  new Option('Hele modelrun', 'all'), new Option('Eigen periode', 'custom'));
+byId('period-start').onchange = update;
+byId('period-end').onchange = update;
 byId('part').value = Math.floor(Number(currentTime.slice(0, 2)) / 6);
 byId('date').onchange = update;
 byId('part').onchange = update;
@@ -462,11 +478,24 @@ async function load() {
   const firstLoad = !forecast;
   const oldDate = byId('date').value;
   const dates = [...new Set(next.hours.map(hour => localTime.format(hour.start).slice(0, 10)))];
+  const boundaries = [next.hours[0].start, ...next.hours.map(hour => hour.end)];
+  for (const [id, times, fallback] of [
+    ['period-start', boundaries.slice(0, -1), boundaries[0]],
+    ['period-end', boundaries.slice(1), boundaries[1]]
+  ]) {
+    const control = byId(id);
+    const previous = Number(control.value);
+    control.replaceChildren(...times.map(time =>
+      new Option(formatBoundary(time) + ' (' + new Intl.DateTimeFormat('nl-NL', {
+        timeZone: 'Europe/Amsterdam', timeZoneName: 'short', hour: 'numeric'
+      }).formatToParts(time).find(part => part.type === 'timeZoneName').value + ')', time)));
+    control.value = String(times.includes(previous) ? previous : fallback);
+  }
   forecast = next;
   byId('date').replaceChildren(...dates.map(value => new Option(dateLabel.format(new Date(value + 'T12:00:00Z')), value)));
   byId('date').value = dates.includes(oldDate) ? oldDate : dates.includes(date) ? date : dates[0];
   const part = byId('part');
-  if (firstLoad && part.value !== 'all' &&
+  if (firstLoad && part.value !== 'all' && part.value !== 'custom' &&
       !periodFor(byId('date').value, Number(part.value), next.hours).hours.length) {
     const first = next.hours.find(hour => hour.end > Date.now()) ?? next.hours[0];
     const [firstDate, clock] = localTime.format(first.start).split(' ');
