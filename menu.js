@@ -261,7 +261,7 @@
   function historyCatalogue(){
     const groups=[
       ['dag-maand','Dag & maand','Hoe was het weer op een dag of in een maand?','history',['archief','klimaatarchief','maandbeeld','maandoverzicht']],
-      ['records','Records & bijzondere dagen','Zoek uitzonderlijk weer en vergelijk metingen.','chart',['records','stormen-windstoten','dagrecords','extremen','feestdagen']],
+      ['records','Records & bijzondere dagen','Zoek uitzonderlijk weer en vergelijk metingen.','chart',['records','stormen-windstoten','dagrecords','jaaruitersten','extremen','feestdagen']],
       ['seizoenen','Seizoenen & droogte','Volg warmte, kou, daglicht en neerslagtekort.','sun',['zomerstatistieken','hittegolven','eerstelaatste','daglengte','droogte']],
       ['gemiddelden','Gemiddelden & neerslag','Wat is normaal, en hoe nat of droog was het?','water',['klimaattabellen','normalen','neerslag668','p13']],
     ];

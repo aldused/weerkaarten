@@ -1103,6 +1103,21 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
+    "id": "jaaruitersten",
+    "name": "Temperatuurextremen 1901–2000",
+    "description": "Bekijk het jaarminimum, jaarmaximum en winterminimum met links naar de historische dagkaarten.",
+    "category": "terugkijken",
+    "type": "klimaat",
+    "section": "Records & extremen",
+    "icon": "records",
+    "href": "index.html#jaaruitersten",
+    "src": "jaaruitersten.html",
+    "thumbnail": null,
+    "facets": {},
+    "keywords": "jaarextremen hoogste laagste temperatuur Tmin Tmax winter jaarboeken",
+    "restricted": false
+  },
+  {
     "id": "dagrecords",
     "name": "Dagrecords op kaarten",
     "description": "Temperatuurrecords voor kalenderdagen, zichtbaar op de kaart.",

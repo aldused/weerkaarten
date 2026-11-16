@@ -150,6 +150,11 @@
   <p id="local-correction-status" role="status" hidden style="padding:12px;background:#fff4d6;color:#633f00;border-radius:6px;margin-bottom:12px"></p>
   <div id="status" class="status">Kies een datum en klik op "Toon kaart".</div>
 
+  <section id="jaaruitersten-bron" class="kaart-container" hidden>
+    <h2 class="kaart-titel">Temperatuurextremen uit de jaarboeken</h2>
+    <ul id="jaaruitersten-dag"></ul>
+    <a href="index.html#jaaruitersten" target="_blank" rel="noopener">Bekijk alle jaarextremen van 1901–2000</a>
+  </section>
   <div class="kaart-wrapper" id="kaart-wrapper" style="display:none;">
     <div class="kaart-container">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div class="kaart-titel" id="kaart-titel" style="margin-bottom:0;"></div><div style="display:flex;gap:6px;"><button onclick="vergroot()" style="padding:5px 12px;background:#eef3fa;border:1px solid #c0d0e4;border-radius:5px;cursor:pointer;font-size:0.8em;color:#003366;">&#128269; Vergroot</button><button onclick="slaOp()" style="padding:5px 12px;background:#eef3fa;border:1px solid #c0d0e4;border-radius:5px;cursor:pointer;font-size:0.8em;color:#003366;">&#11015; Opslaan</button></div></div>
@@ -175,6 +180,7 @@
   </div>
 </div>
 
+<script src="jaaruitersten-data.js"></script>
 <script>
 // Stations: stn, naam, lon, lat (geografisch) → wordt omgezet naar SVG coords
 const STATIONS = [
@@ -483,10 +489,34 @@ function observationValue(raw,param){
   if(param==='NG' && raw===9)return null; // sky obscured, not nine oktas
   return Math.round(raw / PARAM_COL[param].div * 10) / 10;
 }
+function toonJaaruitersten(datum, parameter) {
+  const lijst = document.getElementById('jaaruitersten-dag');
+  lijst.replaceChildren();
+  const graden = new Intl.NumberFormat('nl-NL', {maximumFractionDigits:1});
+  const groepen = parameter === 'TX' ? [[2, 'Jaarmaximum']] :
+    parameter === 'TN' ? [[1, 'Jaarminimum'], [3, 'Winterminimum']] : [];
+  for (const rij of window.WEERLAB_JAARUITERSTEN || []) {
+    for (const [kolom, naam] of groepen) {
+      const meting = rij[kolom];
+      if (!meting || meting[0].replaceAll('-', '') !== datum) continue;
+      const item = document.createElement('li');
+      item.textContent = `${naam} ${rij[0]} · ${meting[2]} · ${graden.format(meting[1])} °C`;
+      lijst.append(item);
+    }
+  }
+  if (parameter === 'TN' && datum === '19330128') {
+    const item = document.createElement('li');
+    item.textContent = 'Warnsveld staat in het werkblad vermeld zonder temperatuur.';
+    lijst.append(item);
+  }
+  document.getElementById('jaaruitersten-bron').hidden = !lijst.children.length;
+}
+
 async function laadDag() {
   const request=++dayRequest;
   const requestedParam=huidigParam;
   const datumStr = getDatumStr();
+  toonJaaruitersten(datumStr, requestedParam);
   const datumLabel = getDatumLabel();
   const status = document.getElementById("status");
   status.className = "status";
