@@ -272,7 +272,7 @@ body {
       </div>
       <div class="kaart-footer-band">
         <span class="merk">weerlab.nl</span>
-        <span class="pill" id="kaart-foot-stand">stand –</span>
+        <span class="pill" id="kaart-foot-stand" style="display:none"></span>
         <span class="src">© Ed Aldus WM · KNMI</span>
       </div>
 
@@ -355,7 +355,7 @@ const PARAMS = {
   t10n: { label:"Min grastemperatuur 10cm", eenheid:"°", decimalen:1,
     kleuren:[["#1a3a6b",-10],["#2980b9",-5],["#a8d8ea",0],["#ffffcc",5],["#fed976",10],["#fd8d3c",15],["#e65100",20]],
     schaal:[-15,25] },
-  rr: { label:"Neerslag (mm)", eenheid:" mm", decimalen:1,
+  rr: { label:"Neerslagsom (mm)", eenheid:" mm", decimalen:1,
     kleuren:[["#c6dbef","0.1"],["#6baed6","5"],["#2171b5","15"],["#084594","30+"]],
     schaal:[0,30] },
   fx: { label:"Max windstoot (km/h)", eenheid:" km/h", decimalen:0,
@@ -940,9 +940,10 @@ function tekenKaart(dagData, param) {
     g.appendChild(text);
 
     if (tijdstip) {
+      const tijdBreedte = param === "rr" ? 52 : 40;
       const tr = ns("rect");
-      tr.setAttribute("x", cx-20); tr.setAttribute("y", cy+6);
-      tr.setAttribute("width", 40); tr.setAttribute("height", 13);
+      tr.setAttribute("x", cx-tijdBreedte/2); tr.setAttribute("y", cy+6);
+      tr.setAttribute("width", tijdBreedte); tr.setAttribute("height", 13);
       tr.setAttribute("rx", 3); tr.setAttribute("fill", "white");
       tr.setAttribute("stroke", "#ccc"); tr.setAttribute("stroke-width", "0.8");
       g.appendChild(tr);
@@ -952,7 +953,7 @@ function tekenKaart(dagData, param) {
       tt.setAttribute("font-size", "9");
       tt.setAttribute("font-family", "Arial,sans-serif");
       tt.setAttribute("fill", "#444");
-      tt.textContent = tijdstip;
+      tt.textContent = param === "rr" ? "piek " + tijdstip : tijdstip;
       g.appendChild(tt);
     }
     svg.appendChild(g);
@@ -1022,22 +1023,10 @@ function tekenKaart(dagData, param) {
     wrd.setAttribute("x", paneel_x + 35); wrd.setAttribute("y", ry + 24);
     wrd.setAttribute("font-size", "10"); wrd.setAttribute("font-family", "Arial,sans-serif");
     wrd.setAttribute("fill", medKleur); wrd.setAttribute("font-weight", "bold");
-    wrd.textContent = waardeTxt + (tijdstip ? "  om " + tijdstip : "");
+    wrd.textContent = waardeTxt + (tijdstip ?
+      (param === "rr" ? " · piek om " : " om ") + tijdstip : "");
     svg.appendChild(wrd);
   });
-
-  // (© en stand-tijd nu in slate footer-band onder kaart)
-  const standEl = document.getElementById("kaart-foot-stand");
-  if (standEl) {
-    const vandaagKey = new Date().toISOString().slice(0,10);
-    if (huidigDag === vandaagKey) {
-      const now = new Date();
-      standEl.textContent = "stand " + now.toLocaleString("nl-NL",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
-      standEl.style.display = "";
-    } else {
-      standEl.style.display = "none";
-    }
-  }
 }
 
 function maakLegenda(param) {
@@ -1052,6 +1041,15 @@ const NL_DAGEN = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag",
 const NL_MND = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
 function dagLabel(d) { return `${NL_DAGEN[d.getDay()]} ${d.getDate()} ${NL_MND[d.getMonth()+1]}`; }
 
+function waarnemingsstand(dag) {
+  if (dag?.status !== "voorlopig" || !dag.bron_laatste_waarneming) return "";
+  const tijd = new Date(dag.bron_laatste_waarneming);
+  if (!Number.isFinite(tijd.getTime())) return "";
+  return "KNMI t/m " + tijd.toLocaleTimeString("nl-NL", {
+    timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit"
+  });
+}
+
 const LIVE_REFRESH_MS = 2 * 60 * 1000;
 let dagData = {}, huidigParam = "max", huidigDag = "vandaag", ladenBezig = false;
 
@@ -1063,8 +1061,13 @@ function update() {
   document.getElementById("status").textContent = "";
   const lbl = dagLabel(d);
   document.getElementById("hdr-datum").textContent = lbl;
+  document.getElementById("hdr-update").textContent = dd.update ? "Bijgewerkt: " + dd.update : "";
   document.getElementById("kaart-dag-label").textContent = lbl;
-  document.getElementById("kaart-subtitel").textContent = PARAMS[huidigParam].label;
+  document.getElementById("kaart-subtitel").textContent = huidigParam === "rr"
+    ? "Neerslagsom per UTC-dag (mm)" : PARAMS[huidigParam].label;
+  const standEl = document.getElementById("kaart-foot-stand");
+  standEl.textContent = waarnemingsstand(dd);
+  standEl.style.display = standEl.textContent ? "" : "none";
   tekenKaart(dd, huidigParam);
   maakLegenda(huidigParam);
 }
@@ -1194,7 +1197,7 @@ function tekenFooter(ctx, breedte, y, hoogte) {
   ctx.fillStyle = "#94a3b8";
   ctx.font = "500 19px 'DM Sans', Arial, sans-serif";
   ctx.fillText("·  Ed Aldus — weerdata & visualisaties", pad + merkW + 6, midY);
-  const bronTekst = "KNMI  ·  " + new Date().toLocaleString("nl-NL", {day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit"});
+  const bronTekst = waarnemingsstand(dagData[huidigDag]) || "KNMI";
   ctx.font = "500 18px 'DM Mono', 'Courier New', monospace";
   ctx.textAlign = "right";
   const bronW = ctx.measureText(bronTekst).width;
@@ -1253,8 +1256,6 @@ function startLaad() {
     }
     const vorigeDag = huidigDag;
     dagData = data;
-    const laatste = Object.keys(data).sort().reverse()[0];
-    if (laatste) document.getElementById("hdr-update").textContent = `Bijgewerkt: ${data[laatste].update||laatste}`;
     document.getElementById("status").textContent = "";
     const dagKeys = Object.keys(data).sort().reverse();
     const dagBtns = document.getElementById("dag-btns");
