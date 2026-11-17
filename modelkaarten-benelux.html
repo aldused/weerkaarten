@@ -321,8 +321,35 @@ async function stepData(step,run){
   rememberPayload(name,payload);
   return payload[step.lead];
 }
+const HOUR_MS=3600000;
+function hourlySteps(steps){
+  const hourly=[];
+  for(let i=0;i<steps.length;i++){
+    const right=steps[i], left=steps[i-1];
+    if(left){
+      const hours=right.lead-left.lead;
+      const start=Date.parse(left.valid);
+      const nominal=right.lead>144?6:3;
+      // Laat gaten in een onvolledige run open.
+      if(hours<=nominal&&Date.parse(right.valid)-start===hours*HOUR_MS){
+        for(let offset=1;offset<hours;offset++){
+          const fraction=offset/hours;
+          const nearest=fraction<.5?left:right;
+          hourly.push({lead:left.lead+offset,valid:new Date(start+offset*HOUR_MS).toISOString(),
+            keys:nearest.keys,gustPeriod:right.gustPeriod,sunHours:sunHours(right),sunEstimated:right.sunEstimated,
+            interpolation:{left,right,fraction}});
+        }
+      }
+    }
+    hourly.push(right);
+  }
+  return hourly;
+}
 for(const [key,model] of Object.entries(models)){
-  for(const run of model.runs)run.modelKey=key;
+  for(const run of model.runs){
+    run.modelKey=key;
+    if(key.startsWith('ecmwf'))run.steps=hourlySteps(run.steps);
+  }
 }
 const dateFormat = new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
 const stripDateFormat = new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'long',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
@@ -360,13 +387,35 @@ function windColor(x){return state.unit==='bft' ? bftColors[beaufort(x)] : windL
 const toWind = (x, gust=false, short=false) => !Number.isFinite(x) ? '—' : state.unit==='bft'
   ? (gust?'≈ ':'')+beaufort(x)+(short?'':' Bft') : num(x)+(short?'':' km/u');
 
-async function load(step, run){
+async function load(step,run){
   if(cache.has(step)){
     const fields=cache.get(step);
     cache.delete(step);
     cache.set(step,fields);
     return fields;
   }
+  const fields=step.interpolation?await interpolateFrame(step,run):await decodeFrame(step,run);
+  cache.set(step,fields);
+  if(cache.size>16)cache.delete(cache.keys().next().value);
+  return fields;
+}
+
+async function interpolateFrame(step,run){
+  const {left,right,fraction}=step.interpolation;
+  const [before,after]=await Promise.all([load(left,run),load(right,run)]);
+  // Neerslagtype en bijbehorende intensiteit komen samen uit de dichtstbijzijnde stap.
+  const fields={...(fraction<.5?before:after)};
+  for(const key of ['t2m','t850','t500','ws','u','v','tcc','vis','msl','ptot','sdep']){
+    const a=before[key], b=after[key];
+    if(a&&b)fields[key]=Float32Array.from(a,(x,i)=>x+(b[i]-x)*fraction);
+    else delete fields[key];
+  }
+  // Maxima en tijdsommen blijven gekoppeld aan hun originele tijdvak.
+  for(const key of ['gust','gustPeriod','sun','sunPeriod','sunEstimated'])fields[key]=after[key];
+  return fields;
+}
+
+async function decodeFrame(step,run){
   const compressed = Uint8Array.from(atob(await stepData(step,run)),s=>s.charCodeAt(0));
   const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'));
   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
@@ -403,8 +452,6 @@ async function load(step, run){
   fields.precipKind=precipKind;
   fields.ptypeMap=fields.rain ? precipKind : null;
   fields.rate=rate;
-  cache.set(step,fields);
-  if(cache.size>16)cache.delete(cache.keys().next().value);
   return fields;
 }
 
@@ -631,9 +678,10 @@ function sunHours(step){
 }
 function layerTitle(step){
   const title=titles[state.layer];
-  if(state.layer==='gust'&&step?.gustPeriod)return title+' · '+step.gustPeriod+' uur';
-  if(state.layer==='sun'&&step?.lead>0)return title+' · '+sunHours(step)+' uur';
-  return title;
+  const hours=state.layer==='gust'?step?.gustPeriod:state.layer==='sun'&&step?.lead>0?sunHours(step):0;
+  if(!hours)return title;
+  const end=step.interpolation?.right.valid;
+  return title+' · '+hours+' uur'+(end?' tot '+clockFormat.format(new Date(end)):'');
 }
 function updateLegend(){
   const target=$('legend');
@@ -691,7 +739,8 @@ function updateLegend(){
   }else if(state.layer==='sun'){
     legendScale(sunnyColors,Array.from({length:7},(_,i)=>i*(scaleHours*10)+(i===6?' min':'')));
     note(step.sunEstimated===false?'Zon-minuten in het afgelopen uur volgens het model.':
-      'Geschat uit globale straling en zonnestand over '+(comparison.active?'het tijdvak boven elke kaart':'de voorgaande '+scaleHours+' uur')+'.');
+      'Geschat uit globale straling en zonnestand over '+
+        (comparison.active||step.interpolation?'het tijdvak boven de kaart':'de voorgaande '+scaleHours+' uur')+'.');
   }else if(temperatureLayers.includes(state.layer)){
     if(state.layer==='t850')legendScale(upperLut.t850.slice(27,107).map(rgb),['−45','−35','−25','−15','−5','5','15','25','35 °C']);
     else if(state.layer==='t500')legendScale(upperLut.t500.slice(12,92).map(rgb),['−60','−50','−40','−30','−20','−10','0','10','20 °C']);
@@ -713,6 +762,11 @@ function updateLegend(){
       detail+' Wind op het geldige tijdstip. Pijlen wijzen in de richting waarin de lucht stroomt.');
   }
   const other=comparison.active&&comparison.step;
+  if(step.interpolation||other?.interpolation){
+    const original=$('legend-note').textContent;
+    if(weather||typeMap)note(original+' Op tussenuren komen neerslagtype en intensiteit uit de dichtstbijzijnde modelstap.');
+    if(state.layer==='gust'||state.layer==='sun')note(original+' Op tussenuren toont de kaart het tijdvak van de volgende modelstap.');
+  }
   let caveat='';
   if(other&&state.layer==='ptot')caveat='Elke kaart telt vanaf de eigen modelstart. De opgetelde periodes verschillen dus.';
   if(other&&state.layer==='gust'&&step.gustPeriod&&other.gustPeriod&&step.gustPeriod!==other.gustPeriod){
@@ -812,7 +866,7 @@ function dayBoundary(before,after,day){
 function timeControls(){
   const steps=state.run.steps, i=state.idx, step=steps[i];
   setValidTime('valid',step.valid,dateFormat);
-  $('lead').textContent='T+'+step.lead+' u';
+  $('lead').textContent=stepLabel(step);
   const slider=$('slider'), minute=Date.parse(step.valid)/MINUTE;
   slider.value=minute-timelineOrigin;
   const progress=slider.max>0?slider.value/slider.max:0;
@@ -901,6 +955,7 @@ function updateNotice(){
   showNotice(message,'compare-notice');
 }
 const formatRun=run=>runFormat.format(new Date(run.time))+' UTC';
+const stepLabel=step=>'T+'+step.lead+' u'+(step.interpolation?' · Geïnterpoleerd':'');
 function updateRunStrips(step){
   if(!comparison.active)return;
   const newer=Date.parse(state.run.time)>Date.parse(comparison.run.time);
@@ -910,8 +965,8 @@ function updateRunStrips(step){
   $('comparison-time').textContent=formatRun(comparison.run);
   setValidTime('primary-valid',step.valid,stripDateFormat);
   setValidTime('comparison-valid',step.valid,stripDateFormat);
-  $('primary-lead').textContent='T+'+step.lead+' u';
-  $('comparison-lead').textContent=comparison.step?'T+'+comparison.step.lead+' u':'';
+  $('primary-lead').textContent=stepLabel(step);
+  $('comparison-lead').textContent=comparison.step?stepLabel(comparison.step):'';
 }
 function hideTips(){
   $('tip').hidden=$('compare-tip').hidden=true;
@@ -1026,7 +1081,8 @@ async function refreshModel(key){
     const feed=await request;
     if(!validFeed(feed,key)||!feed.updated||liveFeeds.get(key)?.updated===feed.updated)return;
     const baseModel=models[key];
-    const updated=feed.runs.map(run=>({...run,modelKey:key,live:true})).sort((a,b)=>b.id.localeCompare(a.id));
+    const updated=feed.runs.map(run=>({...run,modelKey:key,live:true,
+      steps:key.startsWith('ecmwf')?hourlySteps(run.steps):run.steps})).sort((a,b)=>b.id.localeCompare(a.id));
     if(baseModel.runs.length&&updated[0].id<baseModel.runs[0].id)return;
     liveFeeds.set(key,feed);
     const active=key===modelKey;
@@ -1299,7 +1355,7 @@ async function downloadMap(other){
   c.textAlign='left';c.fillStyle='#fff';c.font='700 22px system-ui';
   c.fillText(models[modelKey].label+' · '+layerTitle(step),20,74,780);
   c.font='14px system-ui';c.fillStyle='#dbe9f8';
-  c.fillText('Geldig '+dateFormat.format(new Date(step.valid))+' · T+'+step.lead+' u',20,97,480);
+  c.fillText('Geldig '+dateFormat.format(new Date(step.valid))+' · '+stepLabel(step),20,97,480);
   c.textAlign='right';c.fillText('Modelrun '+formatRun(run),800,97,290);c.textAlign='left';
   c.drawImage(source,0,header,820,mapHeight);
   drawExportLegend(c,blocks,legendTop);
