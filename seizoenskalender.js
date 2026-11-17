@@ -29,6 +29,7 @@
   const human = (year, offset) => offset === null ? '—' : format.format(dateAt(year, offset));
   const iso = (year, offset) => offset === null ? '' : dateAt(year, offset).toISOString().slice(0, 10);
   const periods = [[1961, 1990], [1971, 2000], [1981, 2010], [1991, 2020], [1906, 1990], [1901, 2020]];
+  const publishedFirstSnow = {'1961–1990': '1 november', '1991–2020': '9 november'};
   let source;
   let years;
 
@@ -94,10 +95,14 @@
       return [[year, offset]];
     });
     byId('season-snow-normals').replaceChildren(...periods.map(([from, to]) => {
+      const period = `${from}–${to}`;
       const sample = dated.filter(([year]) => year >= from && year <= to);
       const first = mean(sample.map(([, offset]) => offset));
       const coverage = sample.length ? `${sample.at(-1)[0]}–${sample[0][0]} (${sample.length} winters)` : '—';
-      return tableRow([`${from}–${to}`, first === null ? '—' : fullDate.format(dateAt(2002, first)), coverage]);
+      return tableRow([
+        period, first === null ? '—' : fullDate.format(dateAt(2002, first)), coverage,
+        publishedFirstSnow[period] ?? '—'
+      ]);
     }));
   }
 
