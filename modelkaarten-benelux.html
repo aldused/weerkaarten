@@ -74,6 +74,20 @@
 .toolbar{flex-wrap:wrap}
 .toolbar button{font-size:.72rem;font-weight:400;padding:4px 8px}
 @media(max-width:640px){.toolbar{grid-template-columns:repeat(4,minmax(0,1fr))}.toolbar button{font-size:.69rem;padding:4px 2px}}
+.timeline-scroll{overflow-x:auto;scrollbar-width:thin;margin-top:3px}
+.timeline{--thumb:16px;min-width:var(--timeline-width,0);padding:0 calc(var(--thumb) / 2) 2px}
+.timeline-ruler{position:relative;height:24px}
+.timeline-ruler::before{content:"";position:absolute;inset:9px 0;border-radius:4px;background:#e8eef5}
+.timeline-start{position:absolute;left:var(--start);top:9px;bottom:9px;width:calc(100% - var(--start) - var(--end));border-radius:4px;background:linear-gradient(to right,#1a6baa var(--progress),#c2d4e5 var(--progress))}
+.timeline #slider{appearance:none;position:absolute;left:calc(var(--start) - var(--thumb) / 2);top:0;width:calc(100% - var(--start) - var(--end) + var(--thumb));height:24px;margin:0;padding:0;border:0;background:transparent}
+.timeline #slider::-webkit-slider-thumb{appearance:none;width:var(--thumb);height:var(--thumb);border:0;border-radius:50%;background:#1a6baa}
+.timeline #slider::-moz-range-thumb{width:var(--thumb);height:var(--thumb);border:0;border-radius:50%;background:#1a6baa}
+.timeline .days{display:grid;gap:0;overflow:visible;padding:0}
+.timeline .days button{position:relative;display:grid;justify-items:center;gap:0;min-width:0;padding:3px 1px;line-height:1.25;border-radius:0;border-inline-start:1px solid #cad7e5;font-size:.69rem;font-weight:400}
+.timeline .days button::before{content:"";position:absolute;left:-1px;top:-8px;height:8px;border-left:1px solid #cad7e5;pointer-events:none}
+.timeline .days button:last-child{border-inline-end:1px solid #cad7e5}
+.timeline .days button[aria-current=date]{background:#dcecff;color:#0b497f}
+.timeline .days time{font-size:.65rem;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -159,8 +173,16 @@
             <button type="button" id="next" aria-label="Volgende tijdstap" title="Volgende tijdstap">›</button>
           </div>
         </div>
-        <label class="sr" for="slider">Verwachtingstijd</label><input id="slider" type="range" step="1" min="0" value="0">
-        <div class="days" id="days" aria-label="Kies een dag"></div>
+        <div class="timeline-scroll" id="timeline-scroll">
+          <div class="timeline" id="timeline">
+            <div class="timeline-ruler" id="timeline-ruler">
+              <div class="timeline-start" id="timeline-start" aria-hidden="true"></div>
+              <label class="sr" for="slider">Verwachtingstijd</label>
+              <input id="slider" type="range" step="1" min="0" value="0">
+            </div>
+            <div class="days" id="days" role="group" aria-label="Kies een dag"></div>
+          </div>
+        </div>
       </div>
       <div class="map-hint" id="map-hint">Sleep om te verschuiven · Scroll of gebruik + en − om in te zoomen · Tik of wijs aan voor lokale waarden</div>
       <p class="map-hint" id="export-status" role="status" hidden></p>
@@ -301,6 +323,7 @@ for(const [key,model] of Object.entries(models)){
 const dateFormat = new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
 const stripDateFormat = new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'long',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 const dayFormat = new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'short',day:'numeric',month:'numeric'});
+const clockFormat = new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 const runFormat = new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 const num = (x,d=0) => Number.isFinite(x) ? x.toLocaleString('nl-NL',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
 const clamp = (x,a,b) => Math.min(b,Math.max(a,x));
@@ -771,23 +794,75 @@ function setValidTime(id,stamp,formatter){
   node.dateTime=stamp;
   node.textContent=formatter.format(new Date(stamp));
 }
+const MINUTE=60000;
+const timelineDay=minute=>dayFormat.format(new Date(minute*MINUTE));
+let timelineOrigin;
+function dayBoundary(before,after,day){
+  while(after-before>1){
+    const middle=Math.floor((before+after)/2);
+    if(timelineDay(middle)===day)after=middle;
+    else before=middle;
+  }
+  return after;
+}
 function timeControls(){
   const steps=state.run.steps, i=state.idx, step=steps[i];
   setValidTime('valid',step.valid,dateFormat);
   $('lead').textContent='T+'+step.lead+' u';
-  $('slider').max=steps.length-1;$('slider').value=i;
-  $('slider').setAttribute('aria-valuetext',$('valid').textContent+' · '+$('lead').textContent);
+  const slider=$('slider'), minute=Date.parse(step.valid)/MINUTE;
+  slider.value=minute-timelineOrigin;
+  const progress=slider.max>0?slider.value/slider.max:0;
+  $('timeline-start').style.setProperty('--progress',progress*100+'%');
+  slider.setAttribute('aria-valuetext',$('valid').textContent+' · '+$('lead').textContent);
   $('prev').disabled=i===0;$('next').disabled=i===steps.length-1;
-  $('days').querySelectorAll('button').forEach(b=>b.setAttribute('aria-current',String(b.dataset.day===dayFormat.format(new Date(step.valid)))));
+  const selectedDay=timelineDay(minute);
+  for(const b of $('days').querySelectorAll('button')){
+    const current=b.dataset.day===selectedDay;
+    b.setAttribute('aria-current',current?'date':'false');
+    if(b.disabled)continue;
+    const time=b.querySelector('time');
+    time.dateTime=current?step.valid:steps[b.dataset.index].valid;
+    time.textContent=clockFormat.format(new Date(time.dateTime));
+  }
+  const viewport=$('timeline-scroll');
+  if(viewport.scrollWidth>viewport.clientWidth){
+    const track=slider.getBoundingClientRect(), view=viewport.getBoundingClientRect();
+    const thumb=Number.parseFloat(getComputedStyle(slider).getPropertyValue('--thumb'));
+    const marker=track.left+thumb/2+(track.width-thumb)*progress;
+    if(marker<view.left+thumb/2||marker>view.right-thumb/2){
+      viewport.scrollLeft+=marker-view.left-view.width/2;
+    }
+  }
 }
 function makeDays(){
-  const days=new Map();
-  state.run.steps.forEach((s,i)=>{
-    const d=dayFormat.format(new Date(s.valid));if(!days.has(d))days.set(d,i);
-  });
-  $('days').replaceChildren(...Array.from(days,([day,i])=>{
-    const b=labelNode('button',day);b.type='button';b.dataset.day=day;b.addEventListener('click',()=>{stop();setFrame(i);});return b;
-  }));
+  const steps=state.run.steps, minutes=steps.map(s=>Date.parse(s.valid)/MINUTE);
+  const first=minutes[0], last=minutes.at(-1), buttons=[], columns=[];
+  const dayWindow=26*60; // Covers local days of 23, 24 or 25 hours.
+  const start=dayBoundary(first-dayWindow,first,timelineDay(first));
+  let end=start;
+  while(end<=last){
+    const day=timelineDay(end), nextDay=timelineDay(end+dayWindow);
+    const next=dayBoundary(end,end+dayWindow,nextDay);
+    const i=minutes.findIndex(m=>m>=end&&m<next);
+    const b=labelNode('button');
+    b.append(labelNode('span',day),labelNode('time',i<0?'—':''));
+    b.type='button';b.dataset.day=day;b.dataset.index=i;b.disabled=i<0;
+    if(i>=0){
+      b.title='Eerste kaart: '+dateFormat.format(new Date(steps[i].valid));
+      b.addEventListener('click',()=>{stop();setFrame(i);});
+    }
+    buttons.push(b);columns.push(`minmax(0,${next-end}fr)`);
+    end=next;
+  }
+  timelineOrigin=first;
+  $('slider').max=last-first;
+  $('slider').disabled=first===last;
+  const ruler=$('timeline-ruler');
+  ruler.style.setProperty('--start',100*(first-start)/(end-start)+'%');
+  ruler.style.setProperty('--end',100*(end-last)/(end-start)+'%');
+  $('timeline').style.setProperty('--timeline-width',`${buttons.length*66+16}px`);
+  $('days').style.gridTemplateColumns=columns.join(' ');
+  $('days').replaceChildren(...buttons);
 }
 function sync(){
   const hash=new URLSearchParams({lead:String(state.run.steps[state.idx].lead),kaart:state.layer,wind:state.unit});
@@ -1005,7 +1080,14 @@ $('run').addEventListener('change',()=>{
   stop();state.run=runs.find(r=>r.id===$('run').value)||runs[0];
   compareChoices();makeDays();setFrame(closest(state.run,t));
 });
-$('slider').addEventListener('input',e=>{stop();setFrame(Number(e.target.value));});
+$('slider').addEventListener('input',e=>{
+  stop();setFrame(closest(state.run,(timelineOrigin+Number(e.target.value))*MINUTE));
+});
+$('slider').addEventListener('keydown',e=>{
+  const delta={ArrowLeft:-1,ArrowDown:-1,ArrowRight:1,ArrowUp:1}[e.key];
+  if(!delta)return;
+  e.preventDefault();stop();setFrame(state.idx+delta);
+});
 $('prev').onclick=()=>{stop();setFrame(state.idx-1);};
 $('next').onclick=()=>{stop();setFrame(state.idx+1);};
 $('play').onclick=play;
