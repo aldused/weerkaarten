@@ -7,11 +7,14 @@ import json
 from pathlib import Path
 import re
 
-from bouw_winterdata import snow_indicator
+from bouw_winterdata import VISUAL_SNOW, snow_indicator
 
 # De dag- en uurselecties hebben soms een dubbele punt achter het stationnummer.
 STATION = re.compile(r"^#\s*(\d+):?\s+[-.\d]+\s+[-.\d]+\s+[-.\d]+\s+(.+?)\s*$")
 MONTHS = (7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6)
+# Noordzeeplatforms en meetpunten op open water in het uurarchief.
+OFFSHORE = {201, 203, 204, 205, 206, 207, 208, 209, 211, 212, 213, 214, 216, 218,
+            239, 252, 285, 312, 313, 316, 317, 320, 321}
 
 
 def read_rows(path, station_names, *keys):
@@ -52,9 +55,12 @@ def classify(value):
 
 def station_snow(path, station_names, offsets, observations, month):
     for station, day, (ww, ix, snow) in read_rows(path, station_names, "WW", "IX", "S"):
-        if day not in offsets or not day.startswith(month):
+        if station in OFFSHORE or day not in offsets or not day.startswith(month):
             continue
         event = snow_indicator(day, ww, ix, snow)
+        if event and ix in ("", "1", "4"):
+            # Bij visuele meldingen kan S ook bij hagel en onweer staan.
+            event = int(ww) in VISUAL_SNOW if ww.isdecimal() else None
         if event is None:
             continue
         offset = offsets[day]
@@ -143,14 +149,19 @@ def main():
         season["vorst"] = frost_rows(path, stations["vorst"], offsets)
         if end >= 1951:
             snow = defaultdict(lambda: (set(), set()))
+            snow_offsets = {day: offset for day, offset in offsets.items() if day >= f"{end-1}1001"}
             root = args.edr if end >= 2021 else args.hourly
-            for month in MONTHS:
+            for month in MONTHS[3:]:
                 prefix = f"{end - (month >= 7)}{month:02d}"
                 path = root / f"{prefix}.txt.gz"
                 if not path.is_file():
                     raise FileNotFoundError(path)
-                station_snow(path, stations["val"], offsets, snow, prefix)
+                station_snow(path, stations["val"], snow_offsets, snow, prefix)
             season["val"] = snow_rows(snow)
+            season["valLength"] = len(snow_offsets)
+            coverage = set().union(*(days for days, _ in snow.values()))
+            first = min((row[2] for row in season["val"] if row[2] is not None), default=len(offsets) - 1)
+            season["valComplete"] = all(offset in coverage for offset in snow_offsets.values() if offset <= first)
         if end >= 1956:
             cover = defaultdict(lambda: (set(), set()))
             for year in (end - 1, end):

@@ -23,6 +23,7 @@
     }
   };
   const selected = {};
+  const periods = [[1961, 1990], [1991, 2020], [1906, 1990], [1901, 2020]];
   const day = 86400000;
   let source;
   let kind = 'snow';
@@ -69,6 +70,47 @@
     return tr;
   }
 
+  function average(values) {
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  }
+
+  function renderReferences(years, summaries, top, year) {
+    const samples = periods.map(([start, end]) => {
+      const used = years.map((y, i) => [y, summaries[i].value])
+        .filter(([y, value]) => y >= start && y <= end && value !== null);
+      return {label: `${start}–${end}`, value: average(used.map(([, value]) => value)), used};
+    });
+    byId('normals-caption').textContent = metrics[kind].title + ' per klimaatperiode';
+    byId('normals').replaceChildren(...samples.map(({label, value, used}) =>
+      row([label, valueText(value), used.length ? `${used[0][0]}–${used.at(-1)[0]} (${used.length})` : '—'])
+    ));
+
+    const rolling = summaries.map((_, i) => {
+      if (i < 29 || years[i] - years[i - 29] !== 29) return null;
+      const values = summaries.slice(i - 29, i + 1).map(item => item.value);
+      return values.includes(null) ? null : average(values);
+    });
+    const selectedAverage = rolling[years.indexOf(year)];
+    byId('rolling').textContent = selectedAverage === null
+      ? 'Voor dit jaar zijn geen 30 opeenvolgende jaren met gegevens beschikbaar.'
+      : `Voortschrijdend gemiddelde t/m ${label(year)} · ${valueText(selectedAverage)}`;
+    const svg = byId('references');
+    svg.setAttribute('viewBox', `0 0 ${years.length} 100`);
+    const y = value => 100 - value / top * 100;
+    const path = (className, d) => {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      line.setAttribute('class', className);
+      line.setAttribute('d', d);
+      return line;
+    };
+    const fixed = samples.slice(0, 2).flatMap(({value}, i) =>
+      value === null ? [] : [path(i ? 'reference-current' : 'reference-old', `M 0 ${y(value)} H ${years.length}`)]
+    );
+    const moving = rolling.map((value, i) => value === null ? '' :
+      `${rolling[i - 1] == null ? 'M' : 'L'} ${i + .5} ${y(value)}`).join(' ');
+    svg.replaceChildren(...fixed, path('reference-rolling', moving));
+  }
+
   function render() {
     const year = Number(period.value);
     selected[kind] = year;
@@ -86,6 +128,7 @@
     const chart = byId('chart');
     chart.style.setProperty('--years', years.length);
     const top = Math.max(1, ...summaries.map(item => item.value ?? 0));
+    renderReferences(years, summaries, top, year);
     chart.replaceChildren(...years.map((y, i) => {
       const count = summaries[i].value;
       const bar = el('button');

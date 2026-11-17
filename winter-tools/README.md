@@ -46,7 +46,7 @@ De afgeleide statistieken laten specifieke station/code-combinaties weg die in 1
 
 ## Seizoenskalender
 
-De seizoenskalender gebruikt volledige seizoenen van juli tot en met juni. Hij combineert TN uit de KNMI-dagselectie, sneeuwval uit de KNMI-uurselectie en sneeuwdekcode SX uit het eerder opgebouwde sneeuwdekarchief. Historische sneeuwval tot 1971 volgt expliciete visuele WW-codes omdat S in die periode ook vaak is gezet bij onweer. De seizoenskalender en het uurarchief delen dezelfde functie voor sneeuwval.
+De seizoenskalender combineert TN uit de KNMI-dagselectie, sneeuwval uit de KNMI-uurselectie en sneeuwdekcode SX uit het sneeuwdekarchief. Voor de eerste sneeuwval zoekt hij vanaf 1 oktober in de uurgegevens van landstations. Bij visuele meldingen moet de weercode WW uitdrukkelijk op sneeuw wijzen. Bij automatische meldingen telt de sneeuwindicator S of W3. Het meetmoment volgt het UTC-uurvak. Sneeuwdek en vorst lopen van juli t/m juni.
 
 ```sh
 python3 winter-tools/haal_knmi_dagminima.py /pad/naar/dagminimacache 1902 2026
@@ -58,7 +58,7 @@ python3 winter-tools/bouw_seizoenskalender.py \
   --out winter-data/seizoenskalender.json
 ```
 
-Geef het laatste volledige seizoen op met `--laatste` als de reeks wordt verlengd. De browser berekent gemiddelden over stations met een waargenomen gebeurtenis en met bruikbare gegevens op minstens 90% van de seizoensdagen. De CSV bewaart ook de datums van de overige stations.
+Geef het laatste volledige seizoen op met `--laatste` als de reeks wordt verlengd. Voor de gemiddelde eerste sneeuwval telt elk seizoen met een eerste melding en landelijke dagdekking tot die datum eenmaal mee. Voor sneeuwdek en vorst berekent de browser gemiddelden over stations met een waargenomen gebeurtenis en met bruikbare gegevens op minstens 90% van de seizoensdagen. De CSV bevat de stationdatums en hun meetdekking.
 
 ## Winterstatistieken
 

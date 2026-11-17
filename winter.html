@@ -8,10 +8,10 @@
 <title>Winter in Nederland · Weerlab</title>
 <link rel="stylesheet" href="winter.css?v=20261117-sneeuwdek">
 <script src="winter.js?v=20261117-sneeuwdek" defer></script>
-<link rel="stylesheet" href="seizoenskalender.css">
-<script src="seizoenskalender.js" defer></script>
-<link rel="stylesheet" href="winterstatistieken.css">
-<script src="winterstatistieken.js" defer></script>
+<link rel="stylesheet" href="seizoenskalender.css?v=20261117-eerstesneeuw">
+<script src="seizoenskalender.js?v=20261117-eerstesneeuw" defer></script>
+<link rel="stylesheet" href="winterstatistieken.css?v=20261117-normalen">
+<script src="winterstatistieken.js?v=20261117-normalen" defer></script>
 <link rel="stylesheet" href="strooien.css?v=1">
 <script src="strooien.js?v=1" defer></script>
 </head>
@@ -129,7 +129,7 @@
   <section id="seizoenskalender" class="section" aria-labelledby="season-title">
     <div class="kicker">Winters door de jaren heen</div>
     <h2 id="season-title">Wanneer begon de winter?</h2>
-    <p class="intro">Sneeuw kan vallen voordat er sneeuw blijft liggen. Vergelijk per seizoen wanneer de KNMI-stations voor het eerst sneeuw meldden en wanneer elke klasse vorst begon en eindigde.</p>
+    <p class="intro">Bekijk per seizoen wanneer een KNMI-station op land de eerste sneeuwval in Nederland meldde.</p>
     <div class="panel season-panel">
       <div class="panel-head">
         <div class="choices">
@@ -146,13 +146,23 @@
         <button id="season-csv" class="download" type="button" disabled>Alle stations en seizoenen als CSV ↓</button>
       </div>
       <p id="season-status" class="muted" role="status">Seizoenskalender laden…</p>
+      <div class="season-first-snow">
+        <span>Eerste sneeuwval ergens in Nederland</span>
+        <strong id="season-first-snow"></strong>
+        <p id="season-first-snow-stations"></p>
+      </div>
+      <div class="table-wrap"><table>
+        <caption>Gemiddelde datum van de eerste sneeuwval in Nederland</caption>
+        <thead><tr><th scope="col">Periode (eindjaren)</th><th scope="col">Datum</th><th scope="col">Gebruikte winters</th></tr></thead>
+        <tbody id="season-snow-normals"></tbody>
+      </table></div>
       <div id="season-months" class="season-months" aria-hidden="true"></div>
       <div id="season-timeline" class="season-timeline"></div>
       <details id="season-station-details">
         <summary>Bekijk alle stations in dit seizoen</summary>
         <div class="table-wrap"><table>
           <caption id="season-station-caption"></caption>
-          <thead><tr><th scope="col">Station</th><th scope="col">Eerste datum</th><th id="season-station-last" scope="col">Laatste datum</th><th scope="col">Meetdagen</th><th scope="col">In gemiddelde</th></tr></thead>
+          <thead><tr><th scope="col">Station</th><th scope="col">Eerste datum</th><th id="season-station-last" scope="col">Laatste datum</th><th scope="col">Meetdagen</th><th id="season-station-included" scope="col">In gemiddelde</th></tr></thead>
           <tbody id="season-station-rows"></tbody>
         </table></div>
       </details>
@@ -160,11 +170,12 @@
         <summary>Vergelijk alle seizoenen</summary>
         <div class="table-wrap"><table>
           <caption id="season-history-caption"></caption>
-          <thead><tr><th scope="col">Seizoen</th><th scope="col">Gemiddeld eerste</th><th id="season-history-last" scope="col">Gemiddeld laatste</th><th scope="col">Stations met gebeurtenis</th></tr></thead>
+          <thead><tr><th scope="col">Seizoen</th><th id="season-history-first" scope="col">Eerste sneeuwdag in Nederland</th><th id="season-history-last" scope="col">Gemiddeld laatste</th><th id="season-history-count" scope="col">Landstations op die dag</th></tr></thead>
           <tbody id="season-history-rows"></tbody>
         </table></div>
       </details>
-      <p class="source-note">Elke datum is het rekenkundig gemiddelde van de stationsdatums, afgerond op een dag. Een station telt mee als er voor minstens 90% van de dagen meetgegevens zijn en de gebeurtenis er is waargenomen. De teller geeft aan hoeveel stations aan beide voorwaarden voldoen. De noemer telt alle stations met voldoende gegevens. Voor sneeuwval telt een dag mee bij minstens één bruikbare uurwaarneming. Vóór 1971 gebruiken we expliciete visuele sneeuwcodes, omdat de toenmalige sneeuwindicator ook vaak bij onweer staat. Vanaf 1971 gebruiken we de sneeuwindicator.</p>
+      <p class="source-note">Voor sneeuwval zoeken we vanaf 1 oktober naar de vroegste KNMI-melding op land, met datums in UTC. Visuele meldingen tellen mee bij een expliciete sneeuwcode. Bij automatische meldingen gebruiken we de sneeuwindicator. Voor het gemiddelde telt per winter één datum mee, mits er vanaf 1 oktober tot die datum elke dag minstens één bruikbare landwaarneming beschikbaar was. Het meetnet kan lokale sneeuw missen.</p>
+      <p class="source-note">De datums voor sneeuwdek en vorst zijn gemiddelden van de deelnemende stations, over juli t/m juni. Een station telt mee als voor minstens 90% van de dagen gegevens beschikbaar zijn en de gebeurtenis er is waargenomen.</p>
       <p class="source-note"><a href="https://www.knmi.nl/kennis-en-datacentrum/uitleg/vorst">KNMI-vorstklassen</a> volgen het etmaalminimum op 1,5 meter. Licht is −0,1 tot −5,0 °C, matig −5,1 tot −10,0 °C, streng −10,1 tot −15,0 °C, zeer streng lager dan −15,0 °C. Elke dag valt in maximaal één klasse. Bij sneeuwdek telt ook gebroken of opgehoopte sneeuw mee.</p>
       <p class="source-note">Bronnen <a href="https://www.daggegevens.knmi.nl/klimatologie/uurgegevens">KNMI-uurgegevens</a>, <a href="https://dataplatform.knmi.nl/dataset/docs/hourly-in-situ-meteorological-observations-1-0">gevalideerde KNMI-uurgegevens</a>, <a href="https://daggegevens.knmi.nl/klimatologie/monv/reeksen">neerslagstations</a> en <a href="https://daggegevens.knmi.nl/klimatologie/daggegevens">dagminima</a>. Het meetnet is door de jaren heen veranderd.</p>
     </div>
@@ -190,8 +201,22 @@
           <p id="winterstats-context"></p>
         </div>
         <p id="winterstats-definition" class="muted"></p>
-        <div id="winterstats-chart" class="winterstats-chart" aria-label="Kies een periode in de reeks"></div>
+        <div class="winterstats-plot">
+          <div id="winterstats-chart" class="winterstats-chart" aria-label="Kies een periode in de reeks"></div>
+          <svg id="winterstats-references" class="winterstats-references" aria-hidden="true" preserveAspectRatio="none"></svg>
+        </div>
         <div id="winterstats-axis" class="winterstats-axis" aria-hidden="true"></div>
+        <div class="winterstats-legend">
+          <span><i class="reference-old"></i> 1961–1990</span>
+          <span><i class="reference-current"></i> 1991–2020</span>
+          <span><i class="reference-rolling"></i> Voortschrijdend gemiddelde (30 jaar)</span>
+        </div>
+        <p id="winterstats-rolling" class="muted"></p>
+        <div class="table-wrap"><table>
+          <caption id="winterstats-normals-caption"></caption>
+          <thead><tr><th scope="col">Periode</th><th scope="col">Gemiddelde</th><th scope="col">Gebruikte jaren</th></tr></thead>
+          <tbody id="winterstats-normals"></tbody>
+        </table></div>
       </div>
       <details>
         <summary>Stations in de gekozen periode</summary>
@@ -209,6 +234,7 @@
           <tbody id="winterstats-history"></tbody>
         </table></div>
       </details>
+      <p class="source-note">In de klimaatvergelijking telt elk beschikbaar jaar even zwaar. Bij sneeuwdek middelen we de langste aaneengesloten periode per winter, waar die ook in Nederland voorkwam. Voor winterseizoenen gebruiken we het eindjaar. Voor de vorstvrije periode gebruiken we kalenderjaren.</p>
       <p class="source-note">Bronnen <a href="https://daggegevens.knmi.nl/klimatologie/monv/reeksen">KNMI-neerslagstations</a>, <a href="https://daggegevens.knmi.nl/klimatologie/daggegevens">KNMI-daggegevens</a> en <a href="https://www.knmi.nl/nederland-nu/klimatologie/lijsten/hellmann">de officiële Hellmannreeks voor De Bilt</a>. De stationsdekking verschilt per periode.</p>
     </div>
   </section>

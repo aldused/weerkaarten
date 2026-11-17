@@ -11,9 +11,10 @@
   const day = 86400000;
   const months = ['jul', 'aug', 'sep', 'okt', 'nov', 'dec', 'jan', 'feb', 'mrt', 'apr', 'mei', 'jun'];
   const format = new Intl.DateTimeFormat('nl-NL', {timeZone: 'UTC', day: 'numeric', month: 'short'});
+  const fullDate = new Intl.DateTimeFormat('nl-NL', {timeZone: 'UTC', day: 'numeric', month: 'long'});
   const collator = new Intl.Collator('nl-NL');
   const metrics = {
-    snowfall: {group: 'val', title: 'Eerste sneeuwval', first: 2},
+    snowfall: {group: 'val', title: 'Eerste sneeuwval in Nederland', first: 2},
     snowcover: {group: 'dek', title: 'Eerste sneeuwdek', first: 2},
     light: {group: 'vorst', title: 'Lichte vorst', first: 2, last: 3},
     moderate: {group: 'vorst', title: 'Matige vorst', first: 4, last: 5},
@@ -27,6 +28,7 @@
   const dateAt = (year, offset) => new Date(start(year) + offset * day);
   const human = (year, offset) => offset === null ? '—' : format.format(dateAt(year, offset));
   const iso = (year, offset) => offset === null ? '' : dateAt(year, offset).toISOString().slice(0, 10);
+  const periods = [[1961, 1990], [1991, 2020], [1906, 1990], [1901, 2020]];
   let source;
   let years;
 
@@ -52,6 +54,13 @@
   }
 
   function summarize(season, metric) {
+    if (metric.group === 'val') {
+      const rows = season.val || [];
+      const hits = rows.filter(row => row[metric.first] !== null);
+      const first = season.valComplete && hits.length ? Math.min(...hits.map(row => row[metric.first])) : null;
+      const stations = first === null ? [] : hits.filter(row => row[metric.first] === first).map(row => row[0]);
+      return {first, last: null, count: stations.length, available: rows.length, stations};
+    }
     const stations = (season[metric.group] || []).filter(row => covered(row, season));
     const hits = stations.filter(row => row[metric.first] !== null);
     return {
@@ -64,6 +73,32 @@
 
   function stationName(metric, id) {
     return source.stations[metric.group][id] || `Station ${id}`;
+  }
+
+  function renderSnowfall(year, season) {
+    const metric = metrics.snowfall;
+    const {first, stations} = summarize(season, metric);
+    byId('season-first-snow').textContent = first === null ? '—' : fullDate.format(dateAt(year, first));
+    byId('season-first-snow-stations').textContent = stations.length
+      ? stations.map(id => stationName(metric, id)).sort(collator.compare).join(', ')
+      : season.valComplete ? 'Geen sneeuwval gemeld' : 'Onvoldoende meetdekking vanaf 1 oktober';
+  }
+
+  function renderSnowfallNormals() {
+    const dated = years.flatMap(year => {
+      const {first} = summarize(source.seasons[year], metrics.snowfall);
+      if (first === null) return [];
+      const date = dateAt(year, first);
+      const month = date.getUTCMonth();
+      const offset = (Date.UTC(month >= 6 ? 2001 : 2002, month, month === 1 ? Math.min(date.getUTCDate(), 28) : date.getUTCDate()) - start(2002)) / day;
+      return [[year, offset]];
+    });
+    byId('season-snow-normals').replaceChildren(...periods.map(([from, to]) => {
+      const sample = dated.filter(([year]) => year >= from && year <= to);
+      const first = mean(sample.map(([, offset]) => offset));
+      const coverage = sample.length ? `${sample.at(-1)[0]}–${sample[0][0]} (${sample.length} winters)` : '—';
+      return tableRow([`${from}–${to}`, first === null ? '—' : fullDate.format(dateAt(2002, first)), coverage]);
+    }));
   }
 
   function renderTimeline(year, season) {
@@ -80,8 +115,10 @@
       const header = el('div', undefined, 'season-row-head');
       const event = stats.first === null ? (stats.available ? 'Geen datum' : 'Te weinig meetgegevens') :
         [human(year, stats.first), ...(metric.last ? [human(year, stats.last)] : [])].join(' – ');
-      header.append(el('span', metric.title, 'season-row-title'), el('span',
-        `${event} · ${stats.count} van ${stats.available} stations`, 'season-row-caption'));
+      const caption = metric.group === 'val'
+        ? stats.count ? `${event} · ${stats.count} landstations op die dag` : event
+        : `${event} · ${stats.count} van ${stats.available} stations`;
+      header.append(el('span', metric.title, 'season-row-title'), el('span', caption, 'season-row-caption'));
       const track = el('div', undefined, 'season-track');
       track.setAttribute('aria-hidden', 'true');
       for (const position of positions.slice(1)) {
@@ -112,9 +149,14 @@
 
   function renderTables(year, season) {
     const metric = metrics[metricSelect.value];
+    const snowfall = metric.group === 'val';
     byId('season-station-last').hidden = !metric.last;
     byId('season-history-last').hidden = !metric.last;
+    byId('season-station-included').hidden = snowfall;
+    byId('season-history-first').textContent = snowfall ? 'Eerste sneeuwdag in Nederland' : 'Gemiddeld eerste';
+    byId('season-history-count').textContent = snowfall ? 'Landstations op die dag' : 'Stations met gebeurtenis';
     const stationRows = (season[metric.group] || []).slice().sort((a, b) =>
+      (snowfall ? (a[metric.first] ?? Infinity) - (b[metric.first] ?? Infinity) : 0) ||
       collator.compare(stationName(metric, a[0]), stationName(metric, b[0]))
     );
     byId('season-station-caption').textContent = `${metric.title} · ${seasonLabel(year)}`;
@@ -122,32 +164,33 @@
       stationName(metric, row[0]),
       human(year, row[metric.first]),
       ...(metric.last ? [human(year, row[metric.last])] : []),
-      `${row[1]} / ${season.length}`,
-      covered(row, season) && row[metric.first] !== null ? 'Ja' : 'Nee'
+      `${row[1]} / ${snowfall ? season.valLength : season.length}`,
+      ...(snowfall ? [] : [covered(row, season) && row[metric.first] !== null ? 'Ja' : 'Nee'])
     ]));
     if (!rows.length) {
       const empty = el('tr');
       const cell = el('td', 'Voor deze bron zijn er geen stationsgegevens in dit seizoen.');
-      cell.colSpan = metric.last ? 5 : 4;
+      cell.colSpan = snowfall ? 3 : metric.last ? 5 : 4;
       empty.append(cell);
       rows.push(empty);
     }
     byId('season-station-rows').replaceChildren(...rows);
-    byId('season-history-caption').textContent = metric.title + ' · gemiddelde per seizoen';
+    byId('season-history-caption').textContent = metric.title + (snowfall ? ' · per seizoen' : ' · gemiddelde per seizoen');
     byId('season-history-rows').replaceChildren(...years
       .filter(y => source.seasons[y][metric.group]?.length)
       .map(y => {
         const stats = summarize(source.seasons[y], metric);
         return tableRow([seasonLabel(y), human(y, stats.first),
           ...(metric.last ? [human(y, stats.last)] : []),
-          `${stats.count} / ${stats.available}`]);
+          snowfall ? stats.count || '—' : `${stats.count} / ${stats.available}`]);
       }));
   }
 
   function render() {
     const year = Number(yearSelect.value);
     const season = source.seasons[year];
-    status.textContent = `Seizoen ${seasonLabel(year)} · gemiddeld over de stations · juli t/m juni`;
+    status.textContent = `Seizoen ${seasonLabel(year)}`;
+    renderSnowfall(year, season);
     renderTimeline(year, season);
     renderTables(year, season);
   }
@@ -161,8 +204,8 @@
           const name = '"' + stationName(metric, row[0]).replace(/"/g, '""') + '"';
           lines.push([
             seasonLabel(year), metric.title, row[0], name, iso(year, row[metric.first]),
-            metric.last ? iso(year, row[metric.last]) : '', row[1], season.length,
-            covered(row, season) && row[metric.first] !== null ? 'ja' : 'nee'
+            metric.last ? iso(year, row[metric.last]) : '', row[1], metric.group === 'val' ? season.valLength : season.length,
+            metric.group === 'val' ? '' : covered(row, season) && row[metric.first] !== null ? 'ja' : 'nee'
           ].join(';'));
         }
       }
@@ -178,13 +221,14 @@
   async function init() {
     if (window.weerlabSeizoenen) source = window.weerlabSeizoenen;
     else {
-      const response = await fetch('winter-data/seizoenskalender.json');
+      const response = await fetch('winter-data/seizoenskalender.json?v=20261117-landelijk');
       if (!response.ok) throw new Error('De seizoensgegevens zijn niet beschikbaar');
       source = await response.json();
     }
     years = Object.keys(source.seasons).map(Number).sort((a, b) => b - a);
     yearSelect.replaceChildren(...years.map(y => new Option(seasonLabel(y), y)));
     byId('season-months').replaceChildren(...months.map(m => el('span', m)));
+    renderSnowfallNormals();
     yearSelect.disabled = false;
     metricSelect.disabled = false;
     download.disabled = false;
