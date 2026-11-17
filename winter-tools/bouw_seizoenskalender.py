@@ -12,6 +12,7 @@ from bouw_winterdata import VISUAL_SNOW, snow_indicator
 # De dag- en uurselecties hebben soms een dubbele punt achter het stationnummer.
 STATION = re.compile(r"^#\s*(\d+):?\s+[-.\d]+\s+[-.\d]+\s+[-.\d]+\s+(.+?)\s*$")
 MONTHS = (7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6)
+SNOW_MONTHS = MONTHS[MONTHS.index(9):]
 # Noordzeeplatforms en meetpunten op open water in het uurarchief.
 OFFSHORE = {201, 203, 204, 205, 206, 207, 208, 209, 211, 212, 213, 214, 216, 218,
             239, 252, 285, 312, 313, 316, 317, 320, 321}
@@ -149,9 +150,10 @@ def main():
         season["vorst"] = frost_rows(path, stations["vorst"], offsets)
         if end >= 1951:
             snow = defaultdict(lambda: (set(), set()))
-            snow_offsets = {day: offset for day, offset in offsets.items() if day >= f"{end-1}1001"}
+            snow_start = f"{end-1}{SNOW_MONTHS[0]:02}01"
+            snow_offsets = {day: offset for day, offset in offsets.items() if day >= snow_start}
             root = args.edr if end >= 2021 else args.hourly
-            for month in MONTHS[3:]:
+            for month in SNOW_MONTHS:
                 prefix = f"{end - (month >= 7)}{month:02d}"
                 path = root / f"{prefix}.txt.gz"
                 if not path.is_file():

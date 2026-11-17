@@ -81,7 +81,7 @@
     byId('season-first-snow').textContent = first === null ? '—' : fullDate.format(dateAt(year, first));
     byId('season-first-snow-stations').textContent = stations.length
       ? stations.map(id => stationName(metric, id)).sort(collator.compare).join(', ')
-      : season.valComplete ? 'Geen sneeuwval gemeld' : 'Onvoldoende meetdekking vanaf 1 oktober';
+      : season.valComplete ? 'Geen sneeuwval gemeld' : 'Onvoldoende meetdekking vanaf 1 september';
   }
 
   function renderSnowfallNormals() {
@@ -221,7 +221,7 @@
   async function init() {
     if (window.weerlabSeizoenen) source = window.weerlabSeizoenen;
     else {
-      const response = await fetch('winter-data/seizoenskalender.json?v=20261117-landelijk');
+      const response = await fetch('winter-data/seizoenskalender.json?v=20261117-september');
       if (!response.ok) throw new Error('De seizoensgegevens zijn niet beschikbaar');
       source = await response.json();
     }
