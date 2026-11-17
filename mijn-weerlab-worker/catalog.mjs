@@ -471,16 +471,6 @@ export const catalog=[
     "available": true
   },
   {
-    "id": "modellenbespreking",
-    "name": "Modellenbespreking",
-    "description": "Weerbeeld, modelverschillen en bronkaarten per dag.",
-    "section": "",
-    "category": "verwachting",
-    "href": "index.html#modellenbespreking",
-    "requiresProductGate": false,
-    "available": true
-  },
-  {
     "id": "guidance",
     "name": "Guidance KNMI/DWD",
     "description": "Bracknell + ECMWF",

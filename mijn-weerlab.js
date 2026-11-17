@@ -3,6 +3,8 @@ window.MijnWeerlab=(()=>{
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let data=null,userId=null,products=[],status='loading',message='',busy=false,retry=null,refresh=()=>{},query='',adding=false,drag=null,generation=0,loading=false,pendingVisits=[];
   const api='/api/mijn-weerlab';
+  const retired='modellenbespreking';
+  const favorites=()=>data?.favorites.filter(f=>f.productId!==retired)||[];
   const catalog=()=>new Map(products.map(p=>[p.id,p]));
   function clear(){generation++;loading=false;pendingVisits=[];data=null;userId=null;products=[];retry=null;busy=false;query='';adding=false;drag=null;status='error';message='Log opnieuw in om je persoonlijke omgeving te openen.';refresh();}
   async function request(path,options={}){
@@ -19,7 +21,7 @@ window.MijnWeerlab=(()=>{
       const [account,list]=await Promise.all([request('/dashboard'),request('/catalog')]);
       if(attempt!==generation)return;
       if(userId&&userId!==account.userId)pendingVisits=[];
-      data=account.dashboard;userId=account.userId;products=list.products;status='saved';retry=null;
+      data=account.dashboard;userId=account.userId;products=list.products.filter(p=>p.id!==retired);status='saved';retry=null;
       if(initial&&!location.hash&&data.preferences.start==='personal')history.replaceState(null,'','#menu/favorieten');
     }catch(error){if(attempt!==generation)return;status='error';message=error.message;retry=()=>load();}
     finally{if(attempt===generation){loading=false;refresh();flushVisits();}}
@@ -54,7 +56,7 @@ window.MijnWeerlab=(()=>{
     const p=catalog().get(f.productId),name=f.customName||p?.name||f.productId;
     return `<article class="mw-favorite" data-favorite="${esc(f.id)}"><div class="mw-card-head"><button class="mw-drag" type="button" draggable="false" data-drag="${esc(f.id)}" aria-label="Versleep ${esc(name)}"${disabled()}>⠿</button><button data-mw="remove" data-id="${esc(f.id)}" aria-label="${esc(name)} verwijderen" title="Verwijderen"${disabled()}>★</button></div>${p?.available?`<a class="mw-open" href="${esc(p.href)}"><strong>${esc(name)}</strong><small>${esc(p.section)}</small><span>Direct openen →</span></a>`:`<strong>${esc(name)}</strong><p>Dit product is momenteel niet beschikbaar. Je favoriet blijft bewaard.</p>`}<details><summary>Aanpassen</summary><label>Persoonlijke naam<input data-edit="name" data-id="${esc(f.id)}" value="${esc(f.customName)}" placeholder="${esc(p?.name||f.productId)}" maxlength="100"${disabled()}></label><button data-mw="reset" data-id="${esc(f.id)}"${disabled()}>Standaardnaam</button><label>Categorie<select data-edit="category" data-id="${esc(f.id)}"${disabled()}>${options(f.categoryId)}</select></label><div class="mw-order"><button data-mw="up" data-id="${esc(f.id)}" aria-label="${esc(name)} omhoog"${disabled()}>↑ Omhoog</button><button data-mw="down" data-id="${esc(f.id)}" aria-label="${esc(name)} omlaag"${disabled()}>↓ Omlaag</button></div><small>Oorspronkelijk: ${esc(p?.name||f.productId)}</small></details></article>`;
   }
-  function savedPages(){return (data?.savedPages||[]).map(page=>{
+  function savedPages(){return (data?.savedPages||[]).filter(page=>page.productId!==retired).map(page=>{
     const product=page.productId?catalog().get(page.productId):null;
     const route=product?new URL(product.href,location.href).hash.slice(1):page.menuRoute;
     return {...page,url:route?new URL('index.html#'+route+(page.query?'?'+page.query:''),location.href).href:null};
@@ -73,18 +75,19 @@ window.MijnWeerlab=(()=>{
     if(message)out+=`<p class="mw-message" role="alert">${esc(message)} ${retry?'<button data-mw="retry">'+(message.includes('ander apparaat')?'Nieuwste versie laden':'Opnieuw proberen')+'</button>':''}${!userId?'<a href="/cdn-cgi/access/logout">Opnieuw inloggen</a>':''}</p>`;
     if(!data)return out+(status==='loading'?'<div class="mw-skeleton" aria-label="Dashboard wordt geladen"></div>':'<button data-mw="reload">Dashboard laden</button>');
     out+=`<div class="mw-toolbar"><label class="mw-search">Zoek in je favorieten<input id="mw-search" type="search" value="${esc(query)}" placeholder="Naam, categorie of omschrijving" autocomplete="off"></label><button data-mw="add"${disabled()}>+ Product toevoegen</button><button data-mw="view" data-view-value="cards" aria-pressed="${data.preferences.view==='cards'}"${disabled()}>Tegels</button><button data-mw="view" data-view-value="list" aria-pressed="${data.preferences.view==='list'}"${disabled()}>Lijst</button></div>`;
-    if(!data.favorites.length)out+=`<section class="mw-welcome"><h2>Welkom bij Mijn Weerlab</h2><p>Voeg favorieten toe, geef ze een eigen naam en bepaal zelf de volgorde. Alles wordt automatisch bewaard, ook wanneer je later opnieuw inlogt.</p><button data-mw="add"${disabled()}>Mijn eerste favoriet toevoegen</button></section>`;
+    if(!favorites().length)out+=`<section class="mw-welcome"><h2>Welkom bij Mijn Weerlab</h2><p>Voeg favorieten toe, geef ze een eigen naam en bepaal zelf de volgorde. Alles wordt automatisch bewaard, ook wanneer je later opnieuw inlogt.</p><button data-mw="add"${disabled()}>Mijn eerste favoriet toevoegen</button></section>`;
     if(adding)out+=`<section class="mw-discover"><h2>Product toevoegen</h2><button data-mw="close-add">Sluiten</button><label>Zoek een product<input id="mw-product-search" type="search" placeholder="Bijvoorbeeld ECMWF of neerslag"></label><label>Categorie voor nieuwe favorieten<select id="mw-add-category">${options(null)}</select></label><div id="mw-products">${productChoices('')}</div></section>`;
     out+=`<p class="mw-drag-help" id="mw-drag-help">Sleep met ⠿ om favorieten te ordenen of naar een andere categorie te verplaatsen. Ook categorieën kun je met hun sleepgreep verplaatsen. Via Aanpassen kan dit ook met knoppen.${query?' Wis je zoekopdracht om te kunnen slepen.':''}</p>`;
     const groups=[...data.categories,{id:null,name:'Niet ingedeeld'}],map=catalog();
     for(const group of groups){
-      const found=data.favorites.filter(f=>f.categoryId===group.id).filter(f=>{const p=map.get(f.productId);return [f.customName,p?.name,p?.description,group.name].join(' ').toLocaleLowerCase('nl').includes(query.toLocaleLowerCase('nl'));});
+      const found=favorites().filter(f=>f.categoryId===group.id).filter(f=>{const p=map.get(f.productId);return [f.customName,p?.name,p?.description,group.name].join(' ').toLocaleLowerCase('nl').includes(query.toLocaleLowerCase('nl'));});
       out+=`<section class="mw-group" data-drop-category="${esc(group.id||'')}"><div class="mw-group-title">${group.id?`<button class="mw-drag" type="button" data-drag-group="${esc(group.id)}" aria-label="Versleep categorie ${esc(group.name)}" aria-describedby="mw-drag-help"${disabled()}>⠿</button>`:''}<h2>${esc(group.name)}</h2><small>${found.length} favorieten</small>${group.id?`<details><summary>Categorie aanpassen</summary><label>Naam<input data-edit="group-name" data-id="${esc(group.id)}" value="${esc(group.name)}" maxlength="100"${disabled()}></label><button data-mw="group-up" data-id="${esc(group.id)}"${disabled()}>↑ Omhoog</button><button data-mw="group-down" data-id="${esc(group.id)}"${disabled()}>↓ Omlaag</button><label>Verplaats favorieten bij verwijderen naar<select id="mw-delete-${esc(group.id)}">${options(null)}</select></label><button data-mw="group-delete" data-id="${esc(group.id)}"${disabled()}>Categorie verwijderen</button></details>`:''}</div><div class="mw-items ${data.preferences.view==='list'?'mw-list':''}">${found.map(favorite).join('')}${!found.length?'<p class="mw-empty-drop">Sleep een favoriet hierheen</p>':''}</div></section>`;
     }
     const pages=savedPages().filter(p=>[p.title,p.productId,p.menuRoute].join(' ').toLocaleLowerCase('nl').includes(query.toLocaleLowerCase('nl')));
     if(pages.length)out+=`<section class="mw-saved-pages"><h2>Bewaarde pagina’s en instellingen</h2><p>Directe links naar een specifieke pagina of productconfiguratie.</p>${pages.map(p=>`<div class="mw-product">${p.url?`<a href="${esc(p.url)}">${esc(p.title)}</a>`:`<span>${esc(p.title)} · Momenteel niet beschikbaar</span>`}<button data-mw="remove-page" data-id="${esc(p.id)}"${disabled()}>Verwijderen</button></div>`).join('')}</section>`;
     out+=`<form id="mw-new-group" class="mw-toolbar"><label>Nieuwe categorie<input name="name" required maxlength="100" placeholder="Bijvoorbeeld dagelijkse weerbewaking"${disabled()}></label><button${disabled()}>Categorie maken</button></form><details class="mw-settings"><summary>Voorkeuren en back-up</summary><label>Startpagina<select data-edit="start"${disabled()}><option value="general" ${data.preferences.start==='general'?'selected':''}>Algemeen overzicht</option><option value="personal" ${data.preferences.start==='personal'?'selected':''}>Mijn Weerlab</option></select></label><label><input type="checkbox" data-edit="history" ${data.preferences.history?'checked':''}${disabled()}> Laatst bekeken bewaren</label><button data-mw="clear-history"${disabled()}>Geschiedenis wissen</button><button data-mw="export"${disabled()}>Exporteer dashboard</button><label>Importeer dashboard (JSON)<input id="mw-import" type="file" accept="application/json,.json"${disabled()}></label><p>Import voegt toe; bestaande favorieten blijven behouden.</p></details>`;
-    if(data.preferences.history&&data.recent.length)out+=`<section><h2>Laatst bekeken</h2><div class="mw-recents">${data.recent.map(id=>map.get(id)).filter(Boolean).map(p=>`<a href="${esc(p.href)}">${esc(p.name)}</a>`).join('')}</div></section>`;
+    const recent=data.recent.map(id=>map.get(id)).filter(Boolean);
+    if(data.preferences.history&&recent.length)out+=`<section><h2>Laatst bekeken</h2><div class="mw-recents">${recent.map(p=>`<a href="${esc(p.href)}">${esc(p.name)}</a>`).join('')}</div></section>`;
     return out;
   }
   function productChoices(q){return products.filter(p=>[p.name,p.description,p.section].join(' ').toLocaleLowerCase('nl').includes(q.toLocaleLowerCase('nl'))).map(p=>`<div class="mw-product"><span><strong>${esc(p.name)}</strong><small>${esc(p.section)}${p.requiresProductGate?' · Eigen producttoegang blijft vereist':''}</small></span><button data-mw="choose" data-id="${esc(p.id)}" ${data.favorites.some(f=>f.productId===p.id)?'disabled':disabled()}>${data.favorites.some(f=>f.productId===p.id)?'Toegevoegd':'Toevoegen'}</button></div>`).join('');}
@@ -102,7 +105,7 @@ window.MijnWeerlab=(()=>{
     if(action==='remove'){change(n=>n.favorites=n.favorites.filter(f=>f.id!==id));return;}
     if(action==='reset'){change(n=>n.favorites.find(f=>f.id===id).customName='');return;}
     if(action==='up'||action==='down'){
-      const current=data.favorites.find(f=>f.id===id),peers=data.favorites.filter(f=>f.categoryId===current.categoryId),index=peers.indexOf(current),other=peers[index+(action==='up'?-1:1)];
+      const current=data.favorites.find(f=>f.id===id),peers=favorites().filter(f=>f.categoryId===current.categoryId),index=peers.indexOf(current),other=peers[index+(action==='up'?-1:1)];
       if(other)change(n=>{const a=n.favorites.findIndex(f=>f.id===id),b=n.favorites.findIndex(f=>f.id===other.id);[n.favorites[a],n.favorites[b]]=[n.favorites[b],n.favorites[a]];});return;
     }
     if(action==='group-delete'){const target=document.getElementById('mw-delete-'+id).value||null;if(target===id){message='Kies een andere categorie als bestemming.';refresh();return;}change(n=>{n.categories=n.categories.filter(c=>c.id!==id);n.favorites.forEach(f=>{if(f.categoryId===id)f.categoryId=target;});});return;}
@@ -200,5 +203,5 @@ window.MijnWeerlab=(()=>{
   window.addEventListener('pagehide',clear);
   window.addEventListener('pageshow',event=>{if(event.persisted)load();});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!busy&&!(data&&retry))load();});
-  return {html,toggle,togglePage,savedPages,loaded:()=>!!data,removePage(id){return change(n=>n.savedPages=n.savedPages.filter(p=>p.id!==id));},init(callback){refresh=callback;return load({initial:true});},ids:()=>data?.favorites.map(f=>f.productId)||[],ready:()=>!!data&&!busy&&!retry&&status!=='loading',error:()=>status==='error'?message:'',visit};
+  return {html,toggle,togglePage,savedPages,loaded:()=>!!data,removePage(id){return change(n=>n.savedPages=n.savedPages.filter(p=>p.id!==id));},init(callback){refresh=callback;return load({initial:true});},ids:()=>favorites().map(f=>f.productId),ready:()=>!!data&&!busy&&!retry&&status!=='loading',error:()=>status==='error'?message:'',visit};
 })();

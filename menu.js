@@ -170,6 +170,10 @@
     const incoming=location.hash.slice(1) || site.defaultRoute || '';
     if(/^weerbewaking(?:-|$)/.test(incoming)){location.replace('https://meteobewaking.nl/cms/weerbewaking/weerbewaking.html');return {page:'start',type:'',filters:{},q:''};}
     let raw=site.routeAliases?.[incoming] ?? incoming;
+    if(/^(?:menu\/)?modellenbespreking$/.test(raw.split('?')[0])){
+      raw='menu/verwachting?type=tekst';
+      history.replaceState(null,'','#'+raw);
+    }
     // Sneeuwverwachting blijft voorlopig uitsluitend binnen BETA.
     if(/^sneeuw-(kans|dek|hoogte|nieuw|soort|toename|onzekerheid|vergelijk)$/.test(raw.split('?')[0]))raw='beta?tab=sneeuw';
     if(raw.split('?')[0]==='weerkaarten-hres10' || (raw.split('?')[0]==='beta' && new URLSearchParams(raw.split('?')[1]||'').get('tab')==='hres10')){history.replaceState(null,'','#menu/verwachting?type=kaarten');return {page:'verwachting',type:'kaarten',filters:{},q:''};}
@@ -575,7 +579,7 @@
       restoringPageView=false;
       const frame=previousFrame.cloneNode(false);
       frame.hidden=false;frame.dataset.route=route;frame.title=title;
-      frame.src=state.product?.src || 'product-host.html?v=20261020-mijn-weerlab'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
+      frame.src=state.product?.src || 'product-host.html?v=20261117-zonder-bespreking'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
       if(state.product?.id==='pluim-ens6plus'){
         const url=new URL(frame.src,location.href),params=new URLSearchParams(route.split('?')[1] || '');
         for(const key of ['run','station','lat','lon'])if(params.has(key))url.searchParams.set(key,params.get(key));

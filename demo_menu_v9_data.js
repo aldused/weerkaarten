@@ -863,20 +863,6 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
-    "id": "modellenbespreking",
-    "name": "Modellenbespreking",
-    "description": "4×/dag, Weerlab",
-    "category": "verwachting",
-    "type": "tekst",
-    "section": "",
-    "icon": "tekst",
-    "href": "index.html#modellenbespreking",
-    "thumbnail": null,
-    "facets": {},
-    "keywords": "Modellenbespreking 4×/dag, Weerlab ",
-    "restricted": false
-  },
-  {
     "id": "guidance",
     "name": "Guidance KNMI/DWD",
     "description": "Bracknell + ECMWF",
