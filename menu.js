@@ -174,6 +174,10 @@
     if(/^sneeuw-(kans|dek|hoogte|nieuw|soort|toename|onzekerheid|vergelijk)$/.test(raw.split('?')[0]))raw='beta?tab=sneeuw';
     if(raw.split('?')[0]==='weerkaarten-hres10' || (raw.split('?')[0]==='beta' && new URLSearchParams(raw.split('?')[1]||'').get('tab')==='hres10')){history.replaceState(null,'','#menu/verwachting?type=kaarten');return {page:'verwachting',type:'kaarten',filters:{},q:''};}
     if(raw.split('?')[0]==='beta' && new URLSearchParams(raw.split('?')[1]||'').get('tab')==='stormdagen')raw='stormen-windstoten';
+    if(raw.split('?')[0]==='beta' && new URLSearchParams(raw.split('?')[1]||'').get('tab')==='wegdek'){
+      raw='wegdek';
+      history.replaceState(null,'','#wegdek');
+    }
     const isMenu=!raw || raw.startsWith('menu/') || ['start','home','nu','terugkijken','favorieten','professioneel','zoeken',...(site.navItems || [])].includes(raw.split('?')[0]);
     if(!isMenu){
       const recordViews={'records-warmedagen':'warmedagen','records-koudedagen':'koudedagen','dagrecords-jaar':'dagrecordsjaar',dagrecordsjaar:'dagrecordsjaar'};
@@ -262,7 +266,7 @@
     const groups=[
       ['dag-maand','Dag & maand','Hoe was het weer op een dag of in een maand?','history',['archief','klimaatarchief','maandbeeld','maandoverzicht']],
       ['records','Records & bijzondere dagen','Zoek uitzonderlijk weer en vergelijk metingen.','chart',['records','stormen-windstoten','dagrecords','jaaruitersten','extremen','feestdagen']],
-      ['seizoenen','Seizoenen & droogte','Volg warmte, kou, daglicht en neerslagtekort.','sun',['zomerstatistieken','hittegolven','eerstelaatste','daglengte','droogte']],
+      ['seizoenen','Seizoenen & droogte','Volg warmte, kou, daglicht en neerslagtekort.','sun',['winter','sneeuwdekarchief','zomerstatistieken','hittegolven','eerstelaatste','daglengte','droogte']],
       ['gemiddelden','Gemiddelden & neerslag','Wat is normaal, en hoe nat of droog was het?','water',['klimaattabellen','normalen','neerslag668','p13']],
     ];
     const visible=p=>state.type==='alles'||p.type===state.type;

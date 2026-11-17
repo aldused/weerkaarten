@@ -1,5 +1,6 @@
 /* Weerlab productcatalogus. Kaartfilters en routes gecontroleerd tegen index.html; het modellenvierluik heeft één ingang. */
 const MENU_PRODUCTS = [
+  {id:'wegdek',name:'Wegdek en strooien',description:'Actuele wegdektemperatuur, Rijkswaterstaat-verwachting en strooiroutes.',category:'nu',type:'nu',section:'Metingen',icon:'map',href:'index.html#wegdek',src:'wegdek.html?v=1',thumbnail:null,facets:{grootheid:['temperatuur']},keywords:'wegdek gladheid strooizout strooiwagens strooikaart Rijkswaterstaat RWS vorst'},
   {id:'wintersport',name:'Wintersportweer',description:'Sneeuwhoogtes en sneeuwverwachtingen voor Europese skigebieden.',category:'verwachting',type:'kaarten',section:'Europa',icon:'map',href:'index.html#wintersport',src:'wintersport.html',thumbnail:null,facets:{},keywords:'wintersport ski sneeuw sneeuwhoogte sneeuwval alpen',restricted:false},
   {id:'stormen-windstoten',name:'Stormen en windstoten',description:'Zoek historische stormen en vergelijk de zwaarste windstoten.',category:'terugkijken',type:'terug',section:'Records & extremen',icon:'wind',href:'index.html#stormen-windstoten',src:'beta_stormdagen.html?v=20261024-live',thumbnail:null,facets:{},keywords:'storm stormen stormenarchief stormarchief stormdagen wind windstoten zware storm orkaan Beaufort KNMI historisch historische meten zoeken vergelijken',restricted:false},
   {id:'mosmix-werkstation',name:'MOS/MIX · weer in ontwikkeling',description:'Alle onderdelen in één omgeving · zes kaarten, grote kaart en 9-daagse minikaarten',category:'verwachting',type:'kaarten',alsoTypes:['pluim'],section:'Nederland · MOS/MIX',icon:'map',href:'index.html#mosmix-werkstation',src:'mosmix-werkstation.html?v=20261021-5',thumbnail:null,facets:{model:['mosmix'],gebied:['nl','be','eu'],bron:['mosmix'],grootheid:['wind','neerslag','temperatuur'],vorm:['kaart']},keywords:'MOSMIX MOS/MIX wind windrichting Beaufort windstoten ontwikkeling dagdelen nacht zes kaarten grote kaart uren instellingen modellen',restricted:false},
@@ -1022,6 +1023,36 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
+    "id": "winter",
+    "name": "Winter in Nederland",
+    "description": "Sneeuwdagen, vorst en dooi, en ijzelmeldingen per KNMI-station.",
+    "category": "terugkijken",
+    "type": "terug",
+    "section": "Maand & seizoen",
+    "icon": "records",
+    "href": "index.html#winter",
+    "src": "winter.html?v=20261117-strooien",
+    "thumbnail": null,
+    "facets": {},
+    "keywords": "winter sneeuw sneeuwdagen sneeuwval vorstdagen ijsdagen vorst dooi onder nul boven nul ijzel ijsvorming gladheid KNMI",
+    "restricted": false
+  },
+  {
+    "id": "sneeuwdekarchief",
+    "name": "Sneeuwdek in Nederland",
+    "description": "Verken de sneeuwdekkalender en dagmetingen van KNMI-neerslagstations.",
+    "category": "terugkijken",
+    "type": "terug",
+    "section": "Maand & seizoen",
+    "icon": "records",
+    "href": "index.html#sneeuwdekarchief",
+    "src": "sneeuwdek.html",
+    "thumbnail": null,
+    "facets": {},
+    "keywords": "sneeuwdek sneeuwhoogte winter sneeuwdikte sneeuwneerslag KNMI neerslagstations sneeuwdekkalender",
+    "restricted": false
+  },
+  {
     "id": "zomerstatistieken",
     "name": "Zomerbalans",
     "description": "Warme dagen en warmtegetal van april tot en met oktober.",
@@ -1417,7 +1448,7 @@ const MENU_PRODUCTS = [
     "section": "Experimenten",
     "icon": "studio",
     "href": "index.html#beta",
-    "src": "beta.html?v=20261112-wegdek",
+    "src": "beta.html?v=20261117-zonder-wegdek",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",
