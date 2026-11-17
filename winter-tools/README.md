@@ -34,6 +34,16 @@ python3 winter-tools/bouw_sneeuwdek.py /pad/naar/sneeuwdekcache sneeuwdek-data \
 
 Gebruik de gewenste einddatum om het archief bij te werken. Bij een herhaalde aanvraag met dezelfde einddatum vernieuwt `--ververs-laatste` de twee periodes van dat kalenderjaar. Houd per kalenderjaar twee bestanden in de cache. Vervang het eerdere, kortere juli-bestand van het laatste jaar zodra een nieuwe selectie is ingelezen. De index meldt de laatste datum met SX die het KNMI werkelijk heeft geleverd.
 
+Voor de grafiek van sneeuwdekdagen en de eerste witte dag per klimaatperiode:
+
+```sh
+python3 winter-tools/bouw_sneeuwdekdagen.py sneeuwdek-data winter-data
+```
+
+De grafiek gebruikt volledige winterhalfjaren (oktober t/m maart) en telt iedere positieve SX-code. Het stationsgemiddelde gebruikt stations met minstens 90% dekking. De landelijke telling gebruikt alle beschikbare stations, eenmaal per datum. Voor de eerste witte dag weegt elk winterhalfjaar even zwaar. Het stationsgemiddelde van de eerste datum gebruikt alleen stations waar in dat halfjaar sneeuwdek optrad. De klimaatperioden gebruiken de eindjaren van de winterhalfjaren.
+
+De afgeleide statistieken laten specifieke station/code-combinaties weg die in 1961–1967 op de 10e, 20e en 30e van de maand terugkomen, ook in de zomer. Deze registraties tellen als ontbrekende waarnemingen. De oorspronkelijke waarden blijven beschikbaar in het sneeuwdekarchief.
+
 ## Seizoenskalender
 
 De seizoenskalender gebruikt volledige seizoenen van juli tot en met juni. Hij combineert TN uit de KNMI-dagselectie, sneeuwval uit de KNMI-uurselectie en sneeuwdekcode SX uit het eerder opgebouwde sneeuwdekarchief. Historische sneeuwval tot 1971 volgt expliciete visuele WW-codes omdat S in die periode ook vaak is gezet bij onweer. De seizoenskalender en het uurarchief delen dezelfde functie voor sneeuwval.

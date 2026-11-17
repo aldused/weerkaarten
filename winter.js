@@ -62,22 +62,25 @@ function exportCSV(filename, rows) {
   downloadFile(filename, new Blob(['\ufeff', csv, '\r\n'], {type:'text/csv;charset=utf-8'}));
 }
 
-async function initSnow() {
-  const data = (await get('sneeuwdagen.csv', 'text')).trim().split(/\r?\n/).slice(1)
+async function initSnow(prefix, {file, label, definitions, source, approximate = false}) {
+  const data = (await get(file + '.csv', 'text')).trim().split(/\r?\n/).slice(1)
     .map(s => s.split(',').map(Number));
-  const metric = byId('snow-metric'), year = byId('snow-year'), svg = byId('snow-chart');
-  const value = byId('snow-value'), definition = byId('snow-definition');
+  const metric = byId(prefix + '-metric'), year = byId(prefix + '-year'), svg = byId(prefix + '-chart');
+  const value = byId(prefix + '-value'), definition = byId(prefix + '-definition');
+  const first = data[0][0], last = data.at(-1)[0];
   optionList(year, data.slice().reverse().map(([y]) => [y, winter(y)]));
   const rolling = [1,2].map(m => data.map((_, i) => i < 29 ? null :
     data.slice(i-29, i+1).reduce((sum, r) => sum + r[m], 0) / 30));
+  const maxCounts = [1,2].map(m => Math.max(...data.map(row => row[m])));
   let geometry;
   function graphic(w, top, bottom, m, picked) {
     const left = 35, right = w-8, ref = rolling[m-1];
-    const dy = m === 1 ? 10 : 20, ymax = dy * 7;
+    const dy = m === 1 ? 10 : 20;
+    const ymax = dy * Math.max(7, Math.ceil(maxCounts[m-1] / dy));
     const step = (right-left)/data.length, barWidth = Math.max(1, step*.7);
     const x = i => left + (i+.5)*step;
     const y = n => bottom - (bottom-top)*n/ymax;
-    const marks = w < 500 ? [1951,1970,1990,2010,2026] : [1951,1960,1970,1980,1990,2000,2010,2020,2026];
+    const markStep = w < 500 ? 20 : 10;
     const p = [];
     for (let t = 0; t <= ymax; t += dy) {
       p.push(`<path d="M${left} ${y(t)}H${right}" stroke="#dbe7ef"/><text class="axis-text" x="${left-7}" y="${y(t)+3}" text-anchor="end">${t}</text>`);
@@ -86,7 +89,9 @@ async function initSnow() {
     data.forEach(([end, ...values], i) => {
       const n = values[m-1];
       p.push(`<rect x="${x(i)-barWidth/2}" y="${y(n)}" width="${barWidth}" height="${bottom-y(n)}" fill="${i === picked ? '#0f4e71' : '#427fb5'}"/>`);
-      if (marks.includes(end)) p.push(`<text class="axis-text" text-anchor="${i === 0 ? 'start' : i === data.length-1 ? 'end' : 'middle'}" x="${x(i)}" y="${bottom+19}">${end}</text>`);
+      if (end === first || end === last || (end % markStep === 0 && end - first >= 4 && last - end >= 4)) {
+        p.push(`<text class="axis-text" text-anchor="${end === first ? 'start' : end === last ? 'end' : 'middle'}" x="${x(i)}" y="${bottom+19}">${end}</text>`);
+      }
     });
     const path = ref.flatMap((n, i) => n == null ? [] : [`${i === 29 ? 'M' : 'L'}${x(i)} ${y(n)}`]).join(' ');
     p.push(`<path d="${path}" fill="none" stroke="#8b4f09" stroke-width="2" stroke-dasharray="4 4"/>`);
@@ -97,35 +102,35 @@ async function initSnow() {
     if (w < 70 || h < 70) return;
     const m = Number(metric.value), picked = data.findIndex(([n]) => n === Number(year.value));
     const ref = rolling[m-1][picked], count = data[picked][m];
-    definition.textContent = m === 1
-      ? 'Gemiddeld aantal dagen met sneeuwval per weerstation. Kies een winterhalfjaar of klik op een staaf.'
-      : 'Een dag telt één keer als op minstens één weerstation sneeuw viel. Kies een winterhalfjaar of klik op een staaf.';
-    value.textContent = `${winter(year.value)} · circa ${m === 1 ? decimal.format(count) : integer.format(count)} sneeuwdagen`
-      + (ref == null ? '' : ` · 30-jaarsgemiddelde ${decimal.format(ref)}`);
+    definition.textContent = definitions[m-1] + ' Kies een winterhalfjaar of klik op een staaf.';
+    const stationCount = data[picked][3];
+    value.textContent = `${winter(year.value)} · ${approximate ? 'circa ' : ''}${m === 1 ? decimal.format(count) : integer.format(count)} ${label.toLowerCase()}`
+      + (ref == null ? '' : ` · 30-jaarsgemiddelde ${decimal.format(ref)}`)
+      + (m === 1 && stationCount ? ` · ${integer.format(stationCount)} stations` : '');
     geometry = graphic(w, 12, h-28, m, picked);
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    svg.innerHTML = '<title id="snow-chart-title">Sneeuwdagen per winterhalfjaar, eindjaren 1951 tot en met 2026</title>' + geometry.markup;
+    svg.innerHTML = `<title id="${prefix}-chart-title">${label} per winterhalfjaar, eindjaren ${first} tot en met ${last}</title>` + geometry.markup;
   }
-  const svgDownload = byId('snow-svg');
+  const svgDownload = byId(prefix + '-svg');
   svgDownload.disabled = false;
   svgDownload.addEventListener('click', () => {
     const m = Number(metric.value), picked = data.findIndex(([n]) => n === Number(year.value));
     const {markup} = graphic(1128, 74, 348, m, picked);
-    const title = m === 1 ? 'Sneeuwdagen · gemiddeld per station' : 'Sneeuwdagen · ergens in Nederland';
+    const title = `${label} · ${m === 1 ? 'gemiddeld per station' : 'ergens in Nederland'}`;
     const contents = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="466" viewBox="0 0 1200 466">
   <title>${title}</title>
   <style>.axis-text{font:11px system-ui,sans-serif;fill:#4d6175}</style>
   <rect width="1200" height="466" fill="#fff"/>
   <g transform="translate(36 24)" fill="#132b43" font-family="system-ui,sans-serif">
     <text x="0" y="23" font-size="28" font-weight="750">${title}</text>
-    <text x="0" y="48" font-size="14">Nederland · winterhalfjaren 1950/51–2025/26 · eindjaar op de as</text>
+    <text x="0" y="48" font-size="14">Nederland · ${winter(first)}–${winter(last)} · eindjaar op de as</text>
     ${markup}
     <line x1="0" y1="391" x2="25" y2="391" stroke="#8b4f09" stroke-width="2" stroke-dasharray="4 4"/>
     <text x="34" y="395" font-size="13">Voortschrijdend 30-jaarsgemiddelde</text>
-    <text x="0" y="419" font-size="12">Weerlab · Sneeuwdagen uit de aangeleverde grafieken, afgelezen en afgerond.</text>
+    <text x="0" y="419" font-size="12">${source}</text>
   </g>
 </svg>`;
-    downloadFile(`weerlab-sneeuwdagen-${m === 1 ? 'stationsgemiddelde' : 'landelijk'}.svg`,
+    downloadFile(`weerlab-${file}-${m === 1 ? 'stationsgemiddelde' : 'landelijk'}.svg`,
       new Blob([contents], {type:'image/svg+xml;charset=utf-8'}));
 
   });
@@ -144,6 +149,13 @@ async function initSnow() {
   year.addEventListener('change', draw);
   new ResizeObserver(draw).observe(svg);
   draw();
+}
+
+async function initCoverNormals() {
+  const data = await get('eerste-sneeuwdek.json');
+  const calendarDate = new Intl.DateTimeFormat('nl-NL', {day:'numeric', month:'long', timeZone:'UTC'});
+  byId('cover-normals').replaceChildren(...data.map(([period, ...dates]) =>
+    row([period, ...dates.map(iso => iso ? calendarDate.format(new Date(iso + 'T00:00:00Z')) : '—')], true)));
 }
 
 const TEMP_HEADERS = ['winter','stationnummer','station','meetdagen','vorstdagen','ijsdagen','maximum_boven_nul','minimum_boven_nul','laagste_minimum_C','hoogste_maximum_C','gemiddelde_C'];
@@ -287,6 +299,21 @@ async function initObs() {
   ]));
   await load();
 }
-initSnow().catch(e => unavailable(byId('snow-value'), 'De sneeuwreeks kon niet worden geladen. De CSV blijft beschikbaar via de downloadlink.', e));
+initSnow('snow', {
+  file: 'sneeuwdagen', label: 'Sneeuwdagen', approximate: true,
+  definitions: ['Gemiddeld aantal dagen met sneeuwval per weerstation.',
+    'Een dag telt één keer als op minstens één weerstation sneeuw viel.'],
+  source: 'Weerlab · Sneeuwdagen uit de aangeleverde grafieken, afgelezen en afgerond.'
+}).catch(e => unavailable(byId('snow-value'), 'De sneeuwreeks kon niet worden geladen. De CSV blijft beschikbaar via de downloadlink.', e));
+initSnow('cover', {
+  file: 'sneeuwdekdagen', label: 'Sneeuwdekdagen',
+  definitions: ['Gemiddeld aantal dagen met sneeuwdek per KNMI-neerslagstation met voldoende metingen.',
+    'Een dag telt één keer als minstens één KNMI-neerslagstation sneeuwdek heeft gemeten.'],
+  source: 'Weerlab · KNMI-neerslagstations (SX), metingen om 08.00 UTC · oktober t/m maart.'
+}).catch(e => unavailable(byId('cover-value'), 'De sneeuwdekreeks kon niet worden geladen. De CSV blijft beschikbaar via de downloadlink.', e));
+initCoverNormals().catch(e => {
+  byId('cover-normals').replaceChildren(emptyRow('De gemiddelden konden niet worden geladen.', 3));
+  console.error(e);
+});
 initTemp().catch(e => unavailable(byId('temp-summary'), 'De temperatuurgegevens konden niet worden geladen.', e));
 initObs().catch(e => unavailable(byId('obs-summary'), 'Het KNMI-uurarchief kon niet worden geladen.', e));

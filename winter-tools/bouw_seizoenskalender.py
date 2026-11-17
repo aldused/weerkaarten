@@ -104,12 +104,25 @@ def read_cover(root, year, station_names, offsets, observations):
             continue
         offset = offsets[key]
         for station, code in observations_on_day:
-            if code is None:
+            if code is None or repeated_snow_code(day, station, code):
                 continue
             days, positives = observations[station]
             days.add(offset)
             if code > 0:
                 positives.add(offset)
+
+
+def repeated_snow_code(day, station, code):
+    # Het archief herhaalt deze vaste station/code-combinaties jarenlang
+    # op de 10e, 20e en 30e van de maand, ook midden in de zomer.
+    if day[-2:] not in ("10", "20", "30"):
+        return False
+    year = int(day[:4])
+    if 1961 <= year <= 1965:
+        return {13: 1, 72: 2, 165: 4, 231: 997, 676: 8, 739: 999}.get(station) == code
+    if 1966 <= year <= 1967:
+        return {13: 1, 72: 2, 165: 4, 354: 2, 448: 23, 739: 999}.get(station) == code
+    return False
 
 
 def main():
