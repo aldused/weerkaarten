@@ -28,8 +28,8 @@
   const dateAt = (year, offset) => new Date(start(year) + offset * day);
   const human = (year, offset) => offset === null ? '—' : format.format(dateAt(year, offset));
   const iso = (year, offset) => offset === null ? '' : dateAt(year, offset).toISOString().slice(0, 10);
-  const periods = [[1961, 1990], [1971, 2000], [1981, 2010], [1991, 2020], [1906, 1990], [1901, 2020]];
-  const publishedFirstSnow = {'1961–1990': '1 november', '1991–2020': '9 november'};
+  const periods = [[1951, 1980], [1961, 1990], [1971, 2000], [1981, 2010], [1991, 2020], [1906, 1990], [1901, 2020]];
+  const publishedFirstSnow = {'1951–1980': '25 oktober', '1961–1990': '1 november', '1991–2020': '9 november'};
   let source;
   let years;
 
