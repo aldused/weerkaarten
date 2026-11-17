@@ -152,7 +152,7 @@ async function initSnow(prefix, {file, label, definitions, source, approximate =
 }
 
 async function initCoverNormals() {
-  const data = await get('eerste-sneeuwdek.json');
+  const data = await get('eerste-sneeuwdek.json?v=20261117-klimaatperioden');
   const calendarDate = new Intl.DateTimeFormat('nl-NL', {day:'numeric', month:'long', timeZone:'UTC'});
   byId('cover-normals').replaceChildren(...data.map(([period, ...dates]) =>
     row([period, ...dates.map(iso => iso ? calendarDate.format(new Date(iso + 'T00:00:00Z')) : '—')], true)));

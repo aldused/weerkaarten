@@ -10,7 +10,7 @@ from statistics import mean
 from bouw_seizoenskalender import read_cover
 
 REFERENCE = date(2001, 10, 1)
-PERIODS = ((1961, 1990), (1991, 2020))
+PERIODS = ((1961, 1990), (1971, 2000), (1981, 2010), (1991, 2020))
 
 
 def calendar_offset(day):
