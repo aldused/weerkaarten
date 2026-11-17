@@ -12,13 +12,14 @@ import sys
 import tempfile
 
 import numpy as np
-from ecmwf_frames import atomic, crop_bounds, enrich, MIRROR, NORTH, WEST, sunshine_minutes, write_frame
+from ecmwf_frames import atomic, crop_bounds, crop_grid, enrich, MIRROR, sunshine_minutes, write_frame
 from regional_frames import GRID, NATIVE, native_model
 
 UTC = timezone.utc
 REMOTE = 'r2:weerlab-data/modelkaarten-benelux'
 KEEP = 4
 SCHEMA = 1
+ECMWF_MODELS = {'ecmwf025': 'ecmwf025-grib', 'ecmwf': 'ecmwf-grib'}
 
 
 def json_bytes(value):
@@ -59,8 +60,7 @@ def digest(raw):
 def ecmwf_run(root, rid, manifest, cache, old=None):
     m = json.loads(manifest)
     region = crop_bounds(m['grid'])
-    w, h = region[2]-region[0], region[3]-region[1]
-    grid = dict(lon0=WEST,lat0=NORTH,dx=m['grid']['dlon'],dy=m['grid']['dlat'],w=w,h=h)
+    grid = crop_grid(m['grid'], region)
     start = datetime.fromisoformat(m['run_time'])
     hours_by_step = [int(h) for h in m['steps']]
     cache.mkdir(parents=True, exist_ok=True)
@@ -74,7 +74,7 @@ def ecmwf_run(root, rid, manifest, cache, old=None):
     wanted = [h for h in sorted(hours_by_step) if needs(h)]
     with ThreadPoolExecutor(max_workers=7) as pool:
         # All cumulative solar crops must be present before differencing steps.
-        for _ in pool.map(lambda h: enrich(rid,h,cache,MIRROR,True,True),wanted):
+        for _ in pool.map(lambda h: enrich(rid,h,cache,MIRROR,grid),wanted):
             pass
         def frame(lead):
             if not needs(lead):
@@ -90,11 +90,11 @@ def ecmwf_run(root, rid, manifest, cache, old=None):
             energy = extras.get('ssrd')
             if energy is not None:
                 if prev==0:
-                    extras['sun']=sunshine_minutes(start+timedelta(hours=lead),period,energy)
+                    extras['sun']=sunshine_minutes(start+timedelta(hours=lead),period,energy,grid)
                 elif prev_file.exists():
                     with np.load(prev_file,allow_pickle=False) as data:
                         if 'ssrd' in data:
-                            extras['sun']=sunshine_minutes(start+timedelta(hours=lead),period,energy-data['ssrd'])
+                            extras['sun']=sunshine_minutes(start+timedelta(hours=lead),period,energy-data['ssrd'],grid)
             return write_frame(root/rid,lead,m['steps'][str(lead)],region,m['grid'],m['grid_uv'],extras)
         steps=list(pool.map(frame,sorted(hours_by_step)))
     if not steps or not any({'t2m','tcc','rain','t850','t500','sdep'} <= set(s['keys']) for s in steps):
@@ -140,29 +140,32 @@ def retain(runs):
     return sorted(runs,key=lambda r:r['id'],reverse=True)[:KEEP]
 
 
-def ecmwf(project, cache, previous):
-    root = project/'ecmwf_overview/data/ecmwf'
+def ecmwf(key, project, cache, previous):
+    root = project/'ecmwf_overview/data'/key
     prior = {r['id']:r for r in previous}
     source_runs = sorted(read(root/'runs.json')['runs'],key=lambda r:r['run'],reverse=True)[:KEEP]
-    grid = dict(lon0=WEST,lat0=NORTH,dx=.1,dy=-.1,w=68,h=56)
+    grid = None
     for i,entry in enumerate(source_runs):
         rid = entry['run']
-        manifest = (root/rid/'manifest.json').read_bytes()
-        old = prior.get(rid)
-        # Initial installation supplements the latest two runs. Older published
-        # snapshots stay available where present, without re-downloading them.
-        if old and (old.get('_source')==digest(manifest) and old.get('_complete') or
-                    not old.get('_source') and i>=2):
-            continue
-        if not old and i>=2 and len(prior)>=2:
-            continue
         try:
+            manifest = (root/rid/'manifest.json').read_bytes()
+            source_grid = json.loads(manifest)['grid']
+            grid = crop_grid(source_grid,crop_bounds(source_grid))
+            old = prior.get(rid)
+            # The newest two runs always get supplemental fields.
+            if old and (old.get('_source')==digest(manifest) and old.get('_complete') or
+                        not old.get('_source') and i>=2):
+                continue
+            if not old and i>=2 and len(prior)>=2:
+                continue
             grid,new = ecmwf_run(root,rid,manifest,cache,old)
             prior[rid]=new
         except (ValueError,OSError,RuntimeError) as exc:
             if not prior:
                 raise
-            print(f'ECMWF {rid}: oude run behouden ({type(exc).__name__})',flush=True)
+            print(f'{key} {rid}: oude run behouden ({type(exc).__name__})',flush=True)
+    if not grid:
+        raise ValueError('Geen leesbaar ECMWF-bronraster')
     return grid,retain(prior.values())
 
 
@@ -194,9 +197,9 @@ def update(key, args, seeds):
     folder.mkdir(parents=True,exist_ok=True)
     history = folder/'history.json'
     previous = read(history) if history.exists() else seeds.get(key,{}).get('runs',[])
-    cache = args.state/('ecmwf-grib' if key=='ecmwf' else 'regionaal-grib')
-    if key=='ecmwf':
-        grid,runs = ecmwf(args.project,cache,previous)
+    cache = args.state/ECMWF_MODELS.get(key,'regionaal-grib')
+    if key in ECMWF_MODELS:
+        grid,runs = ecmwf(key,args.project,cache,previous)
     else:
         grid,runs = regional(key,args.project,cache,previous)
     if not runs:
@@ -236,7 +239,7 @@ def main():
     cli.add_argument('--rclone',default='rclone')
     cli.add_argument('--remote',default=REMOTE)
     cli.add_argument('--publish',action='store_true')
-    cli.add_argument('--model',choices=['ecmwf',*NATIVE],action='append')
+    cli.add_argument('--model',choices=[*ECMWF_MODELS,*NATIVE],action='append')
     a=cli.parse_args()
     a.state.mkdir(parents=True,exist_ok=True)
     with (a.state/'update.lock').open('a') as lock:
@@ -244,7 +247,7 @@ def main():
             fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:
             return 0
-        keys=a.model or ['ecmwf',*NATIVE]
+        keys=a.model or [*ECMWF_MODELS,*NATIVE]
         seeds=snapshot(a.seed) if any(not (a.state/k/'history.json').exists() for k in keys) else {}
         failed=False
         with ThreadPoolExecutor(max_workers=3) as pool:

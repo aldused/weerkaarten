@@ -37,14 +37,19 @@ def main():
     launch=Path.home()/'Library/LaunchAgents'
     launch.mkdir(parents=True,exist_ok=True)
     plist=launch/(LABEL+'.plist')
-    temp=plist.with_suffix('.tmp')
-    temp.write_bytes(plistlib.dumps(config))
-    subprocess.run(['/usr/bin/plutil','-lint',str(temp)],check=True)
-    temp.replace(plist)
     domain=f'gui/{os.getuid()}'
     service=f'{domain}/{LABEL}'
-    if subprocess.run(['/bin/launchctl','print',service],stdout=subprocess.DEVNULL,
-                      stderr=subprocess.DEVNULL).returncode==0:
+    loaded=subprocess.run(['/bin/launchctl','print',service],stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode==0
+    payload=plistlib.dumps(config)
+    if loaded and plist.is_file() and plist.read_bytes()==payload:
+        print(f'{LABEL} bijgewerkt. Log: {root/"update.log"}')
+        return
+    temp=plist.with_suffix('.tmp')
+    temp.write_bytes(payload)
+    subprocess.run(['/usr/bin/plutil','-lint',str(temp)],check=True)
+    temp.replace(plist)
+    if loaded:
         subprocess.run(['/bin/launchctl','bootout',service],check=True)
     subprocess.run(['/bin/launchctl','bootstrap',domain,str(plist)],check=True)
     print(f'{LABEL} geïnstalleerd. Log: {root/"update.log"}')

@@ -1,4 +1,4 @@
-"""Maak een zelfstandige Benelux-viewer uit de Weerlab ECMWF IFS 0,1°-cache."""
+"""Lees ECMWF IFS-rasters en aanvullende velden voor de Benelux."""
 import base64
 from datetime import datetime, timedelta, timezone
 import gzip
@@ -73,7 +73,14 @@ def crop_bounds(grid):
     return a, c, b + 1, d + 1
 
 
-def raw_field(base, rec, lead, gust=False):
+def crop_grid(grid, bounds):
+    left, top, right, bottom = bounds
+    return dict(lon0=round(grid['lon0']+left*grid['dlon'], 8),
+                lat0=round(grid['lat0']+top*grid['dlat'], 8),
+                dx=grid['dlon'],dy=grid['dlat'],w=right-left,h=bottom-top)
+
+
+def raw_field(base, rec, lead, grid, gust=False):
     import eccodes as grib
     off, length = rec['_offset'], rec['_length']
     end = off + length - 1
@@ -92,14 +99,14 @@ def raw_field(base, rec, lead, gust=False):
             return None
         nx, ny = get('Ni'), get('Nj')
         dlon, dlat = get('iDirectionIncrementInDegrees'), get('jDirectionIncrementInDegrees')
-        if (abs(dlon - .1) > 1e-6 or abs(dlat - .1) > 1e-6
+        if (abs(dlon - grid['dx']) > 1e-6 or abs(dlat + grid['dy']) > 1e-6
                 or get('iScansNegatively') or get('jScansPositively') or get('jPointsAreConsecutive')
                 or get('alternativeRowScanning')):
             raise ValueError('Onverwacht GRIB-raster')
         lat0, lon0 = get('latitudeOfFirstGridPointInDegrees'), get('longitudeOfFirstGridPointInDegrees')
-        i = round(((WEST - lon0) % 360) / dlon) % nx
-        j = round((lat0 - NORTH) / dlat)
-        w, h = round((EAST - WEST) / dlon) + 1, round((NORTH - SOUTH) / dlat) + 1
+        i = round(((grid['lon0'] - lon0) % 360) / dlon) % nx
+        j = round((lat0 - grid['lat0']) / dlat)
+        w, h = grid['w'], grid['h']
         if not 0 <= j <= ny - h:
             raise ValueError('Onverwacht GRIB-domein')
         v = grib.codes_get_values(gid).reshape(ny, nx)[j:j + h][:, (i + np.arange(w)) % nx]
@@ -110,18 +117,19 @@ def raw_field(base, rec, lead, gust=False):
         grib.codes_release(gid)
 
 
-def enrich(run, lead, cache, mirror, refresh_types, sunshine):
+def enrich(run, lead, cache, mirror, grid):
     target = cache / f'{run}-{lead:03}.npz'
     fields = {}
     if target.exists():
         with np.load(target, allow_pickle=False) as saved:
             fields.update(saved)
     want_gust = lead > 0 and not any(f'g{n}' in fields for n in (1, 3, 6))
-    want_type = refresh_types and 'ptype' not in fields
-    want_solar = sunshine and lead > 0 and 'ssrd' not in fields
+    want_type = 'ptype' not in fields
+    want_solar = lead > 0 and 'ssrd' not in fields
     if not (want_type or want_gust or want_solar):
         return fields
-    base = f'{mirror}/{run[:8]}/{run[8:]}z/ifs/0p1/oper/{run}0000-{lead}h-oper-fc-sfc'
+    resolution, suffix = ('0p1', '-sfc') if grid['dx']==.1 else ('0p25', '')
+    base = f'{mirror}/{run[:8]}/{run[8:]}z/ifs/{resolution}/oper/{run}0000-{lead}h-oper-fc{suffix}'
     try:
         index = http(base + '.index')
         if index is None:
@@ -132,13 +140,13 @@ def enrich(run, lead, cache, mirror, refresh_types, sunshine):
             for k in ('10fg3', '10fg6', '10fg'):
                 if k not in rows:
                     continue
-                result = raw_field(base, rows[k], lead, gust=True)
+                result = raw_field(base, rows[k], lead, grid, gust=True)
                 if result is not None:
                     v, period = result
                     fields[f'g{period}'] = np.where(np.isfinite(v), np.clip(np.rint(v * 3.6), 0, 254), 255).astype('uint8')
                     break
         if want_type and 'ptype' in rows:
-            v = raw_field(base, rows['ptype'], lead)
+            v = raw_field(base, rows['ptype'], lead, grid)
             if v is not None:
                 t = np.full(v.shape, 255, 'uint8')
                 t[v == 0] = 0
@@ -146,7 +154,7 @@ def enrich(run, lead, cache, mirror, refresh_types, sunshine):
                     t[v == code] = display
                 fields['ptype'] = t
         if want_solar and 'ssrd' in rows:
-            v = raw_field(base, rows['ssrd'], lead)
+            v = raw_field(base, rows['ssrd'], lead, grid)
             if v is not None:
                 fields['ssrd'] = v.astype('float32')
     except (requests.RequestException, ValueError, RuntimeError) as exc:
@@ -158,10 +166,10 @@ def enrich(run, lead, cache, mirror, refresh_types, sunshine):
     return fields
 
 
-def sunshine_minutes(end, hours, energy):
+def sunshine_minutes(end, hours, energy, grid):
     """Schat zonneduur in een modelinterval uit globale straling en zonnestand."""
-    phi = np.radians(np.linspace(NORTH, SOUTH, energy.shape[0]))[:, None]
-    lon = np.linspace(WEST, EAST, energy.shape[1])[None, :]
+    phi = np.radians(grid['lat0']+np.arange(grid['h'])*grid['dy'])[:, None]
+    lon = (grid['lon0']+np.arange(grid['w'])*grid['dx'])[None, :]
     potential = np.zeros_like(energy, dtype='float64')
     daylight = np.zeros_like(potential)
     for minute in range(hours * 60):

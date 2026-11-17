@@ -5,8 +5,10 @@ bij openen, modelwissel en daarna om de 90 seconden. De ingebouwde runs vormen
 een reserve als de live feed tijdelijk onbereikbaar is. Dezelfde geldigheidstijd
 en een handmatig gekozen run blijven geselecteerd zolang die beschikbaar zijn.
 
-De updater leest de bestaande ECMWF-cache en de regionale modelbestanden in het
-KNMI-project. Extra velden worden rechtstreeks van ECMWF, DWD en KNMI opgehaald
+De updater leest de bestaande ECMWF-caches voor 0,25° en 0,1° en de regionale
+modelbestanden in het KNMI-project. Elke resolutie heeft een eigen runlijst.
+De pagina opent standaard op 0,25°, dat eerder verschijnt bij ECMWF.
+Extra velden worden rechtstreeks van ECMWF, DWD en KNMI opgehaald
 voor hetzelfde runnummer. Het KNMI-proces gebruikt de bestaande API-toegang via
 `KNMI_API_KEY` of `pascal/.env`.
 

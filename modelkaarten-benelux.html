@@ -223,6 +223,9 @@ const $ = id => document.getElementById(id);
 const bundle = JSON.parse($('bundle').textContent);
 $('bundle').remove();
 const {models, map:geo} = bundle;
+const defaultModel='ecmwf025';
+models.ecmwf.label='ECMWF IFS 0,1°';
+models.ecmwf025={label:'ECMWF IFS 0,25°',detail:'ECMWF · 0,25°',runs:[]};
 let modelKey='ecmwf', grid=bundle.grid, runs=models.ecmwf.runs;
 const ctx = $('canvas').getContext('2d');
 const compareCtx = $('compare-canvas').getContext('2d');
@@ -266,6 +269,7 @@ const requests = new Map();
 const feedRequests = new Map();
 const liveFeeds = new Map();
 let pendingLocation;
+let waitingForDefault;
 const liveBase = new URLSearchParams(location.search).get('localData')==='1' &&
   ['localhost','127.0.0.1'].includes(location.hostname)
   ? new URL('modelkaarten-live/',location.href).href
@@ -366,7 +370,7 @@ async function load(step, run){
   const compressed = Uint8Array.from(atob(await stepData(step,run)),s=>s.charCodeAt(0));
   const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'));
   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
-  const sourceGrid = run.regional ? models[run.modelKey].grid : bundle.grid;
+  const sourceGrid = models[run.modelKey].grid;
   const n = sourceGrid.w*sourceGrid.h;
   if(bytes.length !== n*step.keys.length) throw new Error('Onvolledig deelraster');
   const fields = {};
@@ -865,6 +869,7 @@ function makeDays(){
   $('days').replaceChildren(...buttons);
 }
 function sync(){
+  if(waitingForDefault!==undefined)return;
   const hash=new URLSearchParams({lead:String(state.run.steps[state.idx].lead),kaart:state.layer,wind:state.unit});
   if(state.run.id!==runs[0].id)hash.set('run',state.run.id);
   hash.set('model',modelKey);
@@ -982,7 +987,7 @@ function compareMode(active){
     'Zelfde geldigheid op beide kaarten. Zoomen en slepen bewegen beide kaarten mee.':singleHint;
 }
 function setModel(key){
-  modelKey=Object.hasOwn(models,key)?key:'ecmwf';
+  modelKey=Object.hasOwn(models,key)&&models[key].runs.length?key:'ecmwf';
   const model=models[modelKey];
   grid=model.grid;
   runs=model.runs;
@@ -1022,14 +1027,23 @@ async function refreshModel(key){
     if(!validFeed(feed,key)||!feed.updated||liveFeeds.get(key)?.updated===feed.updated)return;
     const baseModel=models[key];
     const updated=feed.runs.map(run=>({...run,modelKey:key,live:true})).sort((a,b)=>b.id.localeCompare(a.id));
-    if(updated[0].id<baseModel.runs[0].id)return;
+    if(baseModel.runs.length&&updated[0].id<baseModel.runs[0].id)return;
     liveFeeds.set(key,feed);
     const active=key===modelKey;
     const prior=active?state.run:null;
-    const followsLatest=prior?.id===baseModel.runs[0].id;
+    const followsLatest=active&&prior.id===baseModel.runs[0].id;
     const comparePrevious=comparison.run?.id===baseModel.runs[1]?.id;
     const oldTime=active?Date.parse(prior.steps[state.idx].valid):NaN;
     models[key]={...baseModel,grid:feed.grid,runs:updated};
+    if(key===defaultModel){
+      $('model-select').querySelector('option[value="ecmwf025"]').disabled=false;
+      if(waitingForDefault!==undefined){
+        const hash=waitingForDefault;
+        waitingForDefault=undefined;
+        restoreLocation(hash);
+        return;
+      }
+    }
     if(!active)return;
     const requested=pendingLocation?.key===key&&pendingLocation.request===requestID?pendingLocation:null;
     pendingLocation=null;
@@ -1051,12 +1065,15 @@ async function refreshModel(key){
     feedRequests.delete(key);
   }
 }
-$('model-select').replaceChildren(...Object.entries(models).map(([key,model])=>{
+$('model-select').replaceChildren(...[defaultModel,...Object.keys(models).filter(key=>key!==defaultModel)].map(key=>{
+  const model=models[key];
   const option=labelNode('option',model.label);
   option.value=key;
+  option.disabled=!model.runs.length;
   return option;
 }));
 $('model-select').addEventListener('change',()=>{
+  waitingForDefault=undefined;
   const valid=Date.parse(state.run.steps[state.idx].valid);
   stop();
   setModel($('model-select').value);
@@ -1289,7 +1306,7 @@ async function downloadMap(other){
   c.fillStyle='#0d1f3c';c.fillRect(0,footerTop,820,footerHeight);
   c.font='700 14px system-ui';c.fillStyle='#ffffff';
   c.fillText('Weerlab.nl · Ed Aldus',20,footerTop+25);
-  const dataSource=modelKey==='ecmwf'?'ECMWF Open Data':modelKey.startsWith('icon')?'DWD':'KNMI';
+  const dataSource=modelKey.startsWith('ecmwf')?'ECMWF Open Data':modelKey.startsWith('icon')?'DWD':'KNMI';
   c.textAlign='right';c.fillStyle='#c8ddf0';c.font='13px system-ui';
   c.fillText('Modeldata: '+dataSource+' · Kaartgrenzen: Natural Earth',800,footerTop+25);
   c.textAlign='left';
@@ -1313,10 +1330,11 @@ async function downloadMap(other){
 $('png').addEventListener('click',()=>downloadMap(false));
 $('compare-png').addEventListener('click',()=>downloadMap(true));
 
-function restoreLocation(){
-  const hash=new URLSearchParams(location.hash.slice(1));
+function restoreLocation(fragment=location.hash){
+  const hash=new URLSearchParams(fragment.slice(1));
   const params=new URLSearchParams(location.search);
-  const requestedModel=hash.get('model')||params.get('model')||'ecmwf';
+  const requestedModel=hash.get('model')||params.get('model')||defaultModel;
+  waitingForDefault=requestedModel===defaultModel&&!models[defaultModel].runs.length?fragment:undefined;
   const requestedLayer={temp:'t2m',wind:'ws',windstoten:'gust',neerslag:'weather',nsomm:'ptot',cumul:'ptot',zon:'sun',
     hoogte_850:'t850',hoogte_500:'t500',sneeuw:'sdep',neerslagtype:'ptypeMap'}[params.get('param')];
   stop();
@@ -1334,10 +1352,14 @@ function restoreLocation(){
   pendingLocation=(runId&&state.run.id!==runId||compareId&&comparison.run?.id!==compareId)?
     {key:modelKey,runId,compareId,lead:hash.has('lead')?Number(hash.get('lead')):NaN,request:requestID}:null;
   refreshModel(modelKey);
+  if(!models[defaultModel].runs.length)refreshModel(defaultModel);
 }
-window.addEventListener('hashchange',restoreLocation);
+window.addEventListener('hashchange',()=>restoreLocation());
 restoreLocation();
-setInterval(()=>refreshModel(modelKey),90000);
+setInterval(()=>{
+  refreshModel(modelKey);
+  if(!models[defaultModel].runs.length)refreshModel(defaultModel);
+},90000);
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden)refreshModel(modelKey);
 });
