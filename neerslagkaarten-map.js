@@ -4,7 +4,12 @@ const byId = id => document.getElementById(id);
 const map = byId('map');
 const canvas = map.querySelector('canvas');
 const context = canvas.getContext('2d');
-const rainOpacity = 0.52;
+const rainAlpha = Math.round(255 * 0.52);
+const rainOpacity = rainAlpha / 255;
+const nationalLand = '#f5f3e9';
+function legendGround() {
+  return byId('region').value === 'Nederland' ? nationalLand : '#ffffff';
+}
 const markers = byId('maximum-markers');
 const download = byId('png');
 const pickedPoints = new Map();
@@ -79,7 +84,7 @@ const backgrounds = {
         ctx.fillRect(0, 0, geo.w, geo.h);
         ctx.fillStyle = '#e6e4db';
         neighbours.forEach(path => ctx.fill(path, 'evenodd'));
-        ctx.fillStyle = '#f5f3e9';
+        ctx.fillStyle = nationalLand;
         ctx.fill(land, 'evenodd');
       },
       lines(ctx) {
@@ -136,6 +141,7 @@ const backgroundCache = new Map();
 async function chooseRegion() {
   const id = ++mapRequest;
   const name = byId('region').value;
+  byId('legend').style.setProperty('--legend-ground', legendGround());
   map.classList.toggle('landelijk', name === 'Nederland');
   geometry = null;
   download.disabled = true;
@@ -191,7 +197,7 @@ function paint() {
       if (!colors.has(cell)) {
         const sum = forecast.sum(selected, cell);
         const color = palette.findLast(([minimum]) => sum >= minimum);
-        colors.set(cell, color ? [...color.slice(1), Math.round(255 * rainOpacity)] : Number.isNaN(sum) ? [100, 105, 115, 110] : null);
+        colors.set(cell, color ? [...color.slice(1), rainAlpha] : Number.isNaN(sum) ? [100, 105, 115, 110] : null);
       }
       const color = colors.get(cell);
       if (color) frame.data.set(color, i * 4);
@@ -313,6 +319,8 @@ download.onclick = () => {
         legendX = 20;
         legendY += 23;
       }
+      ctx.fillStyle = legendGround();
+      ctx.fillRect(legendX, legendY - 12, 15, 13);
       ctx.fillStyle = color;
       ctx.fillRect(legendX, legendY - 12, 15, 13);
       ctx.strokeStyle = '#8895a7';
@@ -458,7 +466,7 @@ const bins = [
 for (const [label, color] of bins) {
   const item = document.createElement('span');
   const swatch = document.createElement('i');
-  swatch.style.background = color;
+  swatch.style.backgroundImage = 'linear-gradient(' + color + ', ' + color + ')';
   item.append(swatch, label);
   legend.append(item);
 }
