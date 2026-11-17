@@ -10,7 +10,8 @@ import numpy as np
 from ruc_zon import BASE, map_indices
 
 CLASSIC = 'https://opendata.dwd.de/weather/nwp/icon-d2/grib'
-FIELDS = {'t850': (850, 'K'), 't500': (500, 'K'), 'sdep': (None, 'm')}
+FIELDS = {'t850': (850, 'K'), 't500': (500, 'K'), 'sdep': (None, 'm'), 'frz': (None, 'm')}
+SINGLE = {'sdep':'h_snow','frz':'hzerocl'}
 
 
 def icon_fields(model, start, leads, grid, get):
@@ -26,10 +27,10 @@ def icon_fields(model, start, leads, grid, get):
             return f'{CLASSIC}/{cycle}/{field.lower()}/icon-d2_germany_icosahedral_time-invariant_{stamp}_000_0_{field.lower()}.grib2.bz2'
         level, _ = FIELDS[field]
         if ruc:
-            prefix = f'T/lvt1/100/lv1/{level*100}' if level else 'H_SNOW'
+            prefix = f'T/lvt1/100/lv1/{level*100}' if level else SINGLE[field].upper()
             return f'{BASE}/{prefix}/r/{ruc_run}/s/PT{lead:03}H00M.grib2'
-        code = 't' if level else 'h_snow'
-        tag = f'pressure-level_{stamp}_{lead:03}_{level}_t' if level else f'single-level_{stamp}_{lead:03}_2d_h_snow'
+        code = 't' if level else SINGLE[field]
+        tag = f'pressure-level_{stamp}_{lead:03}_{level}_t' if level else f'single-level_{stamp}_{lead:03}_2d_{code}'
         return f'{CLASSIC}/{cycle}/{code}/icon-d2_germany_icosahedral_{tag}.grib2.bz2'
 
     def read(field, lead):
@@ -75,7 +76,10 @@ def icon_fields(model, start, leads, grid, get):
                 if key != lat[1] or values.shape != lat[0].shape:
                     raise ValueError(f'Ongelijk DWD-raster voor {model} {field}')
                 v = values[target]
-                fields[field] = np.where(coverage, v*100 if field == 'sdep' else v-273.15, np.nan)
+                if field=='frz':
+                    fields[field] = np.where(coverage & (v>-100),v,np.nan)
+                else:
+                    fields[field] = np.where(coverage, v*100 if field == 'sdep' else v-273.15, np.nan)
             return start+timedelta(hours=lead), fields
 
         return dict(pool.map(frame, leads))

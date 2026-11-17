@@ -18,7 +18,7 @@ ROOT = Path('/Users/aldus/KNMI_Project')
 MIRROR = 'https://storage.googleapis.com/ecmwf-open-data'
 # Extra rasterrand voor interpolatie tot aan de schermrand.
 WEST, SOUTH, EAST, NORTH = 1.7, 48.8, 8.4, 54.3
-FIELDS = ('t2m', 'ws', 'tcc', 'rain', 'snow', 'fzra', 'ipel', 'vis', 'msl', 'ptot', 't850', 't500', 'sdep')
+FIELDS = ('t2m', 'ws', 'tcc', 'rain', 'snow', 'fzra', 'ipel', 'vis', 'msl', 'ptot', 't850', 't500', 'sdep', 'frz')
 THREAD = local()
 PRECIP_TYPES = {1: 1, 5: 2, 6: 3, 7: 4, 3: 5, 8: 6, 12: 7}
 
@@ -191,6 +191,13 @@ def sunshine_minutes(end, hours, energy, grid):
     return np.where(np.isfinite(sunny), np.rint(sunny / 2), 255).astype('uint8')
 
 
+def crop_layer(src, lead, key, bounds, grid):
+    with Image.open(src / f'{lead:03d}' / f'{key}.png') as im:
+        if im.size != (grid['nx'], grid['ny']) or im.mode != 'L':
+            raise ValueError(f'Onverwachte afmetingen/codering voor {src.name} {lead} {key}')
+        return np.asarray(im.crop(bounds))
+
+
 def write_frame(src, lead, info, bounds, grid, uvgrid, supplement):
     available = info['layers']
     w, h = bounds[2] - bounds[0], bounds[3] - bounds[1]
@@ -198,13 +205,9 @@ def write_frame(src, lead, info, bounds, grid, uvgrid, supplement):
     layers = dict(supplement)
     if lead == 0:
         layers['ptot'] = blank
-    check_shape = (grid['nx'], grid['ny'])
     for key in FIELDS:
         if key in available:
-            with Image.open(src / f'{lead:03d}' / f'{key}.png') as im:
-                if im.size != check_shape or im.mode != 'L':
-                    raise ValueError(f'Onverwachte afmetingen/codering voor {src.name} {lead} {key}')
-                layers[key] = np.asarray(im.crop(bounds))
+            layers[key] = crop_layer(src,lead,key,bounds,grid)
     if 'uv' in available:
         with Image.open(src / f'{lead:03d}' / 'uv.png') as im:
             if im.width == uvgrid['nx'] and im.height == uvgrid['ny'] * 2:

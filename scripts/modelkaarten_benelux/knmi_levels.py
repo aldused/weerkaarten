@@ -12,6 +12,23 @@ import requests
 from ruc_zon import map_indices
 
 API = 'https://api.dataplatform.knmi.nl/open-data/v1'
+PRESSURE_LEVELS = (925, 850, 700, 500, 300)
+PROFILE = {'ground','t2m'} | {f'{field}{level}' for field in ('t','z') for level in PRESSURE_LEVELS}
+
+
+def freezing_height(profile):
+    ground = profile['ground']
+    bottom_t, bottom_z = profile['t2m'], ground+2
+    height = np.where(np.isfinite(ground) & (bottom_t<=0),ground,np.nan)
+    for level in PRESSURE_LEVELS:
+        top_t, top_z = profile[f't{level}'], profile[f'z{level}']
+        above = np.isfinite(top_t) & (top_z>bottom_z)
+        crossing = above & (bottom_t>0) & (top_t<=0)
+        fraction = bottom_t/np.where(crossing,bottom_t-top_t,1)
+        height[crossing] = (bottom_z+(top_z-bottom_z)*fraction)[crossing]
+        bottom_t = np.where(above,top_t,bottom_t)
+        bottom_z = np.where(above,top_z,bottom_z)
+    return np.where((bottom_z>ground+2)&(bottom_t<=0),height,np.nan)
 
 
 def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
@@ -70,8 +87,14 @@ def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
                 level = int.from_bytes(header[18:20],'big')
                 if pkg=='P1' and (header[16],header[17],level)==(66,105,0):
                     return size,'sdep'
-                if pkg=='P3' and header[16]==11 and header[17]==100 and level in (500,850):
-                    return size,f't{level}'
+                if pkg=='P3':
+                    param, surface = header[16],header[17]
+                    if surface==100 and level in PRESSURE_LEVELS and param in (6,11):
+                        return size,f'{"t" if param==11 else "z"}{level}'
+                    if (param,surface,level)==(6,105,0):
+                        return size,'ground'
+                    if (param,surface,level)==(11,105,2):
+                        return size,'t2m'
                 return size,None
             if edition != 2:
                 raise ValueError('Onbekende GRIB-editie')
@@ -83,9 +106,14 @@ def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
                     cat, number, surface = header[pos+9],header[pos+10],header[pos+22]
                     if pkg=='P1' and (header[6],cat,number,surface)==(0,1,11,1):
                         return size,'sdep'
-                    level = int.from_bytes(header[pos+24:pos+28],'big') // 100
-                    if pkg=='P3' and (header[6],cat,number,surface)==(0,0,0,100) and level in (500,850):
-                        return size,f't{level}'
+                    level = int.from_bytes(header[pos+24:pos+28],'big')
+                    if pkg=='P3' and header[6]==0:
+                        if surface==100 and level//100 in PRESSURE_LEVELS and (cat,number) in ((0,0),(3,4)):
+                            return size,f'{"t" if cat==0 else "z"}{level//100}'
+                        if (cat,number,surface)==(3,4,1):
+                            return size,'ground'
+                        if (cat,number,surface,level)==(0,0,103,2):
+                            return size,'t2m'
                     return size,None
                 if length<5:
                     break
@@ -93,7 +121,7 @@ def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
             raise ValueError('KNMI GRIB-metadata past niet in de gelezen kop')
 
         first_grid = {}
-        target_keys = {'sdep'} if pkg=='P1' else {'t500','t850'}
+        target_keys = {'sdep'} if pkg=='P1' else PROFILE
 
         def member(entry):
             lead,(start_byte,size)=entry
@@ -111,8 +139,9 @@ def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
                     msg=grib.codes_new_from_message(partial(offset,span))
                     try:
                         actual=lambda k:grib.codes_get(msg,k)
+                        pressure_field = field not in ('ground','t2m','sdep')
                         if (actual('dataDate')!=int(stamp[:8]) or actual('dataTime')!=start.hour*100 or actual('endStep')!=lead
-                                or (field!='sdep' and (actual('typeOfLevel')!='isobaricInhPa' or actual('level')!=int(field[1:])))):
+                                or (pressure_field and (actual('typeOfLevel')!='isobaricInhPa' or actual('level')!=int(field[1:])))):
                             raise ValueError(f'KNMI GRIB heeft een verkeerde run of druk: {field} T+{lead}')
                         values=grib.codes_get_values(msg)
                         if actual('bitmapPresent'):
@@ -127,11 +156,21 @@ def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
                             first_grid[field]=index
                         sample,inside=index
                         v=values[sample]
-                        v=np.where((v>=0)&(v<90),v*100,np.nan) if field=='sdep' else v-273.15
+                        if field=='sdep':
+                            v=np.where((v>=0)&(v<90),v*100,np.nan)
+                        elif field.startswith('t'):
+                            v=v-273.15
+                        else:
+                            v=v/9.80665
                         out[field]=np.where(inside,v,np.nan)
                     finally:
                         grib.codes_release(msg)
                 offset+=span
+            if pkg=='P3':
+                selected={k:out[k] for k in ('t850','t500') if k in out}
+                if PROFILE <= out.keys():
+                    selected['frz']=freezing_height(out)
+                return start+timedelta(hours=lead),selected
             return start+timedelta(hours=lead),out
 
         # Projecteer het gemeenschappelijke bronraster eenmaal, daarna parallel per tijdstap.

@@ -25,6 +25,7 @@ ENC = {
     't2m': dict(kind='linear', offset=-50.5, scale=.5, lo=1),
     't850': dict(kind='linear', offset=-70.5, scale=.5, lo=1),
     't500': dict(kind='linear', offset=-70.5, scale=.5, lo=1),
+    'frz': dict(kind='linear', offset=-25, scale=25, lo=1),
     'sdep': dict(kind='log2', base=.1, k=20),
     'ws': dict(kind='linear', offset=-.25, scale=.25, lo=1),
     'wuv': dict(kind='linear', offset=-64, scale=.5, lo=1),
@@ -161,7 +162,7 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
             if knmi_levels:
                 from knmi_levels import knmi_fields
                 load = lambda: knmi_fields(root.parent,key,start,leads,GRID,http)
-            expected = {'t850','t500','sdep'}
+            expected = {'t850','t500','sdep','frz'}
             extra = cached_model_fields(cache,key,start,leads,expected,load)
         if key == 'harmonie':
             for t, array in harmonie_snow(root.parent,start).items():

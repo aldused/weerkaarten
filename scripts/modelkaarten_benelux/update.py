@@ -12,8 +12,8 @@ import sys
 import tempfile
 
 import numpy as np
-from ecmwf_frames import atomic, crop_bounds, crop_grid, enrich, MIRROR, sunshine_minutes, write_frame
-from regional_frames import GRID, NATIVE, native_model
+from ecmwf_frames import atomic, crop_bounds, crop_grid, crop_layer, enrich, MIRROR, sunshine_minutes, write_frame
+from regional_frames import GRID, NATIVE, add_bytes, native_model
 
 UTC = timezone.utc
 REMOTE = 'r2:weerlab-data/modelkaarten-benelux'
@@ -78,7 +78,12 @@ def ecmwf_run(root, rid, manifest, cache, old=None):
             pass
         def frame(lead):
             if not needs(lead):
-                return old_steps[lead]
+                step = old_steps[lead]
+                if 'frz' not in step['keys'] and 'frz' in m['steps'][str(lead)]['layers']:
+                    step = dict(step,keys=step['keys'].copy())
+                    field = crop_layer(root/rid,lead,'frz',region,m['grid'])
+                    add_bytes(step,{'frz':field.tobytes()})
+                return step
             extras = {}
             file = cache/f'{rid}-{lead:03}.npz'
             if file.exists():
@@ -115,7 +120,7 @@ def regional(key, project, cache, previous):
     raw = meta_path.read_bytes()
     fingerprint = digest(raw)
     prior = next((r for r in previous if r.get('_source')==fingerprint),None)
-    if prior and prior.get('_complete'):
+    if prior and prior.get('_complete') and all('frz' in s['keys'] for s in prior['steps']):
         return GRID,previous
     try:
         run = native_model(meta_path.parent,key,ruc_solar=key=='icond2ruc',
@@ -127,7 +132,7 @@ def regional(key, project, cache, previous):
     if meta_path.read_bytes()!=raw:
         raise ValueError('Modeldata bijgewerkt tijdens de bouw')
     run['_source']=fingerprint
-    run['_complete']=all({'t850','t500','sdep','sun'} <= set(s['keys']) and not s.get('snowPartial')
+    run['_complete']=all({'t850','t500','sdep','sun','frz'} <= set(s['keys']) and not s.get('snowPartial')
                          for s in run['steps'])
     # Keep a complete version if an optional field briefly fails on the same run.
     old = next((r for r in previous if r['id']==run['id'] and r.get('_complete')),None)
@@ -149,11 +154,15 @@ def ecmwf(key, project, cache, previous):
         rid = entry['run']
         try:
             manifest = (root/rid/'manifest.json').read_bytes()
-            source_grid = json.loads(manifest)['grid']
+            source = json.loads(manifest)
+            source_grid = source['grid']
             grid = crop_grid(source_grid,crop_bounds(source_grid))
             old = prior.get(rid)
+            missing_freezing = old and any('frz' not in s['keys'] and
+                'frz' in source_step['layers'] for s in old['steps']
+                if (source_step:=source['steps'].get(str(s['lead']))))
             # Herbruik bestaande oudere snapshots en vul ontbrekende runs aan uit de broncache.
-            if old and (old.get('_source')==digest(manifest) and old.get('_complete') or
+            if old and not missing_freezing and (old.get('_source')==digest(manifest) and old.get('_complete') or
                         not old.get('_source') and i>=2):
                 continue
             grid,new = ecmwf_run(root,rid,manifest,cache,old)

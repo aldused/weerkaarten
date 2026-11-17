@@ -117,6 +117,7 @@
     <button type="button" data-layer="t2m" aria-pressed="false">Temperatuur</button>
     <button type="button" data-layer="t850" aria-pressed="false">Temp. 850 hPa</button>
     <button type="button" data-layer="t500" aria-pressed="false">Temp. 500 hPa</button>
+    <button type="button" data-layer="frz" aria-pressed="false">0 °C-niveau</button>
     <button type="button" data-layer="ws" aria-pressed="false">Wind</button>
     <button type="button" data-layer="gust" aria-pressed="false">Windstoten</button>
     <button type="button" data-layer="ptot" aria-pressed="false">Neerslagsom</button>
@@ -238,7 +239,7 @@ const state = {...HOME, layer:'weather', unit:'kmh', idx:0, run:runs[0], frame:n
 const comparison = {active:false, run:null, step:null, frame:null, loading:false, failed:false};
 const titles = {weather:'Significant weer', t2m:'Temperatuur op 2 m', ws:'Wind op 10 m', gust:'Windstoten op 10 m',
   ptot:'Neerslagsom', sun:'Zon-minuten', t850:'Temperatuur op 850 hPa', t500:'Temperatuur op 500 hPa',
-  sdep:'Sneeuwhoogte (cm)', ptypeMap:'Neerslagtype'};
+  sdep:'Sneeuwhoogte (cm)', frz:'0 °C-niveau', ptypeMap:'Neerslagtype'};
 const temperatureLayers = ['t2m','t850','t500'];
 const precip = [
   '', 'Regen', 'Sneeuw', 'Natte sneeuw', 'Regen en sneeuw', 'IJzel / onderkoelde regen', 'IJsregen', '',
@@ -253,6 +254,9 @@ const sunnyColors = ['#697889','#a2a7a7','#c1b995','#ddc58a','#f3d17e','#ffdd70'
 const snowLevels = [0,.1,.5,1,2,5,10,15,20,30,50,75,100];
 const snowColors = ['#f3f5f6','#e1f4ff','#c4ebff','#9fddfc','#76c5f2','#4d9bdf','#3672ca',
   '#4d59b8','#6552b3','#924caf','#af4f9f','#c64d81','#9e275a'];
+const freezingLevels=[0,250,500,750,1000,1500,2000,2500,3000,4000,5000];
+const freezingColors=['#443186','#4e54b2','#496fc8','#458fc9','#49b7d0','#66cec2',
+  '#a7dc9a','#e5e587','#ffd26b','#f7a253','#e46f46'];
 const precipitationColor = (color,i) => color.map(c=>Math.round(c*.83+(1-i/6)*115));
 const pShades = pColors.map(color=>color&&intensity.map((_,i)=>precipitationColor(color,i)));
 const capitals = new Set(['Amsterdam','Brussel','Luxemburg']);
@@ -363,6 +367,7 @@ const clamp = (x,a,b) => Math.min(b,Math.max(a,x));
 const rgb = color => 'rgb(' + color.join(',') + ')';
 const css = hex => [1,3,5].map(i => parseInt(hex.slice(i,i+2),16));
 const totalRGB = totalColors.map(css), sunnyRGB = sunnyColors.map(css), snowRGB = snowColors.map(css);
+const freezingRGB=freezingColors.map(css);
 
 function palette(stops,value){
   if(value<=stops[0][0]) return css(stops[0][1]);
@@ -410,7 +415,7 @@ async function interpolateFrame(step,run){
   const [before,after]=await Promise.all([load(left,run),load(right,run)]);
   // Neerslagtype en bijbehorende intensiteit komen samen uit de dichtstbijzijnde stap.
   const fields={...(fraction<.5?before:after)};
-  for(const key of ['t2m','t850','t500','ws','u','v','tcc','vis','msl','ptot','sdep']){
+  for(const key of ['t2m','t850','t500','ws','u','v','tcc','vis','msl','ptot','sdep','frz']){
     const a=before[key], b=after[key];
     if(a&&b)fields[key]=Float32Array.from(a,(x,i)=>x+(b[i]-x)*fraction);
     else delete fields[key];
@@ -552,13 +557,14 @@ function paintRaster(ctx,fields){
     }else{
       const v=rasterValue(scalar,x,y,k);
       if(!Number.isFinite(v)){
-        if(layer==='sdep' && (xx+yy)%8<3){out[pos]=117;out[pos+1]=131;out[pos+2]=149;out[pos+3]=85;}
+        if((layer==='sdep'||layer==='frz') && (xx+yy)%8<3){out[pos]=117;out[pos+1]=131;out[pos+2]=149;out[pos+3]=85;}
         continue;
       }
       if(layer==='t2m') color=tempLut[clamp(Math.floor(v)+52,0,tempLut.length-1)];
       else if(upperLut[layer]) color=upperLut[layer][clamp(Math.floor(v)+72,0,109)];
       else if(layer==='ptot') color=totalRGB[Math.max(0,totals.findLastIndex(t=>v>=t))];
       else if(layer==='sdep') color=snowRGB[Math.max(0,snowLevels.findLastIndex(t=>v>=t))];
+      else if(layer==='frz') color=freezingRGB[Math.max(0,freezingLevels.findLastIndex(t=>v>=t))];
       else if(layer==='sun') color=sunnyRGB[clamp(Math.round(v/sunBin),0,6)];
       else color=windColor(v);
       alpha=235;
@@ -635,6 +641,7 @@ function cityLabels(ctx,fields){
     const label=hasValue&&Number.isFinite(v) ? (
       temperatureLayers.includes(state.layer)?num(v,1)+'°':state.layer==='ptot'?num(v,v<10?1:0)+' mm':
       state.layer==='sdep'?num(v,v<5?1:0)+' cm':
+      state.layer==='frz'?num(v)+' m':
       state.layer==='sun'?num(v)+' min':toWind(v,state.layer==='gust',true)) : '';
     ctx.font='600 '+font+'px system-ui';
     const hw=Math.max(ctx.measureText(city.naam).width/2,10)+4;
@@ -720,7 +727,7 @@ function updateLegend(){
   $('compare-title').textContent=layerTitle(comparison.step);
   const scaleHours=sunScaleHours(), regional=state.run.regional, ownSunHours=sunHours(step);
   $('legend-eyebrow').textContent=weather?'COMPOSIET':isWind?'OP 10 METER':
-    ({ptot:'SINDS DE MODELSTART',sun:'ZONNEDUUR',sdep:'SNEEUWDEK',t850:'850 HPA',t500:'500 HPA',
+    ({ptot:'SINDS DE MODELSTART',sun:'ZONNEDUUR',sdep:'SNEEUWDEK',frz:'BOVEN ZEENIVEAU',t850:'850 HPA',t500:'500 HPA',
       ptypeMap:'SOORT NEERSLAG'})[state.layer]||'OP 2 METER';
   $('units').hidden=!isWind;$('direction-row').hidden=!(weather||isWind);
   $('pressure-row').hidden=!weather;$('fog-row').hidden=!weather;
@@ -762,6 +769,14 @@ function updateLegend(){
     target.append(legendRow('Geen modelwaarde','repeating-linear-gradient(135deg,#8d9aab 0 2px,#e5e9ee 2px 4px)'));
     note('Totale hoogte van het sneeuwdek op het aangegeven tijdstip.'+
       (step.snowPartial?' Het beschikbare KNMI-raster dekt Nederland en een deel van de omgeving.':''));
+  }else if(state.layer==='frz'){
+    const scale=labelNode('div','','class-legend');
+    freezingLevels.forEach((level,i)=>scale.append(legendRow(i===freezingLevels.length-1?'≥ '+num(level):
+      num(level)+'–'+num(freezingLevels[i+1]),freezingColors[i])));
+    target.append(labelNode('div','Hoogte in meter boven zeeniveau','legend-sub'),scale);
+    target.append(legendRow('Geen modelwaarde','repeating-linear-gradient(90deg,#8d9aab 0 2px,#e5e9ee 2px 4px)'));
+    note('Hoogste 0 °C-overgang. Bij een geheel koude modelkolom ligt de indicatie aan de grond.'+
+      (modelKey.startsWith('icon')?'':' De hoogte is geschat tussen drukvlakken.'));
   }else if(state.layer==='sun'){
     legendScale(sunnyColors,Array.from({length:7},(_,i)=>i*(scaleHours*10)+(i===6?' min':'')));
     note(step.sunEstimated===false?'Zon-minuten in het afgelopen uur volgens het model.':
@@ -827,6 +842,10 @@ function valuesAt(lon,lat,f=state.frame){
   if(state.layer==='sdep'){
     const v=bilinear(f.sdep,x,y);
     return Number.isFinite(v)?['Sneeuwhoogte: '+num(v,v<5?1:0)+' cm']:[];
+  }
+  if(state.layer==='frz'){
+    const height=bilinear(f.frz,x,y);
+    return [Number.isFinite(height)?'0 °C-niveau: '+num(height)+' m boven zeeniveau':'',temp].filter(Boolean);
   }
   if(state.layer==='ptot'){
     const total=bilinear(f.ptot,x,y);
@@ -1434,7 +1453,7 @@ function restoreLocation(fragment=location.hash){
   const requestedModel=hash.get('model')||params.get('model')||defaultModel;
   waitingForDefault=requestedModel===defaultModel&&!models[defaultModel].runs.length?fragment:undefined;
   const requestedLayer={temp:'t2m',wind:'ws',windstoten:'gust',neerslag:'weather',nsomm:'ptot',cumul:'ptot',zon:'sun',
-    hoogte_850:'t850',hoogte_500:'t500',sneeuw:'sdep',neerslagtype:'ptypeMap'}[params.get('param')];
+    hoogte_850:'t850',hoogte_500:'t500',nulgradenniveau:'frz',sneeuw:'sdep',neerslagtype:'ptypeMap'}[params.get('param')];
   stop();
   setModel(requestedModel==='ecmwf_om'?'ecmwf':requestedModel);
   const runId=hash.get('run'),compareId=hash.get('vergelijk');
