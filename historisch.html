@@ -163,11 +163,13 @@
         <svg id="nl-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"
           style="position:absolute;top:0;left:0;width:100%;height:100%;">
           <g id="stations-laag"></g>
+          <g id="jaaruitersten-laag"></g>
           <text id="copyright-tekst" x="790" y="1085" text-anchor="end" font-size="18" font-style="italic" fill="rgba(80,80,80,0.75)" font-family="Arial">© Ed Aldus / KNMI</text>
         </svg>
       </div>
 
       <div class="legenda" id="legenda"></div>
+      <p id="jaaruitersten-legenda" hidden><strong>Paarse rand</strong> · jaarextreem. Historische meetplaatsen kunnen bij benadering zijn aangegeven.</p>
     </div>
 
     <div class="info-panel">
@@ -181,6 +183,7 @@
 </div>
 
 <script src="jaaruitersten-data.js?v=20261116-knmi"></script>
+<script src="jaaruitersten-locaties.js?v=20261117"></script>
 <script>
 // Stations: stn, naam, lon, lat (geografisch) → wordt omgezet naar SVG coords
 const STATIONS = [
@@ -382,6 +385,31 @@ function maakLegenda(param) {
     </div></div>`;
 }
 
+let jaaruiterstenPunten = [];
+
+function tekenJaaruitersten() {
+  const laag = document.getElementById('jaaruitersten-laag');
+  laag.replaceChildren();
+  const svg = (tag, attributes) => {
+    const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value);
+    return element;
+  };
+  for (const {x, y, plaats, waarde, labels} of jaaruiterstenPunten) {
+    const tekst = displayObservation(waarde, huidigParam);
+    const punt = svg('g', {role:'img', tabindex:0, 'aria-label':`${plaats}: ${tekst} °C · ${labels.join(', ')}`});
+    const title = svg('title', {});
+    title.textContent = punt.getAttribute('aria-label');
+    const kleur = getKleur(huidigParam, waarde);
+    const marker = svg('circle', {cx:x, cy:y, r:23, fill:kleur, stroke:'#701aac', 'stroke-width':5});
+    const getal = svg('text', {x, y, fill:tekstKleur(kleur), 'text-anchor':'middle', 'dominant-baseline':'central', 'font-size':15, 'font-weight':800});
+    getal.textContent = tekst;
+    punt.append(title, marker, getal);
+    laag.append(punt);
+  }
+  document.getElementById('jaaruitersten-legenda').hidden = !jaaruiterstenPunten.length;
+}
+
 function tekenKaart() {
   const laag = document.getElementById("stations-laag");
   laag.innerHTML = "";
@@ -391,6 +419,7 @@ function tekenKaart() {
 
   const rijen = [];
   for (const st of STATIONS) {
+    if (jaaruiterstenPunten.some(punt => punt.id === String(st.stn))) continue;
     const waarde = huidigData[st.stn] !== undefined ? huidigData[st.stn] : null;
     const x = lonToX(st.lon), y = latToY(st.lat);
     const kleur = getKleur(huidigParam, waarde);
@@ -422,15 +451,28 @@ function tekenKaart() {
     rijen.push({naam: st.naam, waarde});
   }
 
+  for (const punt of jaaruiterstenPunten) {
+    rijen.push({naam:punt.plaats, stn:punt.id || '–', status:'Jaarextreem', waarde:punt.waarde, record:true});
+  }
+
   // Sorteer tabel op waarde
   rijen.sort((a,b) => (b.waarde??-9999) - (a.waarde??-9999));
   rijen.forEach(r => {
     const tr = document.createElement("tr");
+    if (r.record) {
+      const waarden = [r.naam, `${displayObservation(r.waarde,huidigParam)} °C · jaarextreem`];
+      if (document.getElementById('th-uurvak')) waarden.splice(1, 0, r.stn, r.status);
+      for (const waarde of waarden) tr.insertCell().textContent = waarde;
+      tr.style.color = '#701aac';
+      info.appendChild(tr);
+      return;
+    }
     tr.innerHTML = `<td>${r.naam}</td><td><strong>${r.waarde !== null ? displayObservation(r.waarde,huidigParam).replaceAll("<","&lt;") : "–"}</strong> ${r.waarde !== null ? PARAM_COL[huidigParam].eenheid : ""}</td>`;
     info.appendChild(tr);
   });
 
   document.getElementById("legenda").innerHTML = maakLegenda(huidigParam);
+  tekenJaaruitersten();
 }
 
 function wisselParam(param) {
@@ -492,6 +534,7 @@ function observationValue(raw,param){
 function toonJaaruitersten(datum, parameter) {
   const lijst = document.getElementById('jaaruitersten-dag');
   lijst.replaceChildren();
+  const punten = new Map();
   const graden = new Intl.NumberFormat('nl-NL', {maximumFractionDigits:1});
   const groepen = parameter === 'TX' ? [[2, 'Jaarmaximum']] :
     parameter === 'TN' ? [[1, 'Jaarminimum'], [3, 'Winterminimum']] : [];
@@ -504,6 +547,19 @@ function toonJaaruitersten(datum, parameter) {
         const bron = rij[0] <= 2000 ? 'historisch werkblad' : 'KNMI';
         item.textContent = `${naam} ${rij[0]} · ${meting[2]} · ${graden.format(meting[1])} °C · ${bron}`;
         lijst.append(item);
+        for (const plaats of meting[2].split('/').map(naam => naam.trim())) {
+          const locatie = window.WEERLAB_JAARUITERSTEN_LOCATIES?.[plaats];
+          if (!locatie) continue;
+          const key = JSON.stringify([plaats, meting[1]]);
+          if (!punten.has(key)) {
+            const id = locatie.from && meting[0] >= locatie.from ? locatie.id : null;
+            const station = id && STATIONS.find(st => String(st.stn) === id);
+            const positie = station && window.WeerlabStations?.locatieOp(station, meting[0]);
+            const [lon, lat] = positie ? [positie.lon, positie.lat] : locatie.coords;
+            punten.set(key, {x:lonToX(lon), y:latToY(lat), plaats, waarde:meting[1], id, labels:[]});
+          }
+          punten.get(key).labels.push(`${naam} ${rij[0]}`);
+        }
       }
     }
   }
@@ -513,6 +569,7 @@ function toonJaaruitersten(datum, parameter) {
     lijst.append(item);
   }
   document.getElementById('jaaruitersten-bron').hidden = !lijst.children.length;
+  jaaruiterstenPunten = [...punten.values()];
 }
 
 async function laadDag() {
@@ -532,6 +589,12 @@ async function laadDag() {
   if(!validArchiveDate(datumStr)){
     status.className='status fout';status.textContent='Kies een geldige datum vanaf 1894, vóór vandaag.';
     weerlabClimateStatus({fixed:'Geen geldige archiefdatum geselecteerd'});return;
+  }
+  if (jaaruiterstenPunten.length) {
+    document.getElementById("kaart-wrapper").style.display = "flex";
+    document.getElementById("kaart-titel").textContent = `${PARAM_COL[requestedParam].label} — ${datumLabel}`;
+    document.getElementById("info-titel").textContent = datumLabel;
+    tekenKaart();
   }
   try {
     const apiUrl = `https://www.daggegevens.knmi.nl/klimatologie/daggegevens`;
@@ -596,7 +659,7 @@ async function laadDag() {
     const missing=[];
     if(dailyFailed)missing.push('KNMI-daggegevens');
     if(historical.error)missing.push('historische aanvulling');
-    if (Object.keys(huidigData).length === 0) {
+    if (Object.keys(huidigData).length === 0 && !jaaruiterstenPunten.length) {
       status.className = "status fout";
       status.textContent = missing.length ? `Niet alle bronnen bereikbaar (${missing.join(" en ")}). Probeer opnieuw.` : `Geen data gevonden voor ${datumLabel}.`;
       return;

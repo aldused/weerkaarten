@@ -14,7 +14,7 @@ function renderMeasurements(cell, measurement, ties, param) {
     const value = document.createElement('div');
     value.textContent = `${degrees.format(temperature)} °C · ${station}`;
     const link = document.createElement('a');
-    link.href = 'historisch.html?' + new URLSearchParams({date, param});
+    link.href = 'historisch.html?' + new URLSearchParams({date, param, v:'20261117-jaarextremen'});
     link.textContent = date.split('-').reverse().join('-');
     link.target = '_blank';
     link.rel = 'noopener';
