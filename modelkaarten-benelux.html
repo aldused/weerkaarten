@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://data.weerlab.nl" crossorigin>
 <title>Modelkaarten Benelux · Weerlab</title>
 <style>:root{--ink:#14253b;--muted:#52647b;--accent:#073d79;--line:#d5dfeb;--paper:#fff;--bg:#edf3f9;font:16px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg)}
 *{box-sizing:border-box}body{margin:0}button,select,input{font:inherit;color:inherit}button,select{cursor:pointer}button{touch-action:manipulation}a{color:#174f8d}button:focus-visible,select:focus-visible,input:focus-visible,canvas:focus-visible{outline:3px solid #0084bc;outline-offset:2px}[hidden]{display:none!important}
@@ -270,6 +271,7 @@ const feedRequests = new Map();
 const liveFeeds = new Map();
 let pendingLocation;
 let waitingForDefault;
+const useLiveData=/^https?:$/.test(location.protocol);
 const liveBase = new URLSearchParams(location.search).get('localData')==='1' &&
   ['localhost','127.0.0.1'].includes(location.hostname)
   ? new URL('modelkaarten-live/',location.href).href
@@ -387,17 +389,20 @@ function windColor(x){return state.unit==='bft' ? bftColors[beaufort(x)] : windL
 const toWind = (x, gust=false, short=false) => !Number.isFinite(x) ? '—' : state.unit==='bft'
   ? (gust?'≈ ':'')+beaufort(x)+(short?'':' Bft') : num(x)+(short?'':' km/u');
 
-async function load(step,run){
-  if(cache.has(step)){
-    const fields=cache.get(step);
+function load(step,run){
+  let pending=cache.get(step);
+  if(pending){
     cache.delete(step);
-    cache.set(step,fields);
-    return fields;
+  }else{
+    const decode=step.interpolation?interpolateFrame(step,run):decodeFrame(step,run);
+    pending=decode.catch(error=>{
+      if(cache.get(step)===pending)cache.delete(step);
+      throw error;
+    });
   }
-  const fields=step.interpolation?await interpolateFrame(step,run):await decodeFrame(step,run);
-  cache.set(step,fields);
+  cache.set(step,pending);
   if(cache.size>16)cache.delete(cache.keys().next().value);
-  return fields;
+  return pending;
 }
 
 async function interpolateFrame(step,run){
@@ -439,7 +444,7 @@ async function decodeFrame(step,run){
   fields.sunPeriod = sunHours(step) * 60;
   fields.sunEstimated = step.sunEstimated !== false;
   fields.regional = !!run.regional;
-  const precipKind = new Uint8Array(n), rate = new Float32Array(n);
+  const precipKind = new Uint8Array(n), rate = new Float32Array(n), strength = new Uint8Array(n);
   for(let i=0;i<n;i++){
     const ri=fields.rain?.[i] || 0, sn=fields.snow?.[i] || 0;
     const fr=fields.fzra?.[i] || 0, ip=fields.ipel?.[i] || 0;
@@ -447,11 +452,15 @@ async function decodeFrame(step,run){
     const rawType=fields.ptype?.[i];
     const p=rawType===7?5:rawType;
     rate[i] = Math.max(ri,sn,fr,ip);
-    if(rate[i]>=.045) precipKind[i] = p>=1 && p<=8 ? p : fr>0 ? 5 : ip>0 ? 6 : sn>ri ? 2 : 1;
+    if(rate[i]>=.045){
+      precipKind[i] = p>=1 && p<=8 ? p : fr>0 ? 5 : ip>0 ? 6 : sn>ri ? 2 : 1;
+      strength[i]=Math.max(0,intensity.findLastIndex(v=>rate[i]>=v));
+    }
   }
   fields.precipKind=precipKind;
   fields.ptypeMap=fields.rain ? precipKind : null;
   fields.rate=rate;
+  fields.strength=strength;
   return fields;
 }
 
@@ -493,6 +502,21 @@ function bilinear(f,x,y){
   const p=f[index(i,j)],q=f[index(i+1,j)],r=f[index(i,j+1)],s=f[index(i+1,j+1)];
   return Number.isFinite(p+q+r+s) ? (1-b)*(p+(q-p)*a)+b*(r+(s-r)*a) : f[index(x,y)];
 }
+function rasterAxis(length,start,step,limit,stride){
+  const axis=[];
+  for(let i=0;i<length;i++){
+    const point=start+i*step, low=Math.floor(point);
+    axis.push({lo:clamp(low,0,limit-1)*stride,hi:clamp(low+1,0,limit-1)*stride,
+      near:clamp(Math.round(point),0,limit-1)*stride,fraction:point-low});
+  }
+  return axis;
+}
+function rasterValue(field,x,y,nearest){
+  if(!field)return NaN;
+  const p=field[y.lo+x.lo],q=field[y.lo+x.hi],r=field[y.hi+x.lo],s=field[y.hi+x.hi];
+  const a=x.fraction,b=y.fraction;
+  return Number.isFinite(p+q+r+s)?(1-b)*(p+(q-p)*a)+b*(r+(s-r)*a):field[nearest];
+}
 function paintRaster(ctx,fields){
   if(!fields || (state.layer!=='weather'&&!fields[state.layer]))return;
   const rw=Math.min(850,Math.max(1,Math.round(width*.86))),rh=Math.min(890,Math.max(1,Math.round(height*.86)));
@@ -501,21 +525,23 @@ function paintRaster(ctx,fields){
   const topLeft=gridPoint(...ll(.5*width/rw,.5*height/rh));
   const right=gridPoint(...ll(1.5*width/rw,.5*height/rh))[0]-topLeft[0];
   const down=gridPoint(...ll(.5*width/rw,1.5*height/rh))[1]-topLeft[1];
+  const columns=rasterAxis(rw,topLeft[0],right,grid.w,1);
+  const rows=rasterAxis(rh,topLeft[1],down,grid.h,grid.w);
   const layer=state.layer, scalar=fields[layer], showFog=$('fog').checked;
   const sunBin=sunScaleHours()*10;
   for(let yy=0;yy<rh;yy++)for(let xx=0;xx<rw;xx++){
-    const x=topLeft[0]+xx*right,y=topLeft[1]+yy*down,k=index(x,y),pos=4*(yy*rw+xx);
+    const x=columns[xx],y=rows[yy],k=x.near+y.near,pos=4*(yy*rw+xx);
     let color,alpha;
     if(layer==='weather'){
-      const cloud=clamp((bilinear(fields.tcc,x,y)||0)/100,0,1);
       const p=fields.precipKind[k];
       if(p){
-        const strength = intensity.findLastIndex(v=>fields.rate[k]>=v);
-        color=pShades[p][Math.max(0,strength)];
-        alpha=215+Math.max(0,strength)*6;
+        const strength=fields.strength[k];
+        color=pShades[p][strength];
+        alpha=215+strength*6;
       }else if(showFog && Number.isFinite(fields.vis?.[k]) && fields.vis[k]<1000 && (xx+yy)%7<3){
         color=fields.vis[k]<200?[148,81,14]:[200,139,42];alpha=fields.vis[k]<200?195:150;
       }else{
+        const cloud=clamp((rasterValue(fields.tcc,x,y,k)||0)/100,0,1);
         color=[102,113,129];alpha=Math.round(cloud*135);
       }
     }else if(layer==='ptypeMap'){
@@ -524,7 +550,7 @@ function paintRaster(ctx,fields){
       color=pColors[p];
       alpha=218;
     }else{
-      const v=bilinear(scalar,x,y);
+      const v=rasterValue(scalar,x,y,k);
       if(!Number.isFinite(v)){
         if(layer==='sdep' && (xx+yy)%8<3){out[pos]=117;out[pos+1]=131;out[pos+2]=149;out[pos+3]=85;}
         continue;
@@ -971,7 +997,7 @@ function updateRunStrips(step){
 function hideTips(){
   $('tip').hidden=$('compare-tip').hidden=true;
 }
-async function setFrame(i){
+async function setFrame(i,preferLive=false){
   const run=state.run;
   const request=++requestID;
   state.idx=clamp(i,0,run.steps.length-1);
@@ -981,22 +1007,38 @@ async function setFrame(i){
   const other=comparison.active ? otherRun.steps.find(s=>Date.parse(s.valid)===stamp) : null;
   Object.assign(comparison,{step:other||null,frame:null,loading:!!other,failed:false});
   timeControls();updateRunStrips(step);updateLegend();sync();hideTips();
-  showNotice('Kaart laden…');updateNotice();placeData();schedule();
+  showNotice('Kaart laden…');updateNotice();placeData();
+  if(preferLive&&useLiveData&&!run.live){
+    await new Promise(resolve=>setTimeout(resolve,400));
+    if(request!==requestID)return;
+  }
   const primary=load(step,run).then(fields=>{
     if(request!==requestID)return;
     state.frame=fields;updateNotice();placeData();schedule();
   }, error=>{
-    if(request===requestID){showNotice('De kaart kon niet worden geladen.');console.error(error);}
+    if(request===requestID){showNotice('De kaart kon niet worden geladen.');schedule();console.error(error);}
   });
   const secondary=other&&load(other,otherRun).then(fields=>{
     if(request!==requestID)return;
     comparison.frame=fields;comparison.loading=false;updateNotice();placeData();schedule();
   },error=>{
     if(request===requestID){
-      comparison.loading=false;comparison.failed=true;updateNotice();console.error(error);
+      comparison.loading=false;comparison.failed=true;updateNotice();schedule();console.error(error);
     }
   });
   await Promise.all([primary,secondary]);
+  if(request===requestID&&state.frame&&run.live&&!navigator.connection?.saveData){
+    const next=run.steps[state.idx+1];
+    if(!next)return;
+    const warm=()=>{
+      if(request!==requestID)return;
+      load(next,run).catch(()=>{});
+      const following=other&&otherRun.steps.find(s=>Date.parse(s.valid)===Date.parse(next.valid));
+      if(following)load(following,otherRun).catch(()=>{});
+    };
+    if(window.requestIdleCallback)window.requestIdleCallback(warm,{timeout:250});
+    else setTimeout(warm,80);
+  }
 }
 function setLayer(layer){
   if(!Object.hasOwn(titles,layer))return;
@@ -1074,7 +1116,7 @@ function validFeed(feed,key){
       (!i||Date.parse(run.steps[i-1].valid)<Date.parse(s.valid))));
 }
 async function refreshModel(key){
-  if(!/^https?:$/.test(location.protocol)||feedRequests.has(key))return;
+  if(!useLiveData||feedRequests.has(key))return;
   const request=liveJson(liveBase+key+'/runs.json');
   feedRequests.set(key,request);
   try{
@@ -1138,7 +1180,7 @@ $('model-select').addEventListener('change',()=>{
   compareChoices(null);
   compareMode(comparison.active);
   makeDays();
-  setFrame(closest(state.run,valid));
+  setFrame(closest(state.run,valid),true);
   refreshModel(modelKey);
 });
 $('compare').addEventListener('click',()=>{
@@ -1404,11 +1446,14 @@ function restoreLocation(fragment=location.hash){
   Object.assign(comparison,{step:null,frame:null,loading:false,failed:false});
   state.frame=null;
   makeDays();setLayer(hash.get('kaart')||requestedLayer||'weather');setUnit(hash.get('wind')||'kmh');
-  setFrame(state.idx);
+  setFrame(state.idx,true);
   pendingLocation=(runId||compareId)?
     {key:modelKey,runId,compareId,lead:hash.has('lead')?Number(hash.get('lead')):NaN,request:requestID}:null;
-  refreshModel(modelKey);
-  if(!models[defaultModel].runs.length)refreshModel(defaultModel);
+  const preferred=waitingForDefault!==undefined?defaultModel:modelKey;
+  refreshModel(preferred).then(()=>{
+    if(waitingForDefault!==undefined)refreshModel(modelKey);
+    else if(!models[defaultModel].runs.length)refreshModel(defaultModel);
+  });
 }
 window.addEventListener('hashchange',()=>restoreLocation());
 restoreLocation();
