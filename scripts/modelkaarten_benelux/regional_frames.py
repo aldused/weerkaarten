@@ -205,9 +205,9 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
             sun = f['zon'][0]
             encoded['sun'] = np.where(np.isfinite(sun), np.rint(np.clip(sun, 0, 60)/2), 255).astype('uint8')
         elif 'straling' in f:
-            encoded['sun'] = sunshine_minutes(t, 1, f['straling'][0]*3600)
+            encoded['sun'] = sunshine_minutes(t, 1, f['straling'][0]*3600, GRID)
         elif t in solar:
-            encoded['sun'] = sunshine_minutes(t, 1, solar[t]*3600)
+            encoded['sun'] = sunshine_minutes(t, 1, solar[t]*3600, GRID)
         raw = b''.join(a.tobytes() for a in encoded.values())
         steps.append(dict(lead=lead, valid=t.isoformat(), keys=list(encoded),
                           sunHours=1, sunEstimated=not sun_native, gustPeriod=None,

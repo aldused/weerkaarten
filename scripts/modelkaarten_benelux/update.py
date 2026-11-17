@@ -17,7 +17,7 @@ from regional_frames import GRID, NATIVE, native_model
 
 UTC = timezone.utc
 REMOTE = 'r2:weerlab-data/modelkaarten-benelux'
-KEEP = 4
+KEEP = 5  # Nieuwste run plus vier eerdere runs.
 SCHEMA = 1
 ECMWF_MODELS = {'ecmwf025': 'ecmwf025-grib', 'ecmwf': 'ecmwf-grib'}
 
@@ -152,11 +152,9 @@ def ecmwf(key, project, cache, previous):
             source_grid = json.loads(manifest)['grid']
             grid = crop_grid(source_grid,crop_bounds(source_grid))
             old = prior.get(rid)
-            # The newest two runs always get supplemental fields.
+            # Herbruik bestaande oudere snapshots en vul ontbrekende runs aan uit de broncache.
             if old and (old.get('_source')==digest(manifest) and old.get('_complete') or
                         not old.get('_source') and i>=2):
-                continue
-            if not old and i>=2 and len(prior)>=2:
                 continue
             grid,new = ecmwf_run(root,rid,manifest,cache,old)
             prior[rid]=new
