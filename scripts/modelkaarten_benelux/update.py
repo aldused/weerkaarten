@@ -190,6 +190,40 @@ def publish(rclone, remote, key, assets, manifest):
                     '--header-upload','Cache-Control: no-store','--ignore-times',*common],check=True)
 
 
+def clean_published_assets(key, args):
+    folder = args.state/key
+    published = (folder/'remote-fingerprint').read_text()
+    cleaned = folder/'cleanup-fingerprint'
+    if cleaned.exists() and cleaned.read_text()==published:
+        return 0
+
+    model_remote = f'{args.remote}/{key}'
+    raw = subprocess.check_output([args.rclone,'cat',f'{model_remote}/runs.json'])
+    feed = json.loads(raw)
+    feed.pop('updated',None)
+    if (feed.get('schema')!=SCHEMA or feed.get('key')!=key or
+            digest(json_bytes(feed))!=published):
+        raise ValueError('Gepubliceerd manifest wijkt af, kaartbestanden behouden')
+
+    run_ids = {run['id'] for run in feed['runs']}
+    removed = 0
+    if len(run_ids)==KEEP and all(re.fullmatch(r'\d{10}',rid) for rid in run_ids):
+        oldest = min(run_ids)
+        assets_remote = f'{model_remote}/assets'
+        names = subprocess.check_output([args.rclone,'lsf',assets_remote,'--files-only'],text=True).splitlines()
+        generated = re.compile(re.escape(key)+r'-(\d{10})-[a-f0-9]{20}\.json')
+        expired = [name for name in names if (match:=generated.fullmatch(name)) and match[1]<oldest]
+        if expired:
+            with tempfile.TemporaryDirectory(dir=folder) as temp:
+                listing = Path(temp)/'expired-assets.txt'
+                listing.write_text('\n'.join(expired)+'\n')
+                subprocess.run([args.rclone,'delete',assets_remote,'--files-from-raw',str(listing)],check=True)
+            removed = len(expired)
+
+    atomic(cleaned,published.encode())
+    return removed
+
+
 def update(key, args, seeds):
     folder = args.state/key
     folder.mkdir(parents=True,exist_ok=True)
@@ -255,6 +289,10 @@ def main():
                 try:
                     _,run,changed=task.result()
                     print(key,run,'bijgewerkt' if changed else 'al actueel',flush=True)
+                    if a.publish:
+                        removed=clean_published_assets(key,a)
+                        if removed:
+                            print(f'{key}: {removed} verlopen kaartbestanden verwijderd',flush=True)
                 except Exception as exc:
                     failed=True
                     print(f'{key}: {type(exc).__name__}: {str(exc).splitlines()[0][:250]}',file=sys.stderr,flush=True)

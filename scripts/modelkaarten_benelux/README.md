@@ -15,9 +15,10 @@ voor hetzelfde runnummer. Het KNMI-proces gebruikt de bestaande API-toegang via
 De worker zet de kaartbestanden eerst in de bestaande R2-databucket. Daarna
 publiceert hij per model `runs.json` met `Cache-Control: no-store`. Het
 manifest verwijst naar de nieuwste run en maximaal vier eerder beschikbare runs.
-De ECMWF-updater vult het overzicht aan uit de aanwezige broncache. De payloads zijn JSON en hun naam
-is gebaseerd op de inhoud. Delen van een oude run die de bron heeft verwijderd
-worden niet hergebruikt voor een nieuw tijdstip.
+De ECMWF-updater vult het overzicht aan uit de aanwezige broncache. De naam van
+elk kaartbestand is gebaseerd op de inhoud. Zodra vijf runs gepubliceerd zijn,
+verwijdert de updater in de modelmap de kaartbestanden van runs die ouder zijn
+dan de oudste run in het gepubliceerde manifest.
 
 ## Installatie op de bestaande datamac
 
