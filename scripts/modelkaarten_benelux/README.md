@@ -31,7 +31,7 @@ python3 scripts/modelkaarten_benelux/install.py \
   --seed "$PWD/modelkaarten-benelux.html"
 ```
 
-De LaunchAgent draait elke vijf minuten. Een model dat al actueel is veroorzaakt
+De LaunchAgent controleert elke minuut op nieuwe bronkaarten. Een model dat al actueel is veroorzaakt
 geen upload. Log en werkdata staan in
 `~/Library/Application Support/Weerlab/Modelkaarten`.
 Voor een lokale proef kan `update.py` zonder `--publish` draaien. Dan schrijft

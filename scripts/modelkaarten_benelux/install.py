@@ -32,7 +32,7 @@ def main():
         sys.executable,'-u',str(code/'update.py'),'--project',str(args.project.resolve()),
         '--state',str(root/'data'),'--seed',str(args.seed.resolve()),'--publish','--rclone',args.rclone],
         EnvironmentVariables={'PATH':'/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'},
-        RunAtLoad=True,StartInterval=300,ProcessType='Background',
+        RunAtLoad=True,StartInterval=60,ProcessType='Background',
         StandardOutPath=str(root/'update.log'),StandardErrorPath=str(root/'update.log'))
     launch=Path.home()/'Library/LaunchAgents'
     launch.mkdir(parents=True,exist_ok=True)
