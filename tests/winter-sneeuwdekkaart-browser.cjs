@@ -71,7 +71,7 @@ const server=http.createServer((req,res)=>{
    await page.setViewportSize({width,height:844});
    const baseline=await page.evaluate(()=>{const map=document.querySelector('#sneeuwdekkaart');map.hidden=true;const width=document.documentElement.scrollWidth;map.hidden=false;return width;});
    for(const expanded of [true,false]){
-    await page.locator('#snowmap-details > details').evaluate((e,open)=>{e.open=open;},expanded);
+    await page.locator('#snowmap-annual-details').evaluate((e,open)=>{e.open=open;},expanded);
     const sizes=await page.evaluate(()=>{const map=document.querySelector('#sneeuwdekkaart');return {page:document.documentElement.scrollWidth,map:map.scrollWidth,available:map.clientWidth};});
     assert(sizes.map<=sizes.available+1,`Map fits at ${width}px: ${JSON.stringify(sizes)}`);
     assert(sizes.page<=Math.max(width,baseline)+1,`Map adds no page overflow at ${width}px`);
@@ -84,7 +84,43 @@ const server=http.createServer((req,res)=>{
   assert.equal(await page.inputValue('#snowmap-period'),'1961-1990');
   assert.equal(await page.locator('#snowmap-value').innerText(),'22,7');
   await page.locator('#sneeuwdekkaart').screenshot({path:'/private/tmp/sneeuwdekkaart-1961-mobile.png'});
+  // Snowfall uses its official 2003–2020 period and a separate station network.
+  await page.click('#snowmap-type-fall');
+  await page.waitForFunction(()=>document.querySelector('#sneeuwdekkaart').dataset.state==='ready'&&document.querySelector('#snowmap-period-label').textContent==='2003–2020');
+  assert.equal(await page.locator('#snowmap-value').innerText(),'18,9');
+  assert.equal(await page.inputValue('#snowmap-station'),'260');
+  assert.match(await page.locator('#snowmap-title').innerText(),/Waar sneeuwt/);
+  assert.equal(await page.locator('#snowmap-svg [data-station]').count(),14);
+  assert.equal(await page.locator('#snowmap-station option').count(),14);
+  assert.match(await page.locator('#snowmap-status').innerText(),/11 gepubliceerde jaarnormalen/);
+  assert.match(await page.locator('#snowmap-unit').innerText(),/^sneeuwdagen/);
+  assert.equal(await page.locator('#snowmap-annual-details').isVisible(),false);
+  assert.equal(await page.locator('#snowmap-monthly-details').isVisible(),true);
+  assert.equal(await page.locator('#snowmap-cover-source').isVisible(),false);
+  assert.match(await page.locator('#snowmap-fall-source').innerText(),/niet rechtstreeks vergelijkbaar/);
+  assert.equal(await page.locator('#snowmap-months tr').count(),12);
+  await page.selectOption('#snowmap-station','280');
+  assert.equal(await page.locator('#snowmap-value').innerText(),'Geen jaarnormaal');
+  assert.equal(await page.locator('#snowmap-months tr').nth(3).locator('td').textContent(),'Geen normaal');
+  assert.equal(await page.locator('#snowmap-months tr').nth(6).locator('td').textContent(),'0,0');
+  await page.selectOption('#snowmap-station','260');
+  const snowfallCSV=page.waitForEvent('download');await page.click('#snowmap-download');
+  assert.match(fs.readFileSync(await (await snowfallCSV).path(),'utf8'),/260;De Bilt;18,9;2003-2020/);
+  await page.setViewportSize({width:1280,height:1000});
+  await page.locator('#sneeuwdekkaart').screenshot({path:'/private/tmp/sneeuwdagenkaart-desktop.png'});
+  for(const width of [320,390]){
+   await page.setViewportSize({width,height:844});
+   await page.locator('#snowmap-monthly-details').evaluate(e=>{e.open=true;});
+   assert(await page.evaluate(()=>{const map=document.querySelector('#sneeuwdekkaart');return map.scrollWidth<=map.clientWidth+1;}),`Snowfall map fits ${width}px`);
+  }
+  await page.locator('#sneeuwdekkaart').screenshot({path:'/private/tmp/sneeuwdagenkaart-mobile.png'});
+  await page.click('#snowmap-type-cover');
+  await page.waitForFunction(()=>document.querySelector('#sneeuwdekkaart').dataset.state==='ready'&&document.querySelector('#snowmap-period-label').textContent==='1961–1990');
+  assert.equal(await page.inputValue('#snowmap-station'),'550');assert.equal(await page.locator('#snowmap-value').innerText(),'22,7');
+  await page.goto(`http://127.0.0.1:${server.address().port}/winter.html?sneeuwkaart=sneeuwval#sneeuwdekkaart`);
+  await page.waitForFunction(()=>document.querySelector('#sneeuwdekkaart').dataset.state==='ready');
+  assert.equal(await page.inputValue('#snowmap-period'),'2003-2020');assert.equal(await page.locator('#snowmap-value').innerText(),'18,9');
   assert.deepEqual(errors,[]);
-  console.log('PASS: both climate periods and direct historical link, measured normals, incomplete-series display, map selection and search, zoom, keyboard, CSV, desktop/mobile and no browser errors');
+  console.log('PASS: snowfall and snow cover, both climate periods and direct historical link, measured normals, incomplete-series display, map selection and search, zoom, keyboard, CSV, desktop/mobile and no browser errors');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());

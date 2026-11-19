@@ -94,3 +94,36 @@ onder hetzelfde stationsnummer verschijnt het station alleen in de tabel.
 De gegenereerde JSON bevat controlesommen van alle bronbestanden; de CSV bevat
 stationnormalen en meetdekking. Het is een berekening uit bronmetingen, geen
 ruimtelijke interpolatie of correctie voor stationsverplaatsingen.
+
+## Kaart sneeuwdagen (sneeuwval)
+
+```bash
+python3 winter-tools/bouw_sneeuwval_normalenkaart.py
+```
+
+De officiële KNMI-tabel **Gemiddeld aantal dagen met sneeuwval** staat op
+PDF-pagina 19 van [Aantal dagen met, klimaatnormalen 1991–2020](https://cdn.knmi.nl/knmi/map/page/klimatologie/klimaatatlas/tabel/stationsdata/aantal-dagen-met_9120.pdf#page=19).
+De voetnoot en [KNMI-methodetoelichting](https://www.knmi.nl/kennis-en-datacentrum/achtergrond/achtergrondinformatie-berekening-klimaatnormalen-1991-2020)
+vermelden dat sneeuwval feitelijk over **2003–2020** is berekend, vanwege de
+omschakeling naar automatische waarnemingen. Deze gemiddelden zijn niet
+rechtstreeks vergelijkbaar met de eerdere visuele sneeuwvalnormalen.
+
+`bronnen/KNMI-sneeuwvalnormalen-2003-2020.csv` bevat de 14 rijen van die tabel,
+inclusief alle maand-, seizoen- en jaarwaarden. Overgenomen met
+`pdftotext -layout -f 19 -l 19` en visueel gecontroleerd tegen de PDF-pagina.
+Een punt is niet voorgekomen (nul), een streep is ontbrekend. De jaarnormaal
+blijft ontbreken bij Voorschoten, Hoorn/Terschelling en Eelde; de generator
+maakt geen jaartotaal van afgeronde maandwaarden. Er worden geen aantallen
+volledige meetjaren of meetdagen verzonnen: de publicatie vermeldt die niet.
+
+`bronnen/KNMI-uurstations-sneeuwval.csv` bevat de coördinaten uit de
+stationskoppen van de KNMI-uurselectie januari 2020, uit de bestaande
+uurcache (`202001.txt.gz`, selectie WW:IX:S voor alle stations). Sneeuwval
+gebruikt KNMI-weerstations; sneeuwdek gebruikt een ander, dichter meetnet van
+neerslagstations. Stationsnummers tussen die netten zijn geen koppelsleutel.
+De kaart wisselt op stationsnaam als een station in beide netten voorkomt.
+
+De generator schrijft `winter-data/sneeuwval-normalen-2003-2020.json` en `.csv`.
+De kaart toont de bronperiode en bronlinks, maandwaarden en onbekende waarden,
+met dezelfde kleurenschaal als de sneeuwdekkaart en zonder interpolatie.
+Een directe link gebruikt `winter.html?sneeuwkaart=sneeuwval#sneeuwdekkaart`.
