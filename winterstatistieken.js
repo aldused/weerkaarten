@@ -35,6 +35,21 @@
   const name = id => source.names[kind][id] || `Station ${id}`;
   const dates = (start, end) => !start && !end ? '—' : formatDate(start) + ' – ' + formatDate(end);
 
+  function snowContext(leaders) {
+    if (!leaders.length) return 'Geen gemeten sneeuwdek';
+    const groups = new Map();
+    for (const record of leaders) {
+      const key = JSON.stringify([record[2], record[3]]);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(record);
+    }
+    return [...groups.values()].map(records => {
+      const places = records.slice(0, 3).map(record => name(record[0])).join(', ');
+      const more = records.length > 3 ? ` en ${records.length - 3} andere stations` : '';
+      return `${places}${more} · ${dates(records[0][2], records[0][3])}`;
+    }).join('; ');
+  }
+
   function summarize(rows) {
     const hits = rows.filter(row => row[1] !== null);
     if (kind === 'cold') {
@@ -49,9 +64,7 @@
     }
     const highest = hits.reduce((max, row) => Math.max(max, row[1]), 0);
     const leaders = hits.filter(row => highest > 0 && row[1] === highest);
-    const places = leaders.slice(0, 3).map(row => name(row[0])).join(', ');
-    const more = leaders.length > 3 ? ` en ${leaders.length - 3} andere stations` : '';
-    return {value: hits.length ? highest : null, context: places + more || 'Geen gemeten sneeuwdek', leaders};
+    return {value: hits.length ? highest : null, context: snowContext(leaders), leaders};
   }
 
   function el(tag, text) {
@@ -118,10 +131,9 @@
     const years = Object.keys(series).map(Number);
     const summaries = years.map(y => summarize(series[y]));
     const stats = summaries[years.indexOf(year)];
-    const leader = stats.leaders?.length === 1 ? stats.leaders[0] : null;
     byId('status').textContent = `${metrics[kind].title} · ${label(year)}`;
     byId('value').textContent = valueText(stats.value);
-    byId('context').textContent = stats.context + (leader ? ' · ' + dates(leader[2], leader[3]) : '');
+    byId('context').textContent = stats.context;
     byId('definition').textContent = metrics[kind].definition;
     byId('graphic').hidden = false;
 
