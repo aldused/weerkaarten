@@ -1,0 +1,40 @@
+// NODE_PATH=<Playwright modules> node tests/stationsanalyse-vragen-browser.cjs
+const {chromium}=require('playwright');
+const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
+const root=process.env.THRESHOLD_TEST_ROOT||path.resolve(__dirname,'..');
+const stage=process.env.RECORDS_SCREENSHOTS||'/tmp/stationsanalyse-vorst';fs.mkdirSync(stage,{recursive:true});
+const dataRoot=process.env.RECORDS_DATA_ROOT||root;
+const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(name.includes('..'))return res.writeHead(403).end();const local=path.join(root,name),file=fs.existsSync(local)?local:path.join(dataRoot,name);if(!fs.existsSync(file))return res.writeHead(404).end();res.setHeader('Content-Type',name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':name.endsWith('.json')?'application/json':'text/html');fs.createReadStream(file).pipe(res);});
+(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true,channel:'chrome'});try{
+ const page=await browser.newPage({viewport:{width:1440,height:1000},timezoneId:'Europe/Amsterdam'}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));await page.route('https://**/*',r=>r.abort());
+ await page.clock.install({time:new Date('2026-11-19T10:00:00+01:00')});
+ await page.goto(`http://127.0.0.1:${server.address().port}/stationsanalyse.html`);
+ await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'),{},{timeout:60000});
+ assert.match(await page.locator('#q-answer-title').innerText(),/2026/);
+ assert.equal(await page.locator('#q-preset option[value^="frost-"]').count(),8);
+ await page.selectOption('#q-preset','frost-moderate-first');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
+ assert.match(await page.locator('.q-answer .q-eyebrow').innerText(),/-10 t\/m -5,1/);
+ assert.equal(await page.inputValue('#q-window'),'winterjaar');
+ const start=Date.now();await page.click('#q-scope-all');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'),{},{timeout:60000});
+ const networkMs=Date.now()-start;
+ assert.equal(await page.locator('#q-scope-all').getAttribute('aria-pressed'),'true');
+ await page.locator('.q-periods > summary').click();
+ const rows=await page.locator('.q-periods tbody tr').count();assert(rows>100);
+ const first=await page.locator('.q-periods tbody tr').last().innerText();console.log({networkMs,rows,oldest:first});
+ assert(await page.locator('.q-periods tbody').innerText().then(t=>t.includes('historisch')),'Historical station records displayed');
+ await page.selectOption('#q-focus','2025/2026');assert.match(await page.locator('#q-answer-title').innerText(),/°C/);
+ await page.screenshot({path:stage+'/desktop.png',fullPage:true});
+ await page.selectOption('#q-question','earlyFirst');assert.match(await page.locator('#q-answer-title').innerText(),/°C/);
+ await page.selectOption('#q-question','meanFirst');assert.match(await page.locator('#q-answer-title').innerText(),/niet vastgesteld/);
+ await page.selectOption('#q-preset','frost-very-severe-last');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
+ assert.equal(await page.inputValue('#q-op'),'le');assert.equal(await page.inputValue('#q-threshold'),'-15.1');assert.equal(await page.locator('#q-upper-label').isVisible(),false);
+ await page.selectOption('#q-preset','frost-light-last');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
+ await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:stage+'/mobile.png',fullPage:true});
+ await page.click('#q-scope-station');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));assert.equal(await page.inputValue('#q-station'),'260');
+ // A failed archive is visible and can be retried without reloading other stations.
+ await page.reload();await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
+ await page.route('**/records_nl_extreme.json*',r=>r.fulfill({status:503,body:'offline'}));await page.click('#q-scope-all');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Resultaten onvolledig'),{},{timeout:60000});assert.match(await page.locator('#q-status').innerText(),/historisch recordarchief/);
+ await page.unroute('**/records_nl_extreme.json*');await page.click('.q-submit');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
+ assert.deepEqual(errors,[]);console.log('PASS: desktop/mobile, eight frost presets, national historic records, ranks, station switching, archive failure/retry, no browser errors');
+ }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());
