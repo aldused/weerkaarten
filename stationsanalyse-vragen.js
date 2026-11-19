@@ -39,23 +39,28 @@ const stationList=Object.entries(STATIONS).filter(([id,s])=>!s.historisch&&/^\d+
 const cache=new Map();
 const params=new URLSearchParams(location.search);
 let viewMode=params.get('view')==='year'?'year':'all',focusYear=params.get('year')||null;
-el.innerHTML=`<header><p class="q-eyebrow">Eerste & laatste</p><h2>Wanneer vroor het voor het eerst of voor het laatst?</h2><p>Kies een vorstklasse en vergelijk alle jaren, of bekijk één winterjaar.</p></header>
+el.innerHTML=`<header><p class="q-eyebrow">Eerste & laatste</p><h2>Wanneer viel de eerste of laatste dag?</h2><p>Bekijk vorst, warme, zomerse en tropische dagen, neerslag, windstoten en zon. Kies een snelkeuze of stel zelf een grens in.</p></header>
 <form id="q-form">
+<section class="q-weather-choices" aria-labelledby="q-weather-title"><h3 id="q-weather-title">Wat wil je bekijken?</h3>
+<div class="q-weather-shortcuts" role="group" aria-label="Andere weerdagen">${[
+ ['warm-first','Warme dag · ≥ 20 °C'],['summer-first','Zomerse dag · ≥ 25 °C'],['tropical-first','Tropische dag · ≥ 30 °C'],['ice','IJsdag · maximum < 0 °C'],['rain','Natte dag · ≥ 10 mm'],['gust','Windstoot · ≥ 90 km/u'],['sun','Zonnige dag · ≥ 10 uur']
+].map(([key,label])=>`<button type="button" data-weather-preset="${key}" aria-pressed="false">${esc(label)}</button>`).join('')}</div>
+<div class="q-grid"><label>Snelkeuze<select id="q-preset">${presets.map(p=>`<option value="${p[0]}">${p[1]}</option>`).join('')}</select></label><label>Welke vraag wil je beantwoorden?<select id="q-question">${Object.entries(questions).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label></div></section>
 <section id="vorst" class="q-frost" aria-labelledby="q-frost-title">
-<h3 id="q-frost-title">1. Welke vorstklasse?</h3>
+<h3 id="q-frost-title">Of kies een vorstklasse</h3>
 <div class="q-frost-grid" role="group" aria-label="Vorstklasse">${frostClasses.map(f=>`<button type="button" class="q-frost-card" data-frost-class="${f.key}" aria-pressed="false"><strong>${f.label}</strong><span>${f.range}</span></button>`).join('')}</div>
 </section>
-<section class="q-simple-scope" aria-labelledby="q-scope-title"><h3 id="q-scope-title">2. Waar?</h3>
+<section class="q-simple-scope" aria-labelledby="q-scope-title"><h3 id="q-scope-title">Waar?</h3>
 <div class="q-scope" role="group" aria-label="Stationsbereik"><button type="button" id="q-scope-all" aria-pressed="true">Alle stations · ook historisch</button><button type="button" id="q-scope-station" aria-pressed="false">Eén station</button></div>
 <label id="q-station-label" hidden>KNMI-station<select id="q-station"></select></label>
 </section>
-<section id="q-simple-period" aria-labelledby="q-view-title"><h3 id="q-view-title">3. Welke jaren?</h3>
+<section id="q-simple-period" aria-labelledby="q-view-title"><h3 id="q-view-title">Welke jaren?</h3>
 <div class="q-scope" role="group" aria-label="Jaren vergelijken"><button type="button" id="q-view-all" aria-pressed="true">Alle jaren vergelijken</button><button type="button" id="q-view-year" aria-pressed="false">Eén winterjaar</button></div>
 <label id="q-year-label" hidden>Winterjaar<select id="q-year"></select></label>
 <p class="q-frost-note">Winterjaar: 1 oktober t/m 30 april. Meteorologische winter: 1 december t/m de laatste dag van februari.</p>
 </section>
-<details class="q-advanced" id="q-advanced"><summary>Andere weergrenzen en uitgebreide instellingen</summary>
-<div class="q-grid"><label>Snelkeuze<select id="q-preset">${presets.map(p=>`<option value="${p[0]}">${p[1]}</option>`).join('')}</select></label><label>Welke vraag wil je beantwoorden?<select id="q-question">${Object.entries(questions).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label></div>
+<details class="q-advanced" id="q-advanced"><summary>Grens en analyseperiode zelf instellen</summary>
+
 <details class="q-settings" open><summary>Grens en analyseperiode aanpassen</summary>
 <div class="q-grid"><label>Weervariabele<select id="q-field">${Object.entries(C.variables).slice(0,5).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}</select></label><label>Vergelijking<select id="q-op"><option value="ge">≥ Minstens</option><option value="gt">&gt; Meer dan</option><option value="le">≤ Hoogstens</option><option value="lt">&lt; Minder dan</option><option value="eq">= Precies</option><option value="between">Van … t/m …</option></select></label><label><span>Grens (<span id="q-unit">°C</span>)</span><input id="q-threshold" type="number" step="any" required value="20"></label>
 <label id="q-upper-label" hidden>Bovengrens (<span id="q-upper-unit">°C</span>)<input id="q-upper" type="number" step="any" value="-0.1"></label>
@@ -77,6 +82,7 @@ function today(){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{tim
 function syncScope(){const all=$('q-station').value==='all';$('q-scope-all').setAttribute('aria-pressed',String(all));$('q-scope-station').setAttribute('aria-pressed',String(!all));$('q-station-label').hidden=all;if(!all)lastStation=$('q-station').value;}
 function syncFrost(){
  const selected=$('q-preset').value;
+ for(const button of el.querySelectorAll('[data-weather-preset]'))button.setAttribute('aria-pressed',String(button.dataset.weatherPreset===selected||button.dataset.weatherPreset.replace(/-first$/,'-last')===selected));
  for(const button of el.querySelectorAll('[data-frost-class]'))button.setAttribute('aria-pressed',String(selected.startsWith('frost-'+button.dataset.frostClass+'-')));
 }
 function frostFor(a){return a.field==='TN'?frostClasses.find(f=>f.lower===null?a.op==='le'&&a.threshold===f.upper:a.op==='between'&&a.threshold===f.lower&&a.upper===f.upper):null;}
@@ -91,7 +97,7 @@ function syncView(a){
  $('q-view-year').setAttribute('aria-pressed',String(viewMode==='year'));
  $('q-year-label').hidden=viewMode!=='year';
  if(a){
-  const winter=a.start==='12-01'&&a.end==='02-29';$('q-view-year').textContent=winter?'Eén winter':a.cross?'Eén winterjaar':'Eén jaar';$('q-year-label').firstChild.textContent=winter?'Meteorologische winter':a.cross?'Winterjaar':'Jaar';
+  const winter=a.start==='12-01'&&a.end==='02-29';el.querySelector('#q-simple-period .q-frost-note').textContent=a.start==='01-01'&&a.end==='12-31'?'Kalenderjaar: 1 januari t/m 31 december.':'Winterjaar: 1 oktober t/m 30 april. Meteorologische winter: 1 december t/m de laatste dag van februari.';$('q-view-year').textContent=winter?'Eén winter':a.cross?'Eén winterjaar':'Eén jaar';$('q-year-label').firstChild.textContent=winter?'Meteorologische winter':a.cross?'Winterjaar':'Jaar';
   focusYear=a.periods.some(p=>p.label===focusYear)?focusYear:a.periods.at(-1)?.label||null;
   $('q-year').innerHTML=a.periods.slice().reverse().map(p=>`<option value="${p.label}" ${p.label===focusYear?'selected':''}>${p.label}${p.running?' (lopend)':''}</option>`).join('');
  }
@@ -122,16 +128,20 @@ function renderFrost(a,frost){
  const yearCards=selected?['first','last'].map(side=>`<article class="q-date-card"><h4>${side==='first'?'Eerste':'Laatste'} dag</h4><p class="q-big-date">${simpleDate(selected[side])}</p>${selected[side]?`<p class="q-record-year">${date(selected[side].time)}</p>${stationValues(selected[side],a)}`:`<p>${selected.complete?'Geen dag in deze vorstklasse.':'Er is geen passende meting gevonden.'}</p>`}</article>`).join(''):'';
  const tableRows=a.periods.slice().reverse().map(p=>`<tr><th scope="row">${p.label}${p.running?'<span class="q-running">lopend</span>':''}</th>${['first','last'].map(side=>`<td>${p[side]?`<strong>${date(p[side].time)}</strong>${stationValues(p[side],a)}`:p.complete?'Geen dag in deze klasse':'Niet gevonden'}</td>`).join('')}</tr>`).join('');
  $('q-output').innerHTML=`<section class="q-simple-results" aria-labelledby="q-simple-title"><header class="q-simple-heading"><p class="q-eyebrow">${esc(place)}</p><h3 id="q-simple-title">${frost.label} · ${viewMode==='all'?'alle jaren vergeleken':selected?.label||'geen jaar beschikbaar'}</h3><p class="q-range">${frost.range} · ${periodName}: ${windowLabel}</p></header>
- ${viewMode==='all'?`<p class="q-compare-intro">Wanneer viel de eerste of laatste dag met ${frost.label.toLowerCase()} het vroegst of het laatst binnen een ${periodName}? Vergelijking op dag en maand, over alle beschikbare jaren.</p><div class="q-record-grid">${recordCards}</div>`:`<div class="q-record-grid q-year-cards">${yearCards}</div>${selected?.running?'<p class="q-coverage-note">Dit winterjaar loopt nog. Er kunnen nog nieuwe metingen bijkomen.</p>':''}`}
- <p class="q-coverage-note">${viewMode==='year'?a.national?'Dit zijn de eerste en laatste gevonden metingen. Historische meetreeksen zijn niet altijd volledig.':selected?.complete?'Volledige dagreeks voor deze periode.':'Deze periode mist meetdagen of loopt nog; dit zijn de gevonden grensdatums.':a.national?`${a.recordPeriodCount} afgesloten perioden met volledige dagdekking van de beschikbare stations vergeleken. Historische noteringen vullen de datums aan. Het lopende winterjaar telt niet mee voor de records.`:`Records vergelijken volledige, afgesloten perioden. ${a.excluded} onvolledige of lopende perioden tellen niet mee voor de records; hun gevonden datums staan wel in de tabel.`}</p>
+ ${viewMode==='all'?`<p class="q-compare-intro">Wanneer viel de eerste of laatste dag met ${frost.label.toLowerCase()} het vroegst of het laatst binnen een ${periodName}? Vergelijking op dag en maand, over alle beschikbare jaren.</p><div class="q-record-grid">${recordCards}</div>`:`<div class="q-record-grid q-year-cards">${yearCards}</div>${selected?.running?'<p class="q-coverage-note">Deze periode loopt nog. Er kunnen nog nieuwe metingen bijkomen.</p>':''}`}
+ <p class="q-coverage-note">${viewMode==='year'?a.national?'Dit zijn de eerste en laatste gevonden metingen. Historische meetreeksen zijn niet altijd volledig.':selected?.complete?'Volledige dagreeks voor deze periode.':'Deze periode mist meetdagen of loopt nog; dit zijn de gevonden grensdatums.':a.national?`${a.recordPeriodCount} afgesloten perioden met volledige dagdekking van de beschikbare stations vergeleken. Historische noteringen vullen de datums aan. De lopende periode telt niet mee voor de records.`:`Records vergelijken volledige, afgesloten perioden. ${a.excluded} onvolledige of lopende perioden tellen niet mee voor de records; hun gevonden datums staan wel in de tabel.`}</p>
  <section class="q-simple-year-table"><h3>Overzicht per ${periodName}</h3><div class="q-scroll"><table><thead><tr><th scope="col">${periodName==='winterjaar'?'Winterjaar':'Jaar / seizoen'}</th><th scope="col">Eerste dag</th><th scope="col">Laatste dag</th></tr></thead><tbody>${tableRows||'<tr><td colspan="3">Geen jaren beschikbaar.</td></tr>'}</tbody></table></div></section>
  </section>`;
  $('q-output').hidden=false;
 }
 function render(a){
  const frost=frostFor(a);
- const simple=!!frost&&['first','last'].includes($('q-question').value);$('q-simple-period').hidden=!simple;
- if(simple){renderFrost(a,frost);return;}
+ const simple=['first','last'].includes($('q-question').value);$('q-simple-period').hidden=!simple;
+ if(simple){
+  const key=$('q-preset').value.replace(/-(first|last)$/,''),labels={warm:'Warme dag',summer:'Zomerse dag',tropical:'Tropische dag',autumn:'Vorstdag',spring:'Vorstdag',rain:'Natte dag',gust:'Windstoot',sun:'Zonnige dag'};
+  const range=a.op==='between'?`${number(a.threshold)} t/m ${number(a.upper)} ${a.variable.unit}`:`${symbols[a.op]} ${number(a.threshold)} ${a.variable.unit}`;
+  renderFrost(a,frost||{label:labels[key]||a.variable.label,range});return;
+ }
  const q=$('q-question').value,condition=frost?`${frost.label} · ${frost.range}`:a.op==='between'?`${a.variable.label} van ${number(a.threshold)} t/m ${number(a.upper)} ${a.variable.unit}`:`${a.variable.label} ${symbols[a.op]} ${number(a.threshold)} ${a.variable.unit}`,complete=a.periods.filter(p=>p.complete),chosen=a.periods.find(p=>p.label===document.getElementById('q-focus')?.value)||a.periods.at(-1);
  const map={earlyFirst:['first',false],lateFirst:['first',true],earlyLast:['last',false],lateLast:['last',true]},rankInfo=map[q],rank=rankInfo?a.rank(...rankInfo):[],side=q==='last'?'last':'first';
  let answer='';
@@ -175,7 +185,14 @@ async function run(){const token=++version;current=null;syncScope();$('q-status'
  $('q-status').dataset.state=failures.length?'error':'ready';$('q-status').textContent=failures.length?'Resultaten onvolledig. Niet geladen: '+failures.join(', ')+'. Klik opnieuw op ‘Beantwoord mijn vraag’ om te herproberen.':current.national?'Analyse gereed. Landelijke datums zijn uiterste beschikbare waarnemingen, inclusief historische records.':'Analyse gereed. Records en gemiddelden gebruiken uitsluitend volledige, afgesloten perioden.';
  }catch(e){if(token===version){$('q-status').dataset.state='error';$('q-status').textContent=e.message;$('q-output').hidden=true;}}}
 $('q-form').addEventListener('submit',e=>{e.preventDefault();run();});
-$('q-question').addEventListener('change',()=>{const key=$('q-preset').value;if(key.startsWith('frost-')){$('q-preset').value=['first','last'].includes($('q-question').value)?key.replace(/-(first|last)$/,'-'+$('q-question').value):'custom';syncFrost();}if(current)render(current);});
+$('q-question').addEventListener('change',()=>{
+ const key=$('q-preset').value,side=$('q-question').value;
+ if(/-(first|last)$/.test(key)){
+  const candidate=key.replace(/-(first|last)$/,'-'+side);
+  $('q-preset').value=presets.some(p=>p[0]===candidate)?candidate:'custom';
+ }
+ syncFrost();if(current)render(current);
+});
 $('q-station').addEventListener('change',run);
 $('q-scope-all').addEventListener('click',()=>{$('q-station').value='all';run();});
 $('q-scope-station').addEventListener('click',()=>{$('q-station').value=lastStation;run();});
@@ -184,9 +201,10 @@ function applyPreset(key,calculate=true){
  $('q-preset').value=key;
  if(![...$('q-field').options].some(o=>o.value===p[2]))$('q-field').add(new Option(C.variables[p[2]].label,p[2]));
  $('q-field').value=p[2];$('q-op').value=p[3];$('q-threshold').value=p[4];$('q-upper').value=p[8]??0;$('q-question').value=p[7];setWindow(p[5],p[6]);el.querySelector('.q-settings').open=p[0]==='custom';
- syncFrost();$('q-advanced').open=!key.startsWith('frost-');if(calculate)run();
+ syncFrost();$('q-advanced').open=key==='custom';if(calculate)run();
 }
 $('q-preset').addEventListener('change',()=>applyPreset($('q-preset').value));
+for(const button of el.querySelectorAll('[data-weather-preset]'))button.addEventListener('click',()=>applyPreset(button.dataset.weatherPreset));
 for(const button of el.querySelectorAll('[data-frost-class]'))button.addEventListener('click',()=>applyPreset('frost-'+button.dataset.frostClass+'-first'));
 for(const mode of ['all','year'])$('q-view-'+mode).addEventListener('click',()=>{viewMode=mode;syncView(current);if(current)render(current);});
 $('q-year').addEventListener('change',()=>{focusYear=$('q-year').value;if(current)render(current);});

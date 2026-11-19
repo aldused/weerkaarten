@@ -25,6 +25,19 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   assert.equal(await page.locator('#q-view-all').getAttribute('aria-pressed'),'true');
   assert.equal(await page.locator('#q-year').isVisible(),false,'All years is the default, with no mandatory year picker');
   assert.equal(await page.locator('#q-advanced').getAttribute('open'),null);
+  assert.equal(await page.locator('#q-preset').isVisible(),true);
+  assert.equal(await page.locator('#q-question').isVisible(),true);
+  for(const key of ['warm-first','summer-first','tropical-first','ice','rain','gust','sun'])assert.equal(await page.locator(`[data-weather-preset="${key}"]`).isVisible(),true);
+  for(const [key,field,threshold]of [['warm-first','TX','20'],['summer-first','TX','25'],['tropical-first','TX','30'],['ice','TX','0'],['rain','RH','10'],['gust','FXX','90'],['sun','SQ','10']]){
+   await page.locator(`[data-weather-preset="${key}"]`).click();await ready(page);
+   assert.equal(await page.inputValue('#q-field'),field);assert.equal(await page.inputValue('#q-threshold'),threshold);
+   assert.equal(await page.locator(`[data-weather-preset="${key}"]`).getAttribute('aria-pressed'),'true');
+   assert.equal(await page.locator('#q-advanced').getAttribute('open'),null);
+  }
+  await page.locator('[data-weather-preset="warm-first"]').click();await ready(page);await page.selectOption('#q-question','last');assert.equal(await page.inputValue('#q-preset'),'warm-last');
+  assert.equal(await page.locator('[data-record]').count(),4);assert.match(await page.locator('#q-simple-title').innerText(),/Warme dag/);assert.equal(await page.locator('#q-view-all').isVisible(),true);
+  await page.locator('[data-frost-class="moderate"]').click();await ready(page);
+
   assert.equal(await page.locator('[data-record]').count(),4);
   assert.equal(await page.locator('.q-frost-card').count(),4);
   for(const text of ['−0,1 °C tot −5,0 °C','−5,1 °C tot −10,0 °C','−10,1 °C tot −15,0 °C','−15,1 °C of lager'])assert((await page.locator('#vorst').innerText()).includes(text));
@@ -52,8 +65,8 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
    assert.equal(await page.locator(`[data-frost-class="${key}"]`).getAttribute('aria-pressed'),'true');
   }
   // Other weather questions and the meteorological winter remain available in advanced settings.
-  await page.locator('#q-advanced > summary').click();await page.selectOption('#q-preset','rain');await ready(page);
-  assert.match(await page.locator('#q-answer-title').innerText(),/2026/);
+  await page.selectOption('#q-preset','rain');await ready(page);
+  assert.match(await page.locator('#q-simple-title').innerText(),/Natte dag/);assert.equal(await page.locator('[data-record]').count(),4);
   await page.locator('[data-frost-class="moderate"]').click();await ready(page);
   await page.locator('#q-advanced > summary').click();await page.locator('.q-settings > summary').click();await page.selectOption('#q-window','winter');
   assert.equal(await page.inputValue('#q-start'),'01-12');assert.equal(await page.inputValue('#q-end'),'29-02');
