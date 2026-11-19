@@ -10,8 +10,9 @@
 <script src="winter.js?v=20261117-klimaatperioden" defer></script>
 <link rel="stylesheet" href="seizoenskalender.css?v=20261117-eerstesneeuw">
 <script src="seizoenskalender.js?v=20261117-klimaat1951" defer></script>
-<link rel="stylesheet" href="winter-sneeuwdekkaart.css?v=20261119-3">
-<script src="winter-sneeuwdekkaart.js?v=20261119-3" defer></script>
+<link rel="stylesheet" href="winter-sneeuwdekkaart.css?v=20261119-5">
+<script src="winter-sneeuwkaart-core.js?v=20261119-5" defer></script>
+<script src="winter-sneeuwdekkaart.js?v=20261119-5" defer></script>
 <link rel="stylesheet" href="winterstatistieken.css?v=20261117-normalen">
 <script src="winterstatistieken.js?v=20261119-sneeuwdatums" defer></script>
 <link rel="stylesheet" href="strooien.css?v=1">
@@ -107,10 +108,11 @@
   <section id="sneeuwdekkaart" class="section" aria-labelledby="snowmap-title">
     <div class="kicker">Klimaatkaart / <span id="snowmap-period-label">1991–2020</span></div>
     <h2 id="snowmap-title">Waar ligt het vaakst sneeuw?</h2>
-    <p class="intro">Bekijk het gemiddelde aantal sneeuwdagen of sneeuwdekdagen per kalenderjaar. Klik op een meetstation voor de cijfers en de beschikbare metingen.</p>
+    <p class="intro">Bekijk het gemiddelde aantal sneeuwdagen of sneeuwdekdagen per jaar, maand of seizoen. Klik op een meetstation voor de cijfers en de beschikbare metingen.</p>
     <div class="panel">
       <div class="snowmap-types" role="group" aria-label="Soort sneeuwkaart"><button id="snowmap-type-cover" type="button" aria-pressed="true">Sneeuwdekdagen <small>Sneeuw op de grond</small></button><button id="snowmap-type-fall" type="button" aria-pressed="false">Sneeuwdagen <small>Dagen met sneeuwval</small></button></div>
-      <div class="snowmap-period"><label><span id="snowmap-period-caption">Klimaatperiode</span><select id="snowmap-period"><option value="1961-1990">1961–1990 · oud klimaat</option><option value="1991-2020" selected>1991–2020 · recent klimaat</option></select></label></div>
+      <div class="snowmap-controls"><div class="snowmap-period"><label><span id="snowmap-period-caption">Klimaatperiode</span><select id="snowmap-period"><option value="1961-1990">1961–1990 · oud klimaat</option><option value="1991-2020" selected>1991–2020 · recent klimaat</option></select></label></div><div class="snowmap-period"><label>Jaar, maand of seizoen<select id="snowmap-scope"><option value="year">Hele jaar (jan–dec)</option></select></label></div></div>
+      <p id="snowmap-time-note" class="snowmap-help"></p>
       <div class="snowmap-head"><p id="snowmap-explanation">Elk gekleurd punt is een station met 30 volledige meetjaren. Donkerder blauw betekent meer sneeuwdekdagen.</p><a id="snowmap-download" class="download" href="winter-data/sneeuwdek-normalen-1991-2020.csv" download>Stationnormalen als CSV ↓</a></div>
       <p id="snowmap-status" role="status">Sneeuwdekkaart laden…</p>
       <div id="snowmap-canvas" hidden>
@@ -120,19 +122,21 @@
             <svg id="snowmap-svg" class="snowmap-svg" role="group" aria-labelledby="snowmap-svg-title"></svg><div id="snowmap-tooltip" class="snowmap-tooltip" hidden></div>
           </div>
           <div id="snowmap-legend" class="snowmap-legend" aria-label="Sneeuwdekdagen per jaar"><span><i style="background:#d7edf5"></i>0–5</span><span><i style="background:#9ccfe3"></i>5–10</span><span><i style="background:#559cbe"></i>10–15</span><span><i style="background:#256386"></i>15–20</span><span><i style="background:#103b59"></i>20–25</span><span><i style="background:#072c48"></i>25–30</span><span><i style="background:#031a2f"></i>30 of meer</span><span><i style="background:#b4bfc7"></i><span id="snowmap-missing-label">Geen volledige normaal</span></span></div>
-          <p class="snowmap-help">Dagen per kalenderjaar. Zoom in met + en verschuif de kaart met de muis, of kies een station op naam.</p></div>
+          <p id="snowmap-map-help" class="snowmap-help">Dagen per kalenderjaar. Zoom in met + en verschuif de kaart met de muis, of kies een station op naam.</p></div>
           <aside id="snowmap-details" class="snowmap-details" aria-label="Gegevens van het gekozen station">
             <label>Station kiezen<select id="snowmap-station" disabled><option>Stations laden…</option></select></label>
             <div aria-live="polite"><h3 id="snowmap-name"></h3><strong id="snowmap-value"></strong><p id="snowmap-unit"></p><p id="snowmap-coverage"></p><p id="snowmap-observations"></p><p id="snowmap-station-code"></p><p id="snowmap-position"></p></div>
-            <details id="snowmap-annual-details"><summary>De 30 kalenderjaren bekijken</summary><div class="table-wrap"><table><caption id="snowmap-years-caption"></caption><thead><tr><th>Jaar</th><th>Sneeuwdekdagen</th><th>Meetdagen</th></tr></thead><tbody id="snowmap-years"></tbody></table></div></details>
-            <details id="snowmap-monthly-details" hidden><summary>Gemiddelden per maand bekijken</summary><div class="table-wrap"><table><caption id="snowmap-months-caption"></caption><thead><tr><th>Maand</th><th>Sneeuwdagen</th></tr></thead><tbody id="snowmap-months"></tbody></table></div></details>
+            <details id="snowmap-annual-details"><summary id="snowmap-years-summary">De 30 kalenderjaren bekijken</summary><div class="table-wrap"><table><caption id="snowmap-years-caption"></caption><thead><tr><th>Jaar</th><th id="snowmap-years-count-heading">Sneeuwdekdagen</th><th>Meetdagen</th><th id="snowmap-years-hour-heading" hidden>Meeturen</th></tr></thead><tbody id="snowmap-years"></tbody></table></div></details>
+
           </aside>
         </div>
         <details><summary>Alle stationnormalen en meetdekking</summary><div class="snowmap-all-header"><label>Zoek station of nummer<input id="snowmap-search" type="search" placeholder="Bijvoorbeeld De Bilt" disabled></label><span id="snowmap-table-count" class="muted"></span></div><div class="table-wrap"><table><thead><tr><th>Nummer</th><th>Station</th><th>Dagen per jaar</th><th id="snowmap-table-coverage">Volledige jaren</th></tr></thead><tbody id="snowmap-table"></tbody></table></div></details>
       </div>
-      <p id="snowmap-cover-source" class="source-note">Geteld uit de KNMI-ochtendmeting om 08.00 UTC, van <span id="snowmap-source-period">1 januari 1991 t/m 31 december 2020</span>. Elke dag met sneeuwdek telt eenmaal, ook gebroken sneeuwdek en sneeuwhopen. Alleen 30 volledige kalenderjaren leveren een normaalwaarde op; een ontbrekende, tegenstrijdige of bekende verdachte oude registratie blijft onbekend. Stations met onvoldoende dekking zijn grijs. Dezelfde kleurenschaal geldt voor beide perioden. Kaartposities komen uit de KNMI-stationslijst 1991–2020; historische stations zonder eenduidige positie staan alleen in de tabel. Er is geen ruimtelijke interpolatie tussen de meetstations.</p>
+      <details class="snowmap-method"><summary>Definitie, meetdekking en bronnen</summary>
+      <p id="snowmap-cover-source" class="source-note">Geteld uit de KNMI-ochtendmeting om 08.00 UTC, van <span id="snowmap-source-period">1 januari 1991 t/m 31 december 2020</span>. Elke dag met sneeuwdek telt eenmaal, ook gebroken sneeuwdek en sneeuwhopen. Voor de gekozen maand, het gekozen seizoen of het hele jaar zijn 30 volledige meetperioden vereist; een ontbrekende, tegenstrijdige of bekende verdachte oude registratie blijft onbekend. Stations met onvoldoende dekking zijn grijs. Dezelfde kleurenschaal geldt voor beide perioden. Kaartposities komen uit de KNMI-stationslijst 1991–2020; historische stations zonder eenduidige positie staan alleen in de tabel. Er is geen ruimtelijke interpolatie tussen de meetstations.</p>
       <p id="snowmap-cover-links" class="source-note"><a href="https://daggegevens.knmi.nl/klimatologie/monv/reeksen">KNMI · sneeuwdekcode SX</a> · <a href="winter-tools/bronnen/Neerslagstations-1991-2020.csv">KNMI · gebruikte stationscoördinaten</a></p>
-      <div id="snowmap-fall-source" hidden><p class="source-note"><strong>Sneeuwdagen: dagen waarop sneeuw valt, ook als die niet blijft liggen.</strong> Dit zijn de gepubliceerde KNMI-normalen uit de klimaattabel 1991–2020. Voor sneeuwval gebruikt het KNMI de kortere meetperiode <strong>2003–2020</strong>, vanwege de overgang van visuele naar automatische waarnemingen. De waarden zijn daardoor niet rechtstreeks vergelijkbaar met oudere sneeuwvalnormalen. Alleen stations uit de sneeuwvaltabel worden getoond; grijs betekent dat het KNMI geen jaarnormaal publiceert. Ontbrekende waarden zijn geen nul en worden niet aangevuld. Er is geen ruimtelijke interpolatie.</p><p class="source-note"><a href="https://cdn.knmi.nl/knmi/map/page/klimatologie/klimaatatlas/tabel/stationsdata/aantal-dagen-met_9120.pdf#page=19">KNMI · sneeuwvalnormalen, pagina 19</a> · <a href="https://www.knmi.nl/kennis-en-datacentrum/achtergrond/achtergrondinformatie-berekening-klimaatnormalen-1991-2020">KNMI · toelichting meetperiode en methode</a></p></div>
+      <div id="snowmap-fall-source" hidden><p class="source-note"><strong>Sneeuwdagen: dagen waarop sneeuw valt, ook als die niet blijft liggen.</strong> Eigen telling uit KNMI-uurwaarnemingen, van 1 januari t/m 31 december in de gekozen klimaatperiode 1961–1990 of 1991–2020. Een dag met waargenomen sneeuwval telt eenmaal, ongeacht het aantal sneeuwuren. Een periodegemiddelde verschijnt bij minstens 24 van de 30 bruikbare referentiejaren. Alleen de gekozen maanden tellen mee: in ieder gebruikt jaar is een registratie op elke dag van die maanden én minstens 99% van de uurvakken vereist. Ontbrekende of tegenstrijdige uren worden niet ingevuld. Dit zijn gemiddelden van waargenomen sneeuwdagen; de reeks bevat de overgang van visuele naar automatische waarnemingen en is niet gehomogeniseerd. Dezelfde kleurenschaal geldt voor beide perioden; er is geen ruimtelijke interpolatie.</p><p class="source-note"><a href="https://www.knmi.nl/nederland-nu/klimatologie/uurgegevens">KNMI · uurwaarnemingen</a> · <a href="https://www.knmi.nl/kennis-en-datacentrum/achtergrond/achtergrondinformatie-berekening-klimaatnormalen-1991-2020">KNMI · toelichting verandering meetmethode</a></p></div>
+      </details>
     </div>
   </section>
 

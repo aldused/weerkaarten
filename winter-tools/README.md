@@ -82,8 +82,8 @@ Deze generator gebruikt de bestaande KNMI-SX-dagarchieven en de meegeleverde
 De kaart hergebruikt de kaartprojectie en grenzen van de neerslagstationspagina.
 Per kalenderjaar telt iedere geldige positieve SX-code als een sneeuwdekdag,
 ook 997–999. Een ontbrekende of tegenstrijdige dag maakt dat jaar onvolledig.
-Een normaalwaarde verschijnt uitsluitend bij 30 volledige kalenderjaren van
-de gekozen periode; onvolledige stations blijven herkenbaar in kaart en tabel.
+Een normaalwaarde verschijnt uitsluitend bij 30 volledig gemeten
+referentieperioden (de gekozen maand, het seizoen of het hele jaar); onvolledige stations blijven herkenbaar in kaart en tabel.
 De generator schrijft voor beide perioden een eigen JSON en CSV. De bekende
 verdachte herhaalregistraties uit 1961–1967 worden, net als bij de andere
 sneeuwdekstatistieken, als ontbrekend behandeld. Kaartposities komen uit de
@@ -98,32 +98,62 @@ ruimtelijke interpolatie of correctie voor stationsverplaatsingen.
 ## Kaart sneeuwdagen (sneeuwval)
 
 ```bash
-python3 winter-tools/bouw_sneeuwval_normalenkaart.py
+python3 winter-tools/haal_knmi_uren.py /pad/naar/uurcache 1961 2021 --hele-seizoen
+python3 winter-tools/bouw_sneeuwval_normalenkaart.py --hourly /pad/naar/uurcache
 ```
 
-De officiële KNMI-tabel **Gemiddeld aantal dagen met sneeuwval** staat op
-PDF-pagina 19 van [Aantal dagen met, klimaatnormalen 1991–2020](https://cdn.knmi.nl/knmi/map/page/klimatologie/klimaatatlas/tabel/stationsdata/aantal-dagen-met_9120.pdf#page=19).
-De voetnoot en [KNMI-methodetoelichting](https://www.knmi.nl/kennis-en-datacentrum/achtergrond/achtergrondinformatie-berekening-klimaatnormalen-1991-2020)
-vermelden dat sneeuwval feitelijk over **2003–2020** is berekend, vanwege de
-omschakeling naar automatische waarnemingen. Deze gemiddelden zijn niet
-rechtstreeks vergelijkbaar met de eerdere visuele sneeuwvalnormalen.
+De sneeuwvalkaart gebruikt eigen tellingen uit KNMI-uurwaarden over de echte
+referentieperioden **1961–1990** en **1991–2020**. De generator leest daarvoor
+alle twaalf kalendermaanden van ieder jaar. Rijen buiten de geselecteerde
+maand worden genegeerd, inclusief een eventueel extra uur op 1 januari van
+het volgende jaar. KNMI HH=24 blijft bij de opgegeven UTC-datum horen.
 
-`bronnen/KNMI-sneeuwvalnormalen-2003-2020.csv` bevat de 14 rijen van die tabel,
-inclusief alle maand-, seizoen- en jaarwaarden. Overgenomen met
-`pdftotext -layout -f 19 -l 19` en visueel gecontroleerd tegen de PDF-pagina.
-Een punt is niet voorgekomen (nul), een streep is ontbrekend. De jaarnormaal
-blijft ontbreken bij Voorschoten, Hoorn/Terschelling en Eelde; de generator
-maakt geen jaartotaal van afgeronde maandwaarden. Er worden geen aantallen
-volledige meetjaren of meetdagen verzonnen: de publicatie vermeldt die niet.
+Vóór 1971 telt alleen een expliciete visuele sneeuwcode in WW; de oude S-code
+kan ook bij onweer staan. Daarna telt de sneeuwindicator S, met bij visuele
+waarnemingen aanvullend een expliciete sneeuwcode. Dit volgt dezelfde regels
+als de seizoenskalender. Een sneeuwdag telt eenmaal, ongeacht het aantal
+sneeuwuren. Identieke dubbele uren tellen eenmaal, tegenstrijdige uren worden
+onbekend. Noordzeeplatforms en openwaterstations zijn uitgesloten.
 
-`bronnen/KNMI-uurstations-sneeuwval.csv` bevat de coördinaten uit de
-stationskoppen van de KNMI-uurselectie januari 2020, uit de bestaande
-uurcache (`202001.txt.gz`, selectie WW:IX:S voor alle stations). Sneeuwval
-gebruikt KNMI-weerstations; sneeuwdek gebruikt een ander, dichter meetnet van
-neerslagstations. Stationsnummers tussen die netten zijn geen koppelsleutel.
-De kaart wisselt op stationsnaam als een station in beide netten voorkomt.
+Een bruikbaar referentiejaar heeft een geldige registratie op iedere dag van
+de gekozen maanden én minstens 99% geldige uurvakken. Een periodegemiddelde
+vereist minstens **24 van de 30** bruikbare referentiejaren en is het gemiddelde
+van uitsluitend die jaren. Het aantal gebruikte jaren en de dag- en uurdekking
+zijn zichtbaar. Ontbrekende uren worden niet ingevuld, ontbrekende jaren
+worden niet als nul geteld. Het resultaat is een gemiddelde van **waargenomen**
+sneeuwdagen, geen gehomogeniseerde officiële normaal. De meetreeks bevat de
+overgang van visuele naar automatische sneeuwwaarneming rond 2003; de
+[KNMI-methodetoelichting](https://www.knmi.nl/kennis-en-datacentrum/achtergrond/achtergrondinformatie-berekening-klimaatnormalen-1991-2020)
+beschrijft die verandering. De officiële kortere 2003–2020-sneeuwvalnormaal
+wordt niet als een eigen dertigjarige telling gepresenteerd.
 
-De generator schrijft `winter-data/sneeuwval-normalen-2003-2020.json` en `.csv`.
-De kaart toont de bronperiode en bronlinks, maandwaarden en onbekende waarden,
-met dezelfde kleurenschaal als de sneeuwdekkaart en zonder interpolatie.
-Een directe link gebruikt `winter.html?sneeuwkaart=sneeuwval#sneeuwdekkaart`.
+Stationsnamen en posities komen uit de KNMI-stationskoppen van de uurselecties.
+Sneeuwval en sneeuwdek gebruiken verschillende meetnetten: dezelfde
+stationsnummers zijn tussen die netten geen koppelsleutel. Bij het wisselen
+van kaartsoort wordt een gelijknamig station behouden als dat beschikbaar is.
+JSON bevat de controlesommen van alle 360 bronmaanden per klimaatperiode.
+De generator schrijft JSON en CSV per periode; de CSV bevat het jaargemiddelde
+met gebruikte jaren en meetdekking.
+
+## Maand- en seizoenkeuze op beide sneeuwkaarten
+
+Beide generatoren nemen `monthlyAnnual` op: de ruwe aantallen waargenomen
+sneeuwdagen/sneeuwdekdagen en geldige metingen per kalendermaand per
+referentiejaar. `winter-sneeuwkaart-core.js` berekent daaruit de gewenste maand,
+het seizoen of het hele jaar en controleert de meetdekking van alleen die
+maanden. Een gat in juli maakt een volledig gemeten november dus niet ongeldig.
+Sneeuwdek vereist alle 30 volledig gemeten referentieperioden; sneeuwval volgt
+de hierboven beschreven 24-jaar- en 99%-uurcriteria.
+
+De seizoenen zijn meteorologisch: winter december/januari/februari, lente
+maart/april/mei, zomer juni/juli/augustus, herfst september/oktober/november.
+Voor de klimaatnormaal worden de maanden binnen de gekozen referentieperiode
+gegroepeerd. Een winterrij in de controletabel combineert januari, februari en
+december van hetzelfde referentiejaar; dit zijn geen opeenvolgende winterjaren.
+De jaargemiddelden worden onafhankelijk opgeteld, niet uit afgeronde
+maandnormalen samengesteld. De kleurgrenzen passen bij jaar, maand of seizoen
+en zijn voor beide klimaatperioden en kaartsoorten gelijk.
+
+De CSV-link exporteert de gekozen maand of het gekozen seizoen met de
+bijbehorende gemiddelden en meetdekking. Een directe novemberlink gebruikt
+`winter.html?sneeuwkaart=sneeuwval&sneeuwperiode=1991-2020&sneeuwtijdvak=month-11#sneeuwdekkaart`.

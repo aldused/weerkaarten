@@ -46,26 +46,34 @@ def positions(path):
     return result
 
 
-def year_values(data, year):
-    """Station -> [sneeuwdekdagen of None, aantal geldige dagen]."""
-    expected = (date(year + 1, 1, 1) - date(year, 1, 1)).days
-    counts = defaultdict(lambda: [0, 0])
+def month_values(data, year):
+    """Station -> twaalf [waargenomen sneeuwdekdagen, geldige dagen]."""
+    counts = defaultdict(lambda: [[0, 0] for _ in range(12)])
     for raw_day, observations in data['days'].items():
         day = date.fromisoformat(raw_day)
         if day.year != year:
             continue
         values = defaultdict(set)
         for station, code in observations:
-            counts[station]  # Include an entirely missing station in the coverage report.
+            counts[station]
             if isinstance(code, int) and not isinstance(code, bool) and 0 <= code <= 999 and not repeated_snow_code(raw_day, station, code):
                 values[station].add(code)
         for station, codes in values.items():
             if len(codes) == 1:
-                code = next(iter(codes))
-                counts[station][1] += 1
-                counts[station][0] += code > 0
-    return {sid: [snow if valid == expected else None, valid]
-            for sid, (snow, valid) in counts.items()}
+                count = counts[station][day.month - 1]
+                count[1] += 1
+                count[0] += next(iter(codes)) > 0
+    return dict(counts)
+
+
+def year_values(data, year):
+    """Station -> [sneeuwdekdagen of None, aantal geldige dagen]."""
+    expected = (date(year + 1, 1, 1) - date(year, 1, 1)).days
+    result = {}
+    for sid, months in month_values(data, year).items():
+        snow, valid = map(sum, zip(*months))
+        result[sid] = [snow if valid == expected else None, valid]
+    return result
 
 
 def build(cover, station_file, geometry_file, start=1991, end=2020):
@@ -73,6 +81,7 @@ def build(cover, station_file, geometry_file, start=1991, end=2020):
         raise ValueError("Een klimaatperiode moet 30 kalenderjaren bevatten")
     meta = positions(station_file)
     annual = defaultdict(dict)
+    monthly = defaultdict(dict)
     names = {}
     sources = {}
     for year in range(start, end + 1):
@@ -81,8 +90,11 @@ def build(cover, station_file, geometry_file, start=1991, end=2020):
         sources[path.name] = hashlib.sha256(raw).hexdigest()
         data = json.loads(gzip.decompress(raw))
         names.update({int(k): v for k, v in data['stations'].items()})
-        for sid, values in year_values(data, year).items():
-            annual[sid][year] = values
+        expected = (date(year + 1, 1, 1) - date(year, 1, 1)).days
+        for sid, months in month_values(data, year).items():
+            monthly[sid][year] = months
+            snow, valid = map(sum, zip(*months))
+            annual[sid][year] = [snow if valid == expected else None, valid]
     stations = []
     for sid, years in sorted(annual.items()):
         series = [[year, *years.get(year, [None, 0])] for year in range(start, end + 1)]
@@ -92,16 +104,17 @@ def build(cover, station_file, geometry_file, start=1991, end=2020):
                    'lat': meta.get(sid, {}).get('lat'), 'lon': meta.get(sid, {}).get('lon'),
                    'mean': round(normal, 4) if normal is not None else None,
                    'years': len(complete), 'validDays': sum(item[2] for item in series),
-                   'annual': series}
+                   'annual': series,
+                   'monthlyAnnual': [[y, monthly[sid].get(y, [[0, 0] for _ in range(12)])] for y in range(start, end + 1)]}
         stations.append(station)
     match = re.search(r'/\*GEO-START\*/const GEO=(.*?);/\*GEO-END\*/', geometry_file.read_text(), re.S)
     if not match:
         raise ValueError('Bestaande kaartgeometrie ontbreekt')
-    return {'period': [start, end], 'unit': 'dagen per kalenderjaar', 'timeUTC': '08:00',
+    return {'period': [start, end], 'minimumYears': 30, 'unit': 'dagen per kalenderjaar', 'timeUTC': '08:00',
             'expectedDays': (date(end + 1, 1, 1) - date(start, 1, 1)).days,
             'source': SOURCE, 'positionSource': POSITION_SOURCE,
             'method': 'Alleen 30 volledige kalenderjaren. SX > 0, inclusief gebroken sneeuwdek en sneeuwhopen. Ontbrekende, tegenstrijdige en bekende verdachte oude registraties zijn onbekend.',
-            'inputSHA256': sources, 'positionSHA256': hashlib.sha256(station_file.read_bytes()).hexdigest(),
+            'monthlyAnnualFields': ['snowCoverDays', 'validDays'], 'inputSHA256': sources, 'positionSHA256': hashlib.sha256(station_file.read_bytes()).hexdigest(),
             'geometry': json.loads(match[1]), 'stations': stations}
 
 
