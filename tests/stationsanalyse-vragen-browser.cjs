@@ -13,9 +13,15 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
  await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'),{},{timeout:60000});
  assert.match(await page.locator('#q-answer-title').innerText(),/2026/);
  assert.equal(await page.locator('#q-preset option[value^="frost-"]').count(),8);
- await page.selectOption('#q-preset','frost-moderate-first');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
- assert.match(await page.locator('.q-answer .q-eyebrow').innerText(),/-10 t\/m -5,1/);
+ assert.equal(await page.locator('.q-frost-card').count(),4);
+ for(const text of ['−0,1 °C tot −5,0 °C','−5,1 °C tot −10,0 °C','−10,1 °C tot −15,0 °C','−15,1 °C of lager'])assert((await page.locator('#vorst').innerText()).includes(text));
+ await page.locator('[data-frost-preset="frost-moderate-first"]').click();await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
+ assert.match(await page.locator('.q-answer .q-eyebrow').innerText(),/Matige vorst · −5,1 °C tot −10,0 °C/);
  assert.equal(await page.inputValue('#q-window'),'winterjaar');
+ assert.equal(await page.locator('[data-frost-preset="frost-moderate-first"]').getAttribute('aria-pressed'),'true');
+ assert.match(await page.locator('#q-frost-results-title').innerText(),/Matige vorst: eerste en laatste dag per winterjaar/);
+ assert.equal(await page.locator('.q-frost-results table').isVisible(),true);
+ assert.equal(await page.locator('.q-frost-results tbody th').first().evaluate(e=>getComputedStyle(e).position),'static');
  const start=Date.now();await page.click('#q-scope-all');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'),{},{timeout:60000});
  const networkMs=Date.now()-start;
  assert.equal(await page.locator('#q-scope-all').getAttribute('aria-pressed'),'true');
@@ -27,14 +33,20 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
  await page.screenshot({path:stage+'/desktop.png',fullPage:true});
  await page.selectOption('#q-question','earlyFirst');assert.match(await page.locator('#q-answer-title').innerText(),/°C/);
  await page.selectOption('#q-question','meanFirst');assert.match(await page.locator('#q-answer-title').innerText(),/niet vastgesteld/);
- await page.selectOption('#q-preset','frost-very-severe-last');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
+ await page.locator('[data-frost-preset="frost-very-severe-last"]').click();await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
  assert.equal(await page.inputValue('#q-op'),'le');assert.equal(await page.inputValue('#q-threshold'),'-15.1');assert.equal(await page.locator('#q-upper-label').isVisible(),false);
- await page.selectOption('#q-preset','frost-light-last');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
+ await page.locator('[data-frost-preset="frost-light-last"]').click();await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
  await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:stage+'/mobile.png',fullPage:true});
  await page.click('#q-scope-station');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));assert.equal(await page.inputValue('#q-station'),'260');
  // A failed archive is visible and can be retried without reloading other stations.
  await page.reload();await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
  await page.route('**/records_nl_extreme.json*',r=>r.fulfill({status:503,body:'offline'}));await page.click('#q-scope-all');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Resultaten onvolledig'),{},{timeout:60000});assert.match(await page.locator('#q-status').innerText(),/historisch recordarchief/);
  await page.unroute('**/records_nl_extreme.json*');await page.click('.q-submit');await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'));
+ await page.goto(`http://127.0.0.1:${server.address().port}/stationsanalyse.html?station=all&preset=frost-moderate-first#vorst`);
+ await page.waitForFunction(()=>document.querySelector('#q-status').textContent.startsWith('Analyse gereed'),{},{timeout:60000});
+ assert.equal(await page.inputValue('#q-station'),'all');assert.equal(await page.inputValue('#q-preset'),'frost-moderate-first');
+ assert.equal(await page.locator('[data-frost-preset="frost-moderate-first"]').getAttribute('aria-pressed'),'true');
+ for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));}
+ await page.screenshot({path:stage+'/frost-clear-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});await page.screenshot({path:stage+'/frost-clear-mobile.png',fullPage:true});
  assert.deepEqual(errors,[]);console.log('PASS: desktop/mobile, eight frost presets, national historic records, ranks, station switching, archive failure/retry, no browser errors');
  }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());
