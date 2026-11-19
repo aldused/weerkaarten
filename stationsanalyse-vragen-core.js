@@ -62,7 +62,7 @@ function analyzeNetwork(sources,records,options){
  const {field='TN',op='lt',threshold=0,upper}=options,variable=variables[field];
  if(!variable)throw Error('Kies een geldige variabele.');
 
- const days=new Map();
+ const days=new Map(),coverage=[];
  function add(time,v,station,historical=false){
   if(time===null||!v)return;
   let entry=days.get(time);if(!entry){entry=new Map();days.set(time,entry);}
@@ -70,7 +70,9 @@ function analyzeNetwork(sources,records,options){
   if(!entry.has(station))entry.set(station,{...v,station,historical});
  }
  for(const source of sources){const di=source.json.kolommen.indexOf('YYYYMMDD'),vi=source.json.kolommen.indexOf(field);if(di<0||vi<0)continue;
-  for(const row of source.json.data)add(day(row[di]),decode(row[vi],variable),source.id);
+  const dates=new Set();let first=Infinity,last=-Infinity;
+  for(const row of source.json.data){const t=day(row[di]),v=decode(row[vi],variable);add(t,v,source.id);if(t!==null&&v&&match(v,op,threshold,upper)!==null){dates.add(t);first=Math.min(first,t);last=Math.max(last,t);}}
+  if(dates.size)coverage.push({dates,first,last});
  }
  for(const record of records)if(record.parameter===field&&Number.isFinite(record.waarde))add(day(record.datum),{value:record.waarde,trace:false},record.station,true);
  if(!days.size)throw Error('Geen geldige daggegevens beschikbaar voor deze variabele.');
@@ -81,13 +83,20 @@ function analyzeNetwork(sources,records,options){
   if(matching.length)hits.set(time,matching.sort((a,b)=>a.station.localeCompare(b.station,'nl')));
  }
  const result=analyze({kolommen:['YYYYMMDD',field],data:rows},options);
- for(const p of result.periods){p.complete=false;p.status=p.running?'lopend':p.valid?'onvolledig':'geen gegevens';
+ for(const p of result.periods){
+  // Records need daily coverage in every available station's active interval.
+  // Historic isolated records may extend an observed boundary, never certify absence.
+  p.dailyComplete=!p.running&&coverage.some(s=>s.first<=p.start&&s.last>=p.end)&&coverage.every(s=>{
+   for(let t=Math.max(p.start,s.first);t<=Math.min(p.end,s.last);t+=DAY)if(!s.dates.has(t))return false;
+   return true;
+  });
+  p.complete=false;p.status=p.running?'lopend':p.valid?'onvolledig':'geen gegevens';
   for(const side of ['first','last'])if(p[side])p[side].observations=hits.get(p[side].time);
  }
- const eventPeriods=result.periods.filter(p=>p.first);
+ const eventPeriods=result.periods.filter(p=>p.first&&p.dailyComplete);
 
  result.rank=(side,descending=false,limit=10)=>{const sorted=eventPeriods.slice().sort((a,b)=>(descending?-1:1)*(a[side].position-b[side].position)||a.year-b.year);let rank=0,previous=null;return sorted.map((p,i)=>{if(p[side].position!==previous)rank=i+1;previous=p[side].position;return {...p,rank};}).filter((p,i)=>i<limit||p[side].position===sorted[limit-1]?.[side].position);};
- return {...result,national:true,completeCount:0,eventCount:0,noEvent:0,excluded:result.periods.length,meanFirst:null,meanLast:null,meanFirstOffset:null,meanLastOffset:null};
+ return {...result,national:true,recordPeriodCount:result.periods.filter(p=>p.dailyComplete).length,completeCount:0,eventCount:0,noEvent:0,excluded:result.periods.length,meanFirst:null,meanLast:null,meanFirstOffset:null,meanLastOffset:null};
 }
 const api={DAY,variables,day,boundary,position,meanDate,decode,match,analyze,analyzeNetwork};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ThresholdQuestions=api;
 })(typeof window==='undefined'?globalThis:window);

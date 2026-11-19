@@ -18,8 +18,8 @@ const presets=[
  ['autumn','Eerste vorst na de zomer','TN','lt',0,'09-01','02-29','first'],
  ['spring','Laatste vorst vóór de zomer','TN','lt',0,'01-01','06-30','last'],
  ...frostClasses.flatMap(({key,label,lower,upper})=>[
-  ['frost-'+key+'-first','Eerste dag met '+label.toLowerCase(),'TN',lower===null?'le':'between',lower===null?upper:lower,'08-01','07-31','first',upper],
-  ['frost-'+key+'-last','Laatste dag met '+label.toLowerCase(),'TN',lower===null?'le':'between',lower===null?upper:lower,'08-01','07-31','last',upper]
+  ['frost-'+key+'-first','Eerste dag met '+label.toLowerCase(),'TN',lower===null?'le':'between',lower===null?upper:lower,'10-01','04-30','first',upper],
+  ['frost-'+key+'-last','Laatste dag met '+label.toLowerCase(),'TN',lower===null?'le':'between',lower===null?upper:lower,'10-01','04-30','last',upper]
  ]),
  ['warm-first','Eerste warme dag (20 °C)','TX','ge',20,'01-01','12-31','first'],
  ['warm-last','Laatste warme dag (20 °C)','TX','ge',20,'01-01','12-31','last'],
@@ -37,49 +37,101 @@ const presets=[
 let current=null,version=0,loadedStation=null,lastStation='260';
 const stationList=Object.entries(STATIONS).filter(([id,s])=>!s.historisch&&/^\d+$/.test(id));
 const cache=new Map();
-el.innerHTML=`<header><p class="q-eyebrow">Stel je weervraag</p><h2>Eerste dag, laatste dag of een bijzonder jaar?</h2><p>Begin met een snelkeuze of stel zelf een grens in. Vergelijk de datums per jaar of seizoen en bekijk alle vier de datumranglijsten.</p></header>
+const params=new URLSearchParams(location.search);
+let viewMode=params.get('view')==='year'?'year':'all',focusYear=params.get('year')||null;
+el.innerHTML=`<header><p class="q-eyebrow">Eerste & laatste</p><h2>Wanneer vroor het voor het eerst of voor het laatst?</h2><p>Kies een vorstklasse en vergelijk alle jaren, of bekijk één winterjaar.</p></header>
 <form id="q-form">
-<div class="q-scope" role="group" aria-label="Stationsbereik"><button type="button" id="q-scope-station" aria-pressed="true">Per station</button><button type="button" id="q-scope-all" aria-pressed="false">Alle stations · ook historisch</button></div>
 <section id="vorst" class="q-frost" aria-labelledby="q-frost-title">
-<h3 id="q-frost-title">Eerste en laatste dag met vorst</h3>
-<p>Kies één van de vier vorstklassen. Bij ‘Alle stations’ zie je wanneer het voor het eerst of laatst ergens in Nederland zo koud was, inclusief historische stations.</p>
-<div class="q-frost-grid">${frostClasses.map(f=>`<article class="q-frost-card" data-frost="${f.key}"><h4>${f.label}</h4><p>${f.range}</p><div role="group" aria-label="${f.label}">${['first','last'].map(side=>`<button type="button" data-frost-preset="frost-${f.key}-${side}" aria-pressed="false" aria-label="${side==='first'?'Eerste':'Laatste'} dag met ${f.label.toLowerCase()}">${side==='first'?'Eerste dag':'Laatste dag'}</button>`).join('')}</div></article>`).join('')}</div>
-<p class="q-frost-note">Minimumtemperatuur (TN). Elke klasse geldt voor precies het genoemde bereik. De snelkeuzes gebruiken een winterjaar van 1 augustus t/m 31 juli.</p>
+<h3 id="q-frost-title">1. Welke vorstklasse?</h3>
+<div class="q-frost-grid" role="group" aria-label="Vorstklasse">${frostClasses.map(f=>`<button type="button" class="q-frost-card" data-frost-class="${f.key}" aria-pressed="false"><strong>${f.label}</strong><span>${f.range}</span></button>`).join('')}</div>
 </section>
-<div class="q-grid"><label>Snelkeuze<select id="q-preset">${presets.map(p=>`<option value="${p[0]}">${p[1]}</option>`).join('')}</select></label><label>KNMI-station<select id="q-station"></select></label><label class="q-wide">Welke vraag wil je beantwoorden?<select id="q-question">${Object.entries(questions).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label></div>
+<section class="q-simple-scope" aria-labelledby="q-scope-title"><h3 id="q-scope-title">2. Waar?</h3>
+<div class="q-scope" role="group" aria-label="Stationsbereik"><button type="button" id="q-scope-all" aria-pressed="true">Alle stations · ook historisch</button><button type="button" id="q-scope-station" aria-pressed="false">Eén station</button></div>
+<label id="q-station-label" hidden>KNMI-station<select id="q-station"></select></label>
+</section>
+<section id="q-simple-period" aria-labelledby="q-view-title"><h3 id="q-view-title">3. Welke jaren?</h3>
+<div class="q-scope" role="group" aria-label="Jaren vergelijken"><button type="button" id="q-view-all" aria-pressed="true">Alle jaren vergelijken</button><button type="button" id="q-view-year" aria-pressed="false">Eén winterjaar</button></div>
+<label id="q-year-label" hidden>Winterjaar<select id="q-year"></select></label>
+<p class="q-frost-note">Winterjaar: 1 oktober t/m 30 april. Meteorologische winter: 1 december t/m de laatste dag van februari.</p>
+</section>
+<details class="q-advanced" id="q-advanced"><summary>Andere weergrenzen en uitgebreide instellingen</summary>
+<div class="q-grid"><label>Snelkeuze<select id="q-preset">${presets.map(p=>`<option value="${p[0]}">${p[1]}</option>`).join('')}</select></label><label>Welke vraag wil je beantwoorden?<select id="q-question">${Object.entries(questions).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label></div>
 <details class="q-settings" open><summary>Grens en analyseperiode aanpassen</summary>
 <div class="q-grid"><label>Weervariabele<select id="q-field">${Object.entries(C.variables).slice(0,5).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}</select></label><label>Vergelijking<select id="q-op"><option value="ge">≥ Minstens</option><option value="gt">&gt; Meer dan</option><option value="le">≤ Hoogstens</option><option value="lt">&lt; Minder dan</option><option value="eq">= Precies</option><option value="between">Van … t/m …</option></select></label><label><span>Grens (<span id="q-unit">°C</span>)</span><input id="q-threshold" type="number" step="any" required value="20"></label>
 <label id="q-upper-label" hidden>Bovengrens (<span id="q-upper-unit">°C</span>)<input id="q-upper" type="number" step="any" value="-0.1"></label>
-<label>Periode<select id="q-window"><option value="year">Heel kalenderjaar</option><option value="winterjaar">Winterjaar: augustus t/m juli</option><option value="autumn">Na de zomer: september t/m februari</option><option value="spring">Vóór de zomer: januari t/m juni</option><option value="winter">Winter: december t/m februari</option><option value="summer">Zomer: juni t/m augustus</option><option value="custom">Eigen begin en einde</option></select></label>
+<label>Periode<select id="q-window"><option value="year">Heel kalenderjaar</option><option value="winterjaar">Winterjaar: oktober t/m april</option><option value="autumn">Na de zomer: september t/m februari</option><option value="spring">Vóór de zomer: januari t/m juni</option><option value="winter">Meteorologische winter: december t/m februari</option><option value="summer">Zomer: juni t/m augustus</option><option value="custom">Eigen begin en einde</option></select></label>
 <label>Begin (dag-maand)<input id="q-start" value="01-01" placeholder="01-09" pattern="[0-9]{2}-[0-9]{2}" required></label><label>Einde, inclusief (dag-maand)<input id="q-end" value="31-12" placeholder="28-02" pattern="[0-9]{2}-[0-9]{2}" required></label>
 <label>Eerste beginjaar<input id="q-from" type="number" min="1700" max="2200" placeholder="Begin meetreeks"></label><label>Laatste beginjaar<input id="q-to" type="number" min="1700" max="2200" placeholder="Tot nu"></label><button type="submit" class="q-submit">Beantwoord mijn vraag</button></div>
 <p id="q-period-help"></p><p id="q-definition"></p><p id="q-frost-classes" hidden>Vorstklassen op basis van TN: licht −5,0 t/m −0,1 °C; matig −10,0 t/m −5,1 °C; streng −15,0 t/m −10,1 °C; zeer streng ≤ −15,1 °C.</p>
-</details></form>
+</details></details></form>
 <p id="q-status" role="status" aria-live="polite"></p>
 <div id="q-output" hidden></div>
 <details class="q-method"><summary>Hoe rekenen we? Bron, ontbrekende dagen en gemiddelde datums</summary><p>Per station gebruikt deze analyse de KNMI-dagreeks. ‘Alle stations’ combineert de beschikbare dagreeksen, inclusief gesloten stations, met het historische TX/TN-recordarchief. Een landelijke dag telt één keer zodra minstens één station aan de ingestelde grens voldoet; alle passende stations op de eerste en laatste datum worden getoond. Historische recordnoteringen vormen geen volledige dagreeks: landelijke datums zijn uiterste beschikbare waarnemingen. Nationale gemiddelden en definitieve aantallen worden daarom niet berekend. De kalender wordt dag voor dag gecontroleerd voor de gekozen variabele en grens. Een ontbrekende dag is geen dag zonder overschrijding. Onvolledige en nog lopende perioden staan wel in de tabel, maar tellen niet mee voor definitieve records of gemiddelden. Aantallen en reeksen zijn dan ondergrenzen.</p><p>Gemiddelde datums gebruiken alleen volledige perioden mét een overschrijding. Perioden zonder overschrijding worden apart geteld. Datums worden op een vaste schrikkelkalender gezet ten opzichte van het gekozen begin: 1 maart blijft ieder jaar op dezelfde positie en 29 februari heeft een eigen positie. Het gemiddelde wordt afgerond op een dag. Zo komen december en januari in de juiste volgorde. Een grensdatum van 29 februari geldt in niet-schrikkeljaren als 28 februari.</p><p>Bij neerslag en zon betekent broncode −1 minder dan 0,05 mm of uur. Een grens die binnen dit interval valt, kan voor die dag niet met zekerheid worden beoordeeld; die periode telt dan niet mee als volledig. De windstoot wordt zonder afronding naar km/u omgerekend. Gemeten waarden worden alleen voor de weergave afgerond.</p><p><a href="https://www.daggegevens.knmi.nl/klimatologie/daggegevens" target="_blank" rel="noopener">KNMI: definities van de dagwaarden</a>. Het betreft stationsmetingen: meetopstellingen en meetreeksen kunnen in de tijd veranderen. Dit zijn beschrijvende statistieken, geen trendcorrectie of voorspelling.</p></details>`;
 $('q-station').add(new Option('Alle stations (ook historisch)','all'));
 for(const [id,s]of stationList.slice().sort((a,b)=>a[1].naam.localeCompare(b[1].naam))){const o=new Option((id==='344'?'Rotterdam Airport':s.naam)+' ('+id+')',id);$('q-station').add(o);}
 const initialStation=new URLSearchParams(location.search).get('station');
-$('q-station').value=initialStation==='all'||stationList.some(([id])=>id===initialStation)?initialStation:'260';
+$('q-station').value=initialStation==='all'||stationList.some(([id])=>id===initialStation)?initialStation:'all';
 function mdInput(id){const s=$(id).value.trim();if(!/^\d{2}-\d{2}$/.test(s))throw Error('Vul begin en einde in als dag-maand, bijvoorbeeld 01-09.');return s.slice(3)+'-'+s.slice(0,2);}
 const inputDate=s=>s.slice(3)+'-'+s.slice(0,2);
 function today(){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));return C.day(p.year+p.month+p.day);}
-function syncScope(){const all=$('q-station').value==='all';$('q-scope-all').setAttribute('aria-pressed',String(all));$('q-scope-station').setAttribute('aria-pressed',String(!all));if(!all)lastStation=$('q-station').value;}
+function syncScope(){const all=$('q-station').value==='all';$('q-scope-all').setAttribute('aria-pressed',String(all));$('q-scope-station').setAttribute('aria-pressed',String(!all));$('q-station-label').hidden=all;if(!all)lastStation=$('q-station').value;}
 function syncFrost(){
  const selected=$('q-preset').value;
- for(const button of el.querySelectorAll('[data-frost-preset]'))button.setAttribute('aria-pressed',String(button.dataset.frostPreset===selected));
- for(const card of el.querySelectorAll('[data-frost]'))card.classList.toggle('q-selected',selected.startsWith('frost-'+card.dataset.frost+'-'));
+ for(const button of el.querySelectorAll('[data-frost-class]'))button.setAttribute('aria-pressed',String(selected.startsWith('frost-'+button.dataset.frostClass+'-')));
 }
 function frostFor(a){return a.field==='TN'?frostClasses.find(f=>f.lower===null?a.op==='le'&&a.threshold===f.upper:a.op==='between'&&a.threshold===f.lower&&a.upper===f.upper):null;}
 function definition(){syncFrost(); $('q-upper-label').hidden=$('q-op').value!=='between';$('q-upper').required=$('q-op').value==='between';const v=C.variables[$('q-field').value];if(!v)return;$('q-unit').textContent=v.unit;$('q-upper-unit').textContent=v.unit;$('q-frost-classes').hidden=$('q-field').value!=='TN';$('q-definition').textContent=v.definition||v.label+' · KNMI-dagwaarde.';
  try{const s=mdInput('q-start'),e=mdInput('q-end');C.boundary(2000,s);C.boundary(2000,e);$('q-period-help').textContent=`Iedere periode loopt van ${short(s)} t/m ${short(e)}${e<s?' in het volgende kalenderjaar. Het beginjaar 2021 heet dan seizoen 2021/2022.':'. Het beginjaar is het kalenderjaar.'} Daggegevens van vandaag blijven voorlopig en tellen nog niet mee.`;}catch{$('q-period-help').textContent='Vul een geldige begin- en einddatum in.';}}
-function setWindow(s,e){$('q-start').value=inputDate(s);$('q-end').value=inputDate(e);const windows={year:['01-01','12-31'],winterjaar:['08-01','07-31'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31']};$('q-window').value=Object.keys(windows).find(k=>windows[k][0]===s&&windows[k][1]===e)||'custom';definition();}
+function setWindow(s,e){$('q-start').value=inputDate(s);$('q-end').value=inputDate(e);const windows={year:['01-01','12-31'],winterjaar:['10-01','04-30'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31']};$('q-window').value=Object.keys(windows).find(k=>windows[k][0]===s&&windows[k][1]===e)||'custom';definition();}
 function options(){return {field:$('q-field').value,op:$('q-op').value,threshold:Number($('q-threshold').value),upper:$('q-op').value==='between'?Number($('q-upper').value):undefined,start:mdInput('q-start'),end:mdInput('q-end'),from:$('q-from').value?Number($('q-from').value):undefined,to:$('q-to').value?Number($('q-to').value):undefined,today:today()};}
 function value(hit,a){if(hit?.observations)return hit.observations.map(h=>esc(h.station)+(h.historical?' (historisch)':'')+': '+value(h,a)).join('<br>');return hit?hit.trace?'&lt; 0,05 '+esc(a.variable.unit):number(hit.value)+' '+esc(a.variable.unit):'—';}
 function limitTies(sorted,key){return sorted.filter((p,i)=>i<10||key(p)===key(sorted[9]));}
+function syncView(a){
+ $('q-view-all').setAttribute('aria-pressed',String(viewMode==='all'));
+ $('q-view-year').setAttribute('aria-pressed',String(viewMode==='year'));
+ $('q-year-label').hidden=viewMode!=='year';
+ if(a){
+  const winter=a.start==='12-01'&&a.end==='02-29';$('q-view-year').textContent=winter?'Eén winter':a.cross?'Eén winterjaar':'Eén jaar';$('q-year-label').firstChild.textContent=winter?'Meteorologische winter':a.cross?'Winterjaar':'Jaar';
+  focusYear=a.periods.some(p=>p.label===focusYear)?focusYear:a.periods.at(-1)?.label||null;
+  $('q-year').innerHTML=a.periods.slice().reverse().map(p=>`<option value="${p.label}" ${p.label===focusYear?'selected':''}>${p.label}${p.running?' (lopend)':''}</option>`).join('');
+ }
+}
+function shareSelection(){
+ const url=new URL(location.href);url.searchParams.set('station',$('q-station').value);url.searchParams.set('preset',$('q-preset').value);url.searchParams.set('view',viewMode);
+ if(viewMode==='year'&&focusYear)url.searchParams.set('year',focusYear);else url.searchParams.delete('year');
+ history.replaceState(null,'',url);
+}
+function stationValues(hit,a){
+ if(!hit)return '<span class="q-muted">Niet gevonden in de beschikbare metingen</span>';
+ const observations=hit.observations||[{...hit,station:$('q-station').selectedOptions[0].textContent}];
+ const row=h=>`<span class="q-observation"><span>${esc(h.station)}${h.historical?' (historisch)':''}</span><strong>${value(h,a)}</strong></span>`;
+ return observations.slice(0,2).map(row).join('')+(observations.length>2?`<details class="q-tied-stations"><summary>Alle ${observations.length} stations op deze dag</summary>${observations.slice(2).map(row).join('')}</details>`:'');
+}
+function simpleDate(hit){return hit?new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',day:'numeric',month:'long'}).format(hit.time):'Niet gevonden';}
+function renderFrost(a,frost){
+ syncView(a);shareSelection();
+ const place=$('q-station').value==='all'?'Alle stations in Nederland, inclusief historische stations':$('q-station').selectedOptions[0].textContent;
+ const periodName=a.start==='10-01'&&a.end==='04-30'?'winterjaar':a.start==='12-01'&&a.end==='02-29'?'meteorologische winter':a.cross?'seizoen':'jaar';
+ const windowLabel=`${short(a.start)} t/m ${short(a.end)}`;
+ const defs=[['earlyFirst','Eerste dag: het vroegst','first',false],['lateFirst','Eerste dag: het laatst','first',true],['earlyLast','Laatste dag: het vroegst','last',false],['lateLast','Laatste dag: het laatst','last',true]];
+ const recordCards=defs.map(([key,label,side,descending])=>{
+  const entries=a.rank(side,descending,1).filter(p=>p.rank===1),best=entries[0],hit=best?.[side];
+  return `<article class="q-date-card" data-record="${key}"><h4>${label}</h4><p class="q-big-date">${simpleDate(hit)}</p>${best?`<p class="q-record-year">${best.label} · ${date(hit.time)}</p>${stationValues(hit,a)}${entries.length>1?`<details class="q-other-years"><summary>Ook in ${entries.length-1} andere ${entries.length===2?periodName:periodName+'en'}</summary>${entries.slice(1).map(p=>`<p><strong>${p.label} · ${date(p[side].time)}</strong></p>${stationValues(p[side],a)}`).join('')}</details>`:''}`:'<p>Geen afgesloten periode met voldoende dagdekking en een passende meting beschikbaar.</p>'}</article>`;
+ }).join('');
+ const selected=a.periods.find(p=>p.label===focusYear);
+ const yearCards=selected?['first','last'].map(side=>`<article class="q-date-card"><h4>${side==='first'?'Eerste':'Laatste'} dag</h4><p class="q-big-date">${simpleDate(selected[side])}</p>${selected[side]?`<p class="q-record-year">${date(selected[side].time)}</p>${stationValues(selected[side],a)}`:`<p>${selected.complete?'Geen dag in deze vorstklasse.':'Er is geen passende meting gevonden.'}</p>`}</article>`).join(''):'';
+ const tableRows=a.periods.slice().reverse().map(p=>`<tr><th scope="row">${p.label}${p.running?'<span class="q-running">lopend</span>':''}</th>${['first','last'].map(side=>`<td>${p[side]?`<strong>${date(p[side].time)}</strong>${stationValues(p[side],a)}`:p.complete?'Geen dag in deze klasse':'Niet gevonden'}</td>`).join('')}</tr>`).join('');
+ $('q-output').innerHTML=`<section class="q-simple-results" aria-labelledby="q-simple-title"><header class="q-simple-heading"><p class="q-eyebrow">${esc(place)}</p><h3 id="q-simple-title">${frost.label} · ${viewMode==='all'?'alle jaren vergeleken':selected?.label||'geen jaar beschikbaar'}</h3><p class="q-range">${frost.range} · ${periodName}: ${windowLabel}</p></header>
+ ${viewMode==='all'?`<p class="q-compare-intro">Wanneer viel de eerste of laatste dag met ${frost.label.toLowerCase()} het vroegst of het laatst binnen een ${periodName}? Vergelijking op dag en maand, over alle beschikbare jaren.</p><div class="q-record-grid">${recordCards}</div>`:`<div class="q-record-grid q-year-cards">${yearCards}</div>${selected?.running?'<p class="q-coverage-note">Dit winterjaar loopt nog. Er kunnen nog nieuwe metingen bijkomen.</p>':''}`}
+ <p class="q-coverage-note">${viewMode==='year'?a.national?'Dit zijn de eerste en laatste gevonden metingen. Historische meetreeksen zijn niet altijd volledig.':selected?.complete?'Volledige dagreeks voor deze periode.':'Deze periode mist meetdagen of loopt nog; dit zijn de gevonden grensdatums.':a.national?`${a.recordPeriodCount} afgesloten perioden met volledige dagdekking van de beschikbare stations vergeleken. Historische noteringen vullen de datums aan. Het lopende winterjaar telt niet mee voor de records.`:`Records vergelijken volledige, afgesloten perioden. ${a.excluded} onvolledige of lopende perioden tellen niet mee voor de records; hun gevonden datums staan wel in de tabel.`}</p>
+ <section class="q-simple-year-table"><h3>Overzicht per ${periodName}</h3><div class="q-scroll"><table><thead><tr><th scope="col">${periodName==='winterjaar'?'Winterjaar':'Jaar / seizoen'}</th><th scope="col">Eerste dag</th><th scope="col">Laatste dag</th></tr></thead><tbody>${tableRows||'<tr><td colspan="3">Geen jaren beschikbaar.</td></tr>'}</tbody></table></div></section>
+ </section>`;
+ $('q-output').hidden=false;
+}
 function render(a){
  const frost=frostFor(a);
+ const simple=!!frost&&['first','last'].includes($('q-question').value);$('q-simple-period').hidden=!simple;
+ if(simple){renderFrost(a,frost);return;}
  const q=$('q-question').value,condition=frost?`${frost.label} · ${frost.range}`:a.op==='between'?`${a.variable.label} van ${number(a.threshold)} t/m ${number(a.upper)} ${a.variable.unit}`:`${a.variable.label} ${symbols[a.op]} ${number(a.threshold)} ${a.variable.unit}`,complete=a.periods.filter(p=>p.complete),chosen=a.periods.find(p=>p.label===document.getElementById('q-focus')?.value)||a.periods.at(-1);
  const map={earlyFirst:['first',false],lateFirst:['first',true],earlyLast:['last',false],lateLast:['last',true]},rankInfo=map[q],rank=rankInfo?a.rank(...rankInfo):[],side=q==='last'?'last':'first';
  let answer='';
@@ -94,9 +146,7 @@ function render(a){
  const cards=[['Gemiddelde eerste datum',short(a.meanFirst)],['Gemiddelde laatste datum',short(a.meanLast)],['Perioden met overschrijding',a.eventCount],['Volledig, zonder overschrijding',a.noEvent]];
  const rankTable=(title,s,descending)=>{const rows=a.rank(s,descending);return `<details class="q-rank" ${map[q]?.[0]===s&&map[q]?.[1]===descending?'open':''}><summary>${title}</summary><div class="q-scroll"><table><thead><tr><th>Plaats</th><th>Jaar / seizoen</th><th>Datum ${s==='first'?'eerste':'laatste'} optreden</th><th>Gemeten waarde</th></tr></thead><tbody>${rows.map(p=>`<tr><td>${p.rank}</td><td>${p.label}</td><td>${date(p[s].time)}</td><td>${value(p[s],a)}</td></tr>`).join('')||`<tr><td colspan="4">${a.national?'Geen waargenomen overschrijding.':'Geen volledige perioden met een overschrijding.'}</td></tr>`}</tbody></table></div></details>`;};
  const quantitative=!a.national&&(q==='count'||q==='streak');let extra='';if(quantitative){const prop=q==='count'?'hits':'longest',sorted=complete.slice().sort((x,y)=>y[prop]-x[prop]||x.year-y.year);extra=`<div class="q-scroll"><table><caption>${questions[q]} · hoogste aantallen</caption><thead><tr><th>Plaats</th><th>Jaar / seizoen</th><th>Dagen</th><th>Begin</th><th>Einde</th></tr></thead><tbody>${limitTies(sorted,p=>p[prop]).map((p,i)=>`<tr><td>${sorted.findIndex(r=>r[prop]===p[prop])+1}</td><td>${p.label}</td><td>${p[prop]}</td><td>${q==='streak'?(p.longestRuns.map(r=>date(r.start)).join('<br>')||'—'):date(p.first?.time??null)}</td><td>${q==='streak'?(p.longestRuns.map(r=>date(r.end)).join('<br>')||'—'):date(p.last?.time??null)}</td></tr>`).join('')}</tbody></table></div>`;}
- const frostTable=frost?`<section class="q-frost-results" aria-labelledby="q-frost-results-title"><h3 id="q-frost-results-title">${frost.label}: eerste en laatste dag per ${a.cross?'winterjaar':'jaar'}</h3><p>${frost.range} · ${esc($('q-station').selectedOptions[0].textContent)}. Per datum staan de temperatuur en het station erbij.${a.national?' Dit zijn de eerste en laatste gevonden waarnemingen; het historische archief is niet volledig.':''}</p><div class="q-scroll"><table><thead><tr><th scope="col">${a.cross?'Winterjaar':'Jaar'}</th><th scope="col">Eerste dag</th><th scope="col">Laatste dag</th><th scope="col">Meetdekking</th></tr></thead><tbody>${a.periods.slice().reverse().map(p=>`<tr><th scope="row">${p.label}</th>${['first','last'].map(side=>`<td>${p[side]?`<strong>${date(p[side].time)}</strong><br>${p[side].observations?'':esc($('q-station').selectedOptions[0].textContent)+': '}${value(p[side],a)}`:p.complete?'Geen dag in deze klasse':'Niet waargenomen'}</td>`).join('')}<td>${p.status}</td></tr>`).join('')}</tbody></table></div></section>`:'';
  $('q-output').innerHTML=`<section class="q-answer" aria-labelledby="q-answer-title"><p class="q-eyebrow">${esc($('q-station').selectedOptions[0].textContent)} · ${esc(condition)}</p><h3 id="q-answer-title">${answer}</h3>${q==='first'||q==='last'?`<label>Antwoord voor jaar / seizoen<select id="q-focus">${a.periods.slice().reverse().map(p=>`<option value="${p.label}" ${p===chosen?'selected':''}>${p.label} · ${p.status}</option>`).join('')}</select></label>`:''}<p>Periode: ${short(a.start)} t/m ${short(a.end)}${a.cross?' van het volgende jaar':''}. Gekozen beginjaren: ${a.from}–${a.to}.</p></section>
- ${frostTable}
  <div class="q-cards" ${a.national?'hidden':''}>${cards.map(([k,v])=>`<div><span>${k}</span><strong>${v}</strong></div>`).join('')}</div>
  <p class="q-coverage" ${a.national?'hidden':''}>Gemiddelden: ${a.eventCount} perioden mét overschrijding; ${a.noEvent} volledige perioden zonder overschrijding tellen niet mee in gemiddelde datums. Van ${a.periods.length} begonnen perioden zijn ${a.completeCount} volledig en ${a.excluded} uitgesloten wegens ontbrekende gegevens of een lopende periode. Dateringen zijn afgerond op een dag.</p>
  ${a.national?'<p class="q-coverage">Alle beschikbare stations, inclusief gesloten stations en historische recordnoteringen. Dit zijn waargenomen grensdatums; ontbrekende stations of meetdagen kunnen eerdere of latere gebeurtenissen bevatten. Aantallen en reeksen zijn ondergrenzen. Iedere kalenderdag telt eenmaal, ook als meerdere stations aan de grens voldoen.</p>':''}
@@ -109,7 +159,7 @@ function loadFile(key){
  if(!cache.has(key)){const local=location.protocol==='file:'||['localhost','127.0.0.1'].includes(location.hostname),url=(local?'':'https://data.weerlab.nl/')+key+'?v='+Math.floor(Date.now()/300000);
  cache.set(key,fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Bron niet bereikbaar');return r.json();}).catch(e=>{cache.delete(key);throw e;}));}return cache.get(key);
 }
-async function run(){const token=++version;current=null;syncScope();$('q-status').textContent='Dagreeks laden en perioden controleren…';$('q-output').hidden=true;
+async function run(){const token=++version;current=null;syncScope();$('q-status').dataset.state='loading';$('q-status').textContent='Dagreeks laden en perioden controleren…';$('q-output').hidden=true;
  try{const o=options(),station=$('q-station').value;if(!station)throw Error('Kies een station.');let data,failures=[],sources=[],historical=[];
  if(station==='all'){
   let next=0,done=0;
@@ -121,9 +171,9 @@ async function run(){const token=++version;current=null;syncScope();$('q-status'
  }else data=await loadFile('dagdata_'+station+'.json');
  if(token!==version)return;
  if(loadedStation!==station){const selected=$('q-field').value;$('q-field').innerHTML=Object.entries(C.variables).filter(([k])=>data.kolommen.includes(k)).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');if(data.kolommen.includes(selected))$('q-field').value=selected;loadedStation=station;if(!data.kolommen.includes(o.field))throw Error('Deze variabele ontbreekt bij dit station. Kies een andere variabele.');}
- current=station==='all'?C.analyzeNetwork(sources,historical,o):C.analyze(data,o);definition();render(current);window.weerlabClimateStatus?.(current.national?{fixed:'Alle stations · inclusief historische recordnoteringen'}:{through:new Date(current.sourceLast).toISOString().slice(0,10).replaceAll('-','')});
- $('q-status').textContent=failures.length?'Resultaten onvolledig. Niet geladen: '+failures.join(', ')+'. Klik opnieuw op ‘Beantwoord mijn vraag’ om te herproberen.':current.national?'Analyse gereed. Landelijke datums zijn uiterste beschikbare waarnemingen, inclusief historische records.':'Analyse gereed. Records en gemiddelden gebruiken uitsluitend volledige, afgesloten perioden.';
- }catch(e){if(token===version){$('q-status').textContent=e.message;$('q-output').hidden=true;}}}
+ current=station==='all'?C.analyzeNetwork(sources,historical,o):C.analyze(data,o);if(current.national&&failures.length){current.rank=()=>[];current.recordPeriodCount=0;}definition();render(current);window.weerlabClimateStatus?.(current.national?{fixed:'Alle stations · inclusief historische recordnoteringen'}:{through:new Date(current.sourceLast).toISOString().slice(0,10).replaceAll('-','')});
+ $('q-status').dataset.state=failures.length?'error':'ready';$('q-status').textContent=failures.length?'Resultaten onvolledig. Niet geladen: '+failures.join(', ')+'. Klik opnieuw op ‘Beantwoord mijn vraag’ om te herproberen.':current.national?'Analyse gereed. Landelijke datums zijn uiterste beschikbare waarnemingen, inclusief historische records.':'Analyse gereed. Records en gemiddelden gebruiken uitsluitend volledige, afgesloten perioden.';
+ }catch(e){if(token===version){$('q-status').dataset.state='error';$('q-status').textContent=e.message;$('q-output').hidden=true;}}}
 $('q-form').addEventListener('submit',e=>{e.preventDefault();run();});
 $('q-question').addEventListener('change',()=>{const key=$('q-preset').value;if(key.startsWith('frost-')){$('q-preset').value=['first','last'].includes($('q-question').value)?key.replace(/-(first|last)$/,'-'+$('q-question').value):'custom';syncFrost();}if(current)render(current);});
 $('q-station').addEventListener('change',run);
@@ -134,17 +184,20 @@ function applyPreset(key,calculate=true){
  $('q-preset').value=key;
  if(![...$('q-field').options].some(o=>o.value===p[2]))$('q-field').add(new Option(C.variables[p[2]].label,p[2]));
  $('q-field').value=p[2];$('q-op').value=p[3];$('q-threshold').value=p[4];$('q-upper').value=p[8]??0;$('q-question').value=p[7];setWindow(p[5],p[6]);el.querySelector('.q-settings').open=p[0]==='custom';
- syncFrost();if(calculate)run();
+ syncFrost();$('q-advanced').open=!key.startsWith('frost-');if(calculate)run();
 }
 $('q-preset').addEventListener('change',()=>applyPreset($('q-preset').value));
-for(const button of el.querySelectorAll('[data-frost-preset]'))button.addEventListener('click',()=>applyPreset(button.dataset.frostPreset));
-$('q-window').addEventListener('change',()=>{const windows={year:['01-01','12-31'],winterjaar:['08-01','07-31'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31']},w=windows[$('q-window').value];if(w)setWindow(...w);});
+for(const button of el.querySelectorAll('[data-frost-class]'))button.addEventListener('click',()=>applyPreset('frost-'+button.dataset.frostClass+'-first'));
+for(const mode of ['all','year'])$('q-view-'+mode).addEventListener('click',()=>{viewMode=mode;syncView(current);if(current)render(current);});
+$('q-year').addEventListener('change',()=>{focusYear=$('q-year').value;if(current)render(current);});
+$('q-window').addEventListener('change',()=>{const windows={year:['01-01','12-31'],winterjaar:['10-01','04-30'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31']},w=windows[$('q-window').value];if(w)setWindow(...w);});
 for(const id of ['q-field','q-op','q-threshold','q-upper'])$(id).addEventListener('change',()=>{$('q-preset').value='custom';definition();});
 for(const id of ['q-start','q-end'])$(id).addEventListener('change',()=>{$('q-window').value='custom';definition();});
 // Keep old results visibly tied to their settings: editing a condition requires a fresh calculation.
-for(const id of ['q-field','q-op','q-threshold','q-upper','q-window','q-start','q-end','q-from','q-to'])$(id).addEventListener('input',()=>{version++;$('q-output').hidden=true;current=null;$('q-status').textContent='Instellingen gewijzigd. Klik op ‘Beantwoord mijn vraag’.';});
+for(const id of ['q-field','q-op','q-threshold','q-upper','q-window','q-start','q-end','q-from','q-to'])$(id).addEventListener('input',()=>{version++;$('q-output').hidden=true;current=null;$('q-status').dataset.state='draft';$('q-status').textContent='Instellingen gewijzigd. Klik op ‘Beantwoord mijn vraag’.';});
 $('q-legacy').addEventListener('toggle',()=>{if($('q-legacy').open){chart1Instance?.resize();chart2Instance?.resize();}});
 const linkedPreset=new URLSearchParams(location.search).get('preset');
-if(linkedPreset)applyPreset(linkedPreset,false);
+applyPreset(presets.some(p=>p[0]===linkedPreset)?linkedPreset:'frost-moderate-first',false);
+syncView();
 syncScope();definition();run();
 })();
