@@ -41,6 +41,32 @@ const server=http.createServer((req,res)=>{
   assert.equal(download.suggestedFilename(),'sneeuwdek-normalen-1991-2020.csv');
   assert.match(fs.readFileSync(await download.path(),'utf8'),/550;De Bilt;11,2667;30/);
   await page.locator('#snowmap-canvas > details > summary').click();
+  await page.selectOption('#snowmap-period','1961-1990');
+  await page.waitForFunction(()=>document.querySelector('#sneeuwdekkaart').dataset.state==='ready'&&document.querySelector('#snowmap-period-label').textContent==='1961–1990');
+  assert.equal(await page.locator('#snowmap-value').innerText(),'22,7');
+  assert.match(await page.locator('#snowmap-status').innerText(),/251 stationnormalen/);
+  assert.match(await page.locator('#snowmap-status').innerText(),/16 volledige normalen zonder kaartpositie/);
+  assert.equal(await page.locator('#snowmap-years tr').first().locator('td').first().textContent(),'1961');
+  assert.equal(await page.locator('#snowmap-years tr').last().locator('td').first().textContent(),'1990');
+  assert.match(await page.locator('#snowmap-source-period').innerText(),/1961.*1990/);
+  assert.equal(await page.locator('#snowmap-download').getAttribute('href'),'winter-data/sneeuwdek-normalen-1961-1990.csv');
+  const oldDownload=page.waitForEvent('download');await page.click('#snowmap-download');
+  assert.match(fs.readFileSync(await (await oldDownload).path(),'utf8'),/550;De Bilt;22,7;30/);
+  const historic=JSON.parse(fs.readFileSync(path.join(root,'winter-data/sneeuwdek-normalen-1961-1990.json')));
+  const withoutPosition=historic.stations.find(s=>s.mean!==null&&s.lat===null);
+  await page.selectOption('#snowmap-station',String(withoutPosition.id));
+  assert.match(await page.locator('#snowmap-position').innerText(),/Geen eenduidige kaartpositie/);
+  assert.equal(await page.locator('#snowmap-svg [aria-pressed="true"]').count(),0);
+  await page.selectOption('#snowmap-station','550');
+  // Repeated switches retain the station and attach each zoom handler only once.
+  for(const period of ['1991-2020','1961-1990','1991-2020']){
+   await page.selectOption('#snowmap-period',period);
+   await page.waitForFunction(p=>document.querySelector('#sneeuwdekkaart').dataset.state==='ready'&&document.querySelector('#snowmap-period-label').textContent===p.replace('-','–'),period);
+   assert.equal(await page.inputValue('#snowmap-station'),'550');
+   await page.click('#snowmap-zoom-in');
+   assert(Math.abs(Number((await page.locator('#snowmap-svg').getAttribute('viewBox')).split(' ')[2])-851/1.5)<.001);
+   await page.click('#snowmap-reset');
+  }
   for(const width of [320,390,768]){
    await page.setViewportSize({width,height:844});
    const baseline=await page.evaluate(()=>{const map=document.querySelector('#sneeuwdekkaart');map.hidden=true;const width=document.documentElement.scrollWidth;map.hidden=false;return width;});
@@ -53,7 +79,12 @@ const server=http.createServer((req,res)=>{
   }
   await page.setViewportSize({width:390,height:844});
   await page.locator('#sneeuwdekkaart').screenshot({path:'/private/tmp/sneeuwdekkaart-mobile.png'});
+  await page.goto(`http://127.0.0.1:${server.address().port}/winter.html?sneeuwperiode=1961-1990#sneeuwdekkaart`);
+  await page.waitForFunction(()=>document.querySelector('#sneeuwdekkaart').dataset.state==='ready');
+  assert.equal(await page.inputValue('#snowmap-period'),'1961-1990');
+  assert.equal(await page.locator('#snowmap-value').innerText(),'22,7');
+  await page.locator('#sneeuwdekkaart').screenshot({path:'/private/tmp/sneeuwdekkaart-1961-mobile.png'});
   assert.deepEqual(errors,[]);
-  console.log('PASS: measured normals, incomplete-series display, map selection and search, zoom, keyboard, CSV, desktop/mobile and no browser errors');
+  console.log('PASS: both climate periods and direct historical link, measured normals, incomplete-series display, map selection and search, zoom, keyboard, CSV, desktop/mobile and no browser errors');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());

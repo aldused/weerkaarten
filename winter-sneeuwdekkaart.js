@@ -6,12 +6,14 @@
   const $=name=>document.getElementById('snowmap-'+name),NS='http://www.w3.org/2000/svg';
   const number=new Intl.NumberFormat('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:1});
   const integer=new Intl.NumberFormat('nl-NL');
-  const colors=['#d7edf5','#9ccfe3','#559cbe','#256386','#103b59'];
-  let data,geo,selected,view,markers,drag=null,hasDragged=false;
+  const colors=['#d7edf5','#9ccfe3','#559cbe','#256386','#103b59','#072c48','#031a2f'];
+  const periods=new Set(['1961-1990','1991-2020']),cache=new Map();
+  let data,geo,selected,view,markers,drag=null,hasDragged=false,loadId=0;
+  const periodLabel=()=>data.period.join('–');
   const markerNodes=new Map();
   function element(tag,text){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;}
   function svgElement(tag,attributes={}){const e=document.createElementNS(NS,tag);for(const [key,value]of Object.entries(attributes))e.setAttribute(key,value);return e;}
-  function color(mean){return mean===null?'#b4bfc7':colors[mean<5?0:mean<10?1:mean<15?2:mean<20?3:4];}
+  function color(mean){return mean===null?'#b4bfc7':colors[mean<5?0:mean<10?1:mean<15?2:mean<20?3:mean<25?4:mean<30?5:6];}
   function point(station){const [lon0,lat1,cos,k]=geo.proj;return [(station.lon-lon0)*cos*k,(lat1-station.lat)*k];}
   function value(station){return station.mean===null?'Geen volledige normaal':number.format(station.mean)+' dagen per jaar';}
   function setView(){
@@ -26,7 +28,7 @@
     selected=data.stations.find(s=>s.id===Number(id));if(!selected)return;
     $('station').value=String(selected.id);$('name').textContent=selected.name;
     $('value').textContent=selected.mean===null?'Geen volledige normaal':number.format(selected.mean);$('value').classList.toggle('snowmap-empty',selected.mean===null);
-    $('unit').textContent=selected.mean===null?'Meetreeks 1991–2020 is onvolledig':'sneeuwdekdagen per kalenderjaar';
+    $('unit').textContent=selected.mean===null?`Meetreeks ${periodLabel()} is onvolledig`:'sneeuwdekdagen per kalenderjaar';
     $('coverage').textContent=`${selected.years} van 30 kalenderjaren volledig gemeten`;
     $('observations').textContent=`${integer.format(selected.validDays)} van ${integer.format(data.expectedDays)} dagen met een geldige registratie`;
     $('station-code').textContent=`KNMI-neerslagstation ${String(selected.id).padStart(3,'0')}`;
@@ -48,7 +50,8 @@
     tip.style.top=Math.max(5,Math.min(box.height-tip.offsetHeight-5,event.clientY-box.top+12))+'px';
   }
   function renderMap(){
-    const svg=$('svg');svg.replaceChildren(svgElement('title',{id:'snowmap-svg-title'}));svg.firstChild.textContent='Gemiddeld aantal sneeuwdekdagen per kalenderjaar, 1991–2020, per KNMI-neerslagstation';
+    markerNodes.clear();$('tooltip').hidden=true;drag=null;hasDragged=false;
+    const svg=$('svg');svg.replaceChildren(svgElement('title',{id:'snowmap-svg-title'}));svg.firstChild.textContent=`Gemiddeld aantal sneeuwdekdagen per kalenderjaar, ${periodLabel()}, per KNMI-neerslagstation`;
     svg.append(svgElement('rect',{width:geo.w,height:geo.h,fill:'#e8f3f8'}));
     const land=svgElement('g',{'aria-hidden':'true'});
     for(const country of geo.buren)land.append(svgElement('path',{d:country.d,fill:'#eceee7',stroke:'#d0d8d4','stroke-width':1}));
@@ -70,9 +73,6 @@
       });
       markerNodes.set(station.id,group);markers.append(group);
     }
-    svg.addEventListener('pointerdown',event=>{if(event.button!==0||event.pointerType==='touch'||event.target.closest('[data-station]'))return;hasDragged=false;drag={x:event.clientX,y:event.clientY,view:{...view}};svg.setPointerCapture(event.pointerId);});
-    svg.addEventListener('pointermove',event=>{if(!drag)return;const dx=event.clientX-drag.x,dy=event.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>5)hasDragged=true;const bounds=svg.getBoundingClientRect(),scale=Math.min(bounds.width/drag.view.w,bounds.height/drag.view.h);view.x=drag.view.x-dx/scale;view.y=drag.view.y-dy/scale;setView();});
-    const end=()=>{drag=null;setTimeout(()=>{hasDragged=false;},0);};svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);
     reset();
   }
   function renderTable(){
@@ -80,19 +80,46 @@
     $('table').replaceChildren(...stations.map(station=>{const tr=element('tr'),cell=element('th'),button=element('button',station.name);cell.scope='row';button.type='button';button.className='snowmap-table-button';button.addEventListener('click',()=>{choose(station.id);$('details').scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});});cell.append(button);tr.append(element('td',String(station.id).padStart(3,'0')),cell,element('td',station.mean===null?'Geen volledige normaal':number.format(station.mean)),element('td',station.years+' / 30'));return tr;}));
     $('table-count').textContent=stations.length+' stations';
   }
-  async function init(){
+  async function loadPeriod(period){
+    if(!periods.has(period))return;
+    const request=++loadId,previousStation=selected?.id;
+    section.dataset.state='loading';$('period').disabled=true;$('canvas').hidden=true;
+    $('status').textContent=`Sneeuwdekkaart ${period.replace('-', '–')} laden…`;
+    $('download').href=`winter-data/sneeuwdek-normalen-${period}.csv`;
     try{
-      const response=await fetch('winter-data/sneeuwdek-normalen-1991-2020.json?v=20261119');if(!response.ok)throw Error('Sneeuwdeknormalen niet bereikbaar.');data=await response.json();geo=data.geometry;
-      const normals=data.stations.filter(s=>s.mean!==null),mapped=normals.filter(s=>s.lat!==null);
-      $('status').textContent=`${mapped.length} stationnormalen op de kaart · 1991–2020. Grijs: geen 30 volledige meetjaren.`;
+      if(!cache.has(period)){
+        const response=await fetch(`winter-data/sneeuwdek-normalen-${period}.json?v=20261119-2`);
+        if(!response.ok)throw Error('Sneeuwdeknormalen niet bereikbaar.');
+        cache.set(period,await response.json());
+      }
+      if(request!==loadId)return;
+      data=cache.get(period);geo=data.geometry;
+      const normals=data.stations.filter(s=>s.mean!==null),mapped=normals.filter(s=>s.lat!==null),unmapped=normals.length-mapped.length;
+      $('period-label').textContent=periodLabel();$('source-period').textContent=`1 januari ${data.period[0]} t/m 31 december ${data.period[1]}`;
+      $('status').textContent=`${mapped.length} stationnormalen op de kaart · ${periodLabel()}. Grijs: geen 30 volledige meetjaren.`+(unmapped?` Nog ${unmapped} volledige normalen zonder kaartpositie staan in de tabel.`:'');
       const groups=[['Met volledige normaal',s=>s.mean!==null],['Geen volledige normaal',s=>s.mean===null]];
       $('station').replaceChildren(...groups.map(([label,test])=>{const group=element('optgroup');group.label=label;for(const s of data.stations.filter(test).sort((a,b)=>a.name.localeCompare(b.name,'nl')))group.append(new Option(`${s.name} (${String(s.id).padStart(3,'0')})`,s.id));return group;}));
       $('canvas').hidden=false;renderMap();renderTable();
-      $('station').disabled=false;$('station').addEventListener('change',()=>choose($('station').value));$('search').disabled=false;$('search').addEventListener('input',renderTable);
-      $('zoom-in').addEventListener('click',()=>zoom(1.5));$('zoom-out').addEventListener('click',()=>zoom(1/1.5));$('reset').addEventListener('click',reset);$('reset').disabled=false;
-      choose(normals.find(s=>s.id===550)?.id||normals[0].id);
+      choose(data.stations.find(s=>s.id===previousStation)?.id||normals.find(s=>s.id===550)?.id||normals[0].id);
       section.dataset.state='ready';
-    }catch(error){section.dataset.state='error';$('status').textContent='De sneeuwdekkaart kon niet worden geladen. De stationnormalen blijven beschikbaar als CSV.';console.error(error);}
+    }catch(error){
+      if(request!==loadId)return;
+      section.dataset.state='error';$('status').textContent='De sneeuwdekkaart kon niet worden geladen. De stationnormalen voor de gekozen periode blijven beschikbaar als CSV.';console.error(error);
+    }finally{if(request===loadId)$('period').disabled=false;}
+  }
+  function init(){
+    const svg=$('svg');
+    svg.addEventListener('pointerdown',event=>{if(event.button!==0||event.pointerType==='touch'||event.target.closest('[data-station]'))return;hasDragged=false;drag={x:event.clientX,y:event.clientY,view:{...view}};svg.setPointerCapture(event.pointerId);});
+    svg.addEventListener('pointermove',event=>{if(!drag)return;const dx=event.clientX-drag.x,dy=event.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>5)hasDragged=true;const bounds=svg.getBoundingClientRect(),scale=Math.min(bounds.width/drag.view.w,bounds.height/drag.view.h);view.x=drag.view.x-dx/scale;view.y=drag.view.y-dy/scale;setView();});
+    const end=()=>{drag=null;setTimeout(()=>{hasDragged=false;},0);};svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);
+    $('station').disabled=false;$('station').addEventListener('change',()=>choose($('station').value));$('search').disabled=false;$('search').addEventListener('input',renderTable);
+    $('zoom-in').addEventListener('click',()=>zoom(1.5));$('zoom-out').addEventListener('click',()=>zoom(1/1.5));$('reset').addEventListener('click',reset);$('reset').disabled=false;
+    $('period').addEventListener('change',()=>{
+      const period=$('period').value,url=new URL(location.href);url.searchParams.set('sneeuwperiode',period);history.replaceState(null,'',url);loadPeriod(period);
+    });
+    const requested=new URLSearchParams(location.search).get('sneeuwperiode');
+    if(periods.has(requested))$('period').value=requested;
+    loadPeriod($('period').value);
   }
   if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){observer.disconnect();init();}},{rootMargin:'450px'});observer.observe(section);}else init();
 })();

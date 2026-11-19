@@ -1,4 +1,4 @@
-"""Bereken stationnormalen sneeuwdekdagen 1991–2020 uit volledige kalenderjaren.
+"""Bereken stationnormalen sneeuwdekdagen voor een klimaatperiode uit volledige kalenderjaren.
 
 Bron: KNMI SX om 08 UTC; positieve codes (ook 997–999) tellen als sneeuwdek.
 Een ontbrekende of tegenstrijdige dag is onbekend en maakt het jaar onvolledig.
@@ -14,8 +14,11 @@ import json
 from pathlib import Path
 import re
 
+from bouw_seizoenskalender import repeated_snow_code
+
 ROOT = Path(__file__).resolve().parents[1]
-START, END = 1991, 2020
+
+PERIODS = ((1961, 1990), (1991, 2020))
 SOURCE = 'https://daggegevens.knmi.nl/klimatologie/monv/reeksen'
 POSITION_SOURCE = 'https://dataplatform.knmi.nl/catalog/datasets/index.html?x-dataset=climate_normals_1991_2020_precipitation_normals_by_station&x-dataset-version=1'
 
@@ -54,7 +57,7 @@ def year_values(data, year):
         values = defaultdict(set)
         for station, code in observations:
             counts[station]  # Include an entirely missing station in the coverage report.
-            if isinstance(code, int) and not isinstance(code, bool) and 0 <= code <= 999:
+            if isinstance(code, int) and not isinstance(code, bool) and 0 <= code <= 999 and not repeated_snow_code(raw_day, station, code):
                 values[station].add(code)
         for station, codes in values.items():
             if len(codes) == 1:
@@ -65,12 +68,14 @@ def year_values(data, year):
             for sid, (snow, valid) in counts.items()}
 
 
-def build(cover, station_file, geometry_file):
+def build(cover, station_file, geometry_file, start=1991, end=2020):
+    if end - start != 29:
+        raise ValueError("Een klimaatperiode moet 30 kalenderjaren bevatten")
     meta = positions(station_file)
     annual = defaultdict(dict)
     names = {}
     sources = {}
-    for year in range(START, END + 1):
+    for year in range(start, end + 1):
         path = cover / f'{year}.json.gz'
         raw = path.read_bytes()
         sources[path.name] = hashlib.sha256(raw).hexdigest()
@@ -80,7 +85,7 @@ def build(cover, station_file, geometry_file):
             annual[sid][year] = values
     stations = []
     for sid, years in sorted(annual.items()):
-        series = [[year, *years.get(year, [None, 0])] for year in range(START, END + 1)]
+        series = [[year, *years.get(year, [None, 0])] for year in range(start, end + 1)]
         complete = [item for item in series if item[1] is not None]
         normal = sum(item[1] for item in complete) / 30 if len(complete) == 30 else None
         station = {'id': sid, 'name': meta.get(sid, {}).get('name', names[sid]),
@@ -92,10 +97,10 @@ def build(cover, station_file, geometry_file):
     match = re.search(r'/\*GEO-START\*/const GEO=(.*?);/\*GEO-END\*/', geometry_file.read_text(), re.S)
     if not match:
         raise ValueError('Bestaande kaartgeometrie ontbreekt')
-    return {'period': [START, END], 'unit': 'dagen per kalenderjaar', 'timeUTC': '08:00',
-            'expectedDays': (date(END + 1, 1, 1) - date(START, 1, 1)).days,
+    return {'period': [start, end], 'unit': 'dagen per kalenderjaar', 'timeUTC': '08:00',
+            'expectedDays': (date(end + 1, 1, 1) - date(start, 1, 1)).days,
             'source': SOURCE, 'positionSource': POSITION_SOURCE,
-            'method': 'Alleen 30 volledige kalenderjaren. SX > 0, inclusief gebroken sneeuwdek en sneeuwhopen. Ontbrekende en tegenstrijdige dagen zijn onbekend.',
+            'method': 'Alleen 30 volledige kalenderjaren. SX > 0, inclusief gebroken sneeuwdek en sneeuwhopen. Ontbrekende, tegenstrijdige en bekende verdachte oude registraties zijn onbekend.',
             'inputSHA256': sources, 'positionSHA256': hashlib.sha256(station_file.read_bytes()).hexdigest(),
             'geometry': json.loads(match[1]), 'stations': stations}
 
@@ -107,15 +112,21 @@ def main():
     parser.add_argument('--geometry', type=Path, default=ROOT / 'beta_neerslagstations.html')
     parser.add_argument('--out', type=Path, default=ROOT / 'winter-data')
     args = parser.parse_args()
-    data = build(args.cover, args.stations, args.geometry)
+    for start, end in PERIODS:
+        write_period(args, start, end)
+
+
+def write_period(args, start, end):
+    data = build(args.cover, args.stations, args.geometry, start, end)
+    stem = f"sneeuwdek-normalen-{start}-{end}"
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / 'sneeuwdek-normalen-1991-2020.json').write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n')
-    with (args.out / 'sneeuwdek-normalen-1991-2020.csv').open('w', encoding='utf-8-sig', newline='') as stream:
+    (args.out / f'{stem}.json').write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n')
+    with (args.out / f'{stem}.csv').open('w', encoding='utf-8-sig', newline='') as stream:
         writer = csv.writer(stream, delimiter=';', lineterminator='\n')
-        writer.writerow(['stationnummer', 'station', 'normaal_sneeuwdekdagen_per_kalenderjaar', 'volledige_jaren_1991_2020', 'geldige_meetdagen', 'breedtegraad', 'lengtegraad'])
+        writer.writerow(['stationnummer', 'station', 'normaal_sneeuwdekdagen_per_kalenderjaar', f'volledige_jaren_{start}_{end}', 'geldige_meetdagen', 'breedtegraad', 'lengtegraad'])
         for s in data['stations']:
             writer.writerow([f"{s['id']:03}", s['name'], str(s['mean']).replace('.', ',') if s['mean'] is not None else '', s['years'], s['validDays'], s['lat'], s['lon']])
-    print(f"{len(data['stations'])} stations; {sum(s['mean'] is not None for s in data['stations'])} volledige normalen; "
+    print(f"{start}–{end}: {len(data['stations'])} stations; {sum(s['mean'] is not None for s in data['stations'])} volledige normalen; "
           f"{sum(s['mean'] is not None and s['lat'] is None for s in data['stations'])} normalen zonder kaartpositie")
 
 

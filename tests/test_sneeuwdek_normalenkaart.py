@@ -6,9 +6,11 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'winter-tools'))
 spec = importlib.util.spec_from_file_location('snow_normals', ROOT / 'winter-tools/bouw_sneeuwdek_normalenkaart.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -47,6 +49,25 @@ class SnowNormalMapTest(unittest.TestCase):
             self.assertEqual((a['mean'], a['years'], a['validDays']), (1, 30, 10958))
             self.assertEqual((b['mean'], b['years']), (None, 29))
             self.assertEqual(c['mean'], 0)
+
+    def test_known_suspicious_historical_codes_make_a_year_incomplete(self):
+        days = {(date(1961, 1, 1) + timedelta(days=i)).isoformat(): [[739, 0], [550, 0]] for i in range(365)}
+        days['1961-07-10'] = [[739, 999], [550, 997]]
+        result = module.year_values({'days': days}, 1961)
+        self.assertEqual(result[739], [None, 364])
+        self.assertEqual(result[550], [1, 365])
+
+    def test_old_climate_uses_its_own_thirty_calendar_years(self):
+        data = json.loads((ROOT / 'winter-data/sneeuwdek-normalen-1961-1990.json').read_text())
+        self.assertEqual(data['period'], [1961, 1990])
+        self.assertEqual(len(data['inputSHA256']), 30)
+        normal = next(s for s in data['stations'] if s['id'] == 550)
+        self.assertEqual([row[0] for row in normal['annual']], list(range(1961, 1991)))
+        self.assertEqual(normal['validDays'], 10957)
+        self.assertEqual(normal['mean'], 22.7)
+        self.assertTrue(any(s['mean'] is not None and s['lat'] is None for s in data['stations']))
+        invalid = next(s for s in data['stations'] if s['id'] == 739)
+        self.assertIsNone(invalid['mean'])
 
     def test_ambiguous_coordinates_are_not_guessed(self):
         with tempfile.TemporaryDirectory() as tmp:
