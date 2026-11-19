@@ -21,7 +21,7 @@ RR_DREMPEL = 0.2
 # toplijst ruim onder de KNMI-quota van 1000 aanvragen per uur. De oude aanpak
 # deed per station vijf losse aanvragen en kon daardoor zelfstandig de quota
 # overschrijden.
-BULK_PARAMETERS = "ta,tx,tn,fx,ff,dd,tgn,ss,qg,rg"
+BULK_PARAMETERS = "ta,tx,tn,fx,gff,ff,dd,tgn,ss,qg,rg"
 BULK_BATCH_SIZE = 20
 
 # Stations die alleen wind meten (geen temperatuur)
@@ -373,6 +373,30 @@ def tijdstip_van_min(vals, tijden, local_tz):
         return dt_lt.strftime("%H:%M")
     except: return None
 
+def haal_windstoot_uit_dekking(cov: dict) -> tuple:
+    """Dagmaximum uit fx, aangevuld met gff waar fx ontbreekt.
+
+    Stavenisse en Tholen leveren geen fx maar wel gff. Volgens de KNMI-EDR
+    metadata is gff de maximale windstoot over tien minuten, representatief
+    voor 10 m en uitgedrukt in m/s. Gebruik niet gffs (sensorhoogte), ff
+    (gemiddelde wind) of een rollend uurmaximum dat de daggrens overschrijdt.
+    https://dataplatform.knmi.nl/dataset/docs/10-minute-in-situ-meteorological-observations-1-0
+    """
+    tijden = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values") or []
+    ranges = cov.get("ranges", {})
+    fx = to_floats(ranges.get("fx", {}).get("values"))
+    gff = to_floats(ranges.get("gff", {}).get("values"))
+    waarden = []
+    for i in range(max(len(fx), len(gff))):
+        primair = fx[i] if i < len(fx) else None
+        alternatief = gff[i] if i < len(gff) else None
+        if primair is not None and primair >= 0:
+            waarden.append(primair)
+        else:
+            waarden.append(alternatief if alternatief is not None and alternatief >= 0 else None)
+    return max_valid(waarden), tijdstip_van_max(waarden, tijden, LOCAL_TZ)
+
+
 def haal_temp_wind_uit_dekking(cov: dict) -> dict | None:
     """Temperatuur, windstoot en windchill uit één reeds opgehaalde dekking."""
     t_vals = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values") or []
@@ -380,13 +404,11 @@ def haal_temp_wind_uit_dekking(cov: dict) -> dict | None:
     ta  = to_floats(ranges.get("ta", {}).get("values"))
     tx  = to_floats(ranges.get("tx", {}).get("values"))
     tn  = to_floats(ranges.get("tn", {}).get("values"))
-    fx  = to_floats(ranges.get("fx", {}).get("values"))
     tx_val = max_valid(tx) if max_valid(tx) is not None else max_valid(ta)
     tn_val = min_valid(tn) if min_valid(tn) is not None else min_valid(ta)
-    fx_val = max_valid(fx)
+    fx_val, fx_t = haal_windstoot_uit_dekking(cov)
     tx_t = tijdstip_van_max(tx if any(v is not None for v in tx) else ta, t_vals, LOCAL_TZ)
     tn_t = tijdstip_van_min(tn if any(v is not None for v in tn) else ta, t_vals, LOCAL_TZ)
-    fx_t = tijdstip_van_max(fx, t_vals, LOCAL_TZ)
     # Windchill (min gevoelstemperatuur)
     ff_vals = to_floats(ranges.get("ff", {}).get("values"))
     gevoels_min = None
@@ -416,7 +438,7 @@ def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     fx  → max windstoot
     Inclusief tijdstip van TX, TN en FX.
     """
-    params = {"datetime": dt_range, "parameter-name": "ta,tx,tn,fx,ff"}
+    params = {"datetime": dt_range, "parameter-name": "ta,tx,tn,fx,gff,ff"}
     r = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params, timeout=25)
     if r.status_code in (400, 404): return None
     r.raise_for_status()
@@ -458,9 +480,7 @@ def haal_wind_only_uit_dekking(cov: dict) -> dict | None:
     """Windstootvelden uit een dekking van een station zonder thermometer."""
     t_vals = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values") or []
     ranges = cov.get("ranges", {})
-    fx  = to_floats(ranges.get("fx", {}).get("values"))
-    fx_val = max_valid(fx)
-    fx_t   = tijdstip_van_max(fx, t_vals, LOCAL_TZ)
+    fx_val, fx_t = haal_windstoot_uit_dekking(cov)
     return {
         "tx": None, "tx_t": None,
         "tn": None, "tn_t": None,
@@ -470,8 +490,8 @@ def haal_wind_only_uit_dekking(cov: dict) -> dict | None:
 
 
 def haal_wind_only(station_id: str, dt_range: str) -> dict | None:
-    """Haal alleen fx en ff op voor wind-only stations (geen temperatuursensor)."""
-    params = {"datetime": dt_range, "parameter-name": "fx,ff"}
+    """Haal fx, gff en ff op voor wind-only stations (geen temperatuursensor)."""
+    params = {"datetime": dt_range, "parameter-name": "fx,gff,ff"}
     r = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params, timeout=25)
     if r.status_code in (400, 404): return None
     r.raise_for_status()

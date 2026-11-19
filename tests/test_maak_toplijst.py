@@ -3,6 +3,7 @@ import math
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -43,6 +44,51 @@ def dekking(station_id="0-20000-0-06260"):
 
 
 class ToplijstBerekeningTest(unittest.TestCase):
+    def test_stavenisse_en_tholen_met_gff_zonder_thermometer(self):
+        dekkingen = {}
+        for station, piek in [("0-20000-0-06324", 19.75), ("0-20000-0-06331", 21.25)]:
+            cov = dekking(station)
+            cov["ranges"] = {"gff": {"values": [None, 12, piek, 15, 9, 8]}}
+            dekkingen[station] = cov
+            wind = toplijst.haal_wind_only_uit_dekking(cov)
+            self.assertEqual(wind["fx"], piek)
+            self.assertEqual(wind["fx_t"], "02:30")  # Augustus: UTC+2.
+            self.assertIsNone(wind["tx"])
+            self.assertIsNone(wind["tn"])
+        with patch.object(toplijst, "haal_bulk_dekkingen", return_value=dekkingen):
+            resultaat = toplijst.haal_dag(date(2026, 8, 8))
+        self.assertEqual([(rij[0], rij[1]) for rij in resultaat["fx"]], [(21.25, "Tholen"), (19.75, "Stavenisse")])
+        self.assertEqual(resultaat["max"], [])
+        self.assertEqual(resultaat["min"], [])
+
+    def test_gff_vult_alleen_ontbrekende_of_ongeldige_fx_aan(self):
+        cov = dekking()
+        cov["ranges"]["fx"]["values"] = [0, 8, None, float("nan"), -9999, 6]
+        cov["ranges"]["gff"] = {"values": [50, 50, 11, 15, 12, 50]}
+        self.assertEqual(toplijst.haal_windstoot_uit_dekking(cov), (15, "02:40"))
+        # De normale parser gebruikt dezelfde fallback, met behoud van temperatuur.
+        resultaat = toplijst.haal_temp_wind_uit_dekking(cov)
+        self.assertEqual(resultaat["fx"], 15)
+        self.assertEqual(resultaat["fx_t"], "02:40")
+        self.assertEqual(resultaat["tx"], 15.2)
+
+    def test_geen_gust_uit_gemiddelde_sensorhoogte_of_rollend_uur(self):
+        cov = dekking()
+        cov["ranges"] = {"ff": {"values": [12] * 6}, "gffs": {"values": [24] * 6}, "Sx1H": {"values": [30] * 6}}
+        self.assertEqual(toplijst.haal_windstoot_uit_dekking(cov), (None, None))
+        cov["ranges"]["gff"] = {"values": [None, -1, float("inf"), float("nan")]}
+        self.assertEqual(toplijst.haal_windstoot_uit_dekking(cov), (None, None))
+
+    def test_bulk_en_losse_queries_vragen_gff_op(self):
+        self.assertIn("gff", toplijst.BULK_PARAMETERS.split(","))
+        response = unittest.mock.Mock(status_code=200)
+        response.json.return_value = {"coverages": [dekking()]}
+        with patch.object(toplijst, "knmi_get", return_value=response) as get:
+            toplijst.haal_temp_wind("0-20000-0-06260", "interval")
+            toplijst.haal_wind_only("0-20000-0-06324", "interval")
+        for call in get.call_args_list:
+            self.assertIn("gff", call.kwargs["params"]["parameter-name"].split(","))
+
     def test_daguitersten_merge_behoudt_alle_stations(self):
         oud = [[30.0, "A", "14:00"], [28.0, "B", "13:00"]]
         nieuw = [[31.0, "A", "15:00"], [27.0, "B", "15:00"], [29.0, "C", "15:00"]]
