@@ -1,0 +1,98 @@
+/* KNMI snow-cover normals: measured station points, no spatial interpolation. */
+(() => {
+  'use strict';
+  const section=document.getElementById('sneeuwdekkaart');
+  if(!section)return;
+  const $=name=>document.getElementById('snowmap-'+name),NS='http://www.w3.org/2000/svg';
+  const number=new Intl.NumberFormat('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:1});
+  const integer=new Intl.NumberFormat('nl-NL');
+  const colors=['#d7edf5','#9ccfe3','#559cbe','#256386','#103b59'];
+  let data,geo,selected,view,markers,drag=null,hasDragged=false;
+  const markerNodes=new Map();
+  function element(tag,text){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;}
+  function svgElement(tag,attributes={}){const e=document.createElementNS(NS,tag);for(const [key,value]of Object.entries(attributes))e.setAttribute(key,value);return e;}
+  function color(mean){return mean===null?'#b4bfc7':colors[mean<5?0:mean<10?1:mean<15?2:mean<20?3:4];}
+  function point(station){const [lon0,lat1,cos,k]=geo.proj;return [(station.lon-lon0)*cos*k,(lat1-station.lat)*k];}
+  function value(station){return station.mean===null?'Geen volledige normaal':number.format(station.mean)+' dagen per jaar';}
+  function setView(){
+    view.w=Math.max(geo.w/5,Math.min(geo.w,view.w));view.h=view.w*geo.h/geo.w;
+    view.x=Math.max(0,Math.min(geo.w-view.w,view.x));view.y=Math.max(0,Math.min(geo.h-view.h,view.y));
+    $('svg').setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`);
+    $('zoom-in').disabled=view.w<=geo.w/5+.01;$('zoom-out').disabled=view.w>=geo.w-.01;
+  }
+  function zoom(factor){const cx=view.x+view.w/2,cy=view.y+view.h/2;view.w/=factor;view.h=view.w*geo.h/geo.w;view.x=cx-view.w/2;view.y=cy-view.h/2;setView();}
+  function reset(){view={x:0,y:0,w:geo.w,h:geo.h};setView();}
+  function choose(id,focus=false){
+    selected=data.stations.find(s=>s.id===Number(id));if(!selected)return;
+    $('station').value=String(selected.id);$('name').textContent=selected.name;
+    $('value').textContent=selected.mean===null?'Geen volledige normaal':number.format(selected.mean);$('value').classList.toggle('snowmap-empty',selected.mean===null);
+    $('unit').textContent=selected.mean===null?'Meetreeks 1991–2020 is onvolledig':'sneeuwdekdagen per kalenderjaar';
+    $('coverage').textContent=`${selected.years} van 30 kalenderjaren volledig gemeten`;
+    $('observations').textContent=`${integer.format(selected.validDays)} van ${integer.format(data.expectedDays)} dagen met een geldige registratie`;
+    $('station-code').textContent=`KNMI-neerslagstation ${String(selected.id).padStart(3,'0')}`;
+    $('position').textContent=selected.lat===null?'Geen eenduidige kaartpositie beschikbaar; dit station staat wel in de tabel.':'';
+    for(const [sid,node]of markerNodes){node.classList.toggle('is-selected',sid===selected.id);node.setAttribute('aria-pressed',String(sid===selected.id));node.setAttribute('tabindex',sid===selected.id?'0':'-1');}
+    const node=markerNodes.get(selected.id);
+    if(node){markers.append(node);if(focus)node.focus({preventScroll:true});}
+    $('years').replaceChildren(...selected.annual.map(([year,count,valid])=>{
+      const tr=element('tr');for(const text of [year,count===null?'Onvolledig':integer.format(count),valid])tr.append(element('td',text));return tr;
+    }));
+    $('years-caption').textContent=`Sneeuwdekdagen per kalenderjaar · ${selected.name}`;
+    const [x,y]=node?point(selected):[0,0];
+    if(node&&view.w<geo.w&&(x<view.x||x>view.x+view.w||y<view.y||y>view.y+view.h)){view.x=x-view.w/2;view.y=y-view.h/2;setView();}
+  }
+  function tooltip(event,station){
+    if(event.pointerType==='touch')return;
+    const tip=$('tooltip'),box=$('frame').getBoundingClientRect();tip.textContent=`${station.name} · ${value(station)}`;tip.hidden=false;
+    tip.style.left=Math.max(5,Math.min(box.width-tip.offsetWidth-5,event.clientX-box.left+12))+'px';
+    tip.style.top=Math.max(5,Math.min(box.height-tip.offsetHeight-5,event.clientY-box.top+12))+'px';
+  }
+  function renderMap(){
+    const svg=$('svg');svg.replaceChildren(svgElement('title',{id:'snowmap-svg-title'}));svg.firstChild.textContent='Gemiddeld aantal sneeuwdekdagen per kalenderjaar, 1991–2020, per KNMI-neerslagstation';
+    svg.append(svgElement('rect',{width:geo.w,height:geo.h,fill:'#e8f3f8'}));
+    const land=svgElement('g',{'aria-hidden':'true'});
+    for(const country of geo.buren)land.append(svgElement('path',{d:country.d,fill:'#eceee7',stroke:'#d0d8d4','stroke-width':1}));
+    land.append(svgElement('path',{d:geo.nl,fill:'#fafcfb',stroke:'#95aeba','stroke-width':1.6,'fill-rule':'evenodd'}));
+    for(const province of geo.provincies)land.append(svgElement('path',{d:province.d,fill:'none',stroke:'#c5d2d9','stroke-width':1,'fill-rule':'evenodd'}));
+    svg.append(land);markers=svgElement('g',{'aria-label':'KNMI-neerslagstations'});svg.append(markers);
+    const mapped=data.stations.filter(s=>s.lat!==null&&s.lon!==null).sort((a,b)=>Number(a.mean!==null)-Number(b.mean!==null)||a.id-b.id);
+    for(const station of mapped){
+      const [x,y]=point(station),group=svgElement('g',{class:'snowmap-marker',transform:`translate(${x} ${y})`,role:'button',tabindex:'-1','aria-pressed':'false','aria-label':`${station.name}, station ${station.id}: ${value(station)}`,'data-station':station.id});
+      group.append(svgElement('circle',{r:11,class:'snowmap-hit'}),svgElement('circle',{r:5.5,fill:color(station.mean),class:'snowmap-dot'}));
+      group.addEventListener('click',event=>{if(hasDragged)return;event.stopPropagation();choose(station.id);$('tooltip').hidden=true;});
+      group.addEventListener('pointermove',event=>tooltip(event,station));group.addEventListener('pointerleave',()=>{$('tooltip').hidden=true;});
+      group.addEventListener('keydown',event=>{
+        if(event.key==='Enter'||event.key===' '){event.preventDefault();choose(station.id);}
+        else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){
+          event.preventDefault();const sorted=mapped.slice().sort((a,b)=>a.name.localeCompare(b.name,'nl'));
+          const next=(sorted.findIndex(s=>s.id===station.id)+(event.key==='ArrowLeft'||event.key==='ArrowUp'?-1:1)+sorted.length)%sorted.length;choose(sorted[next].id,true);
+        }
+      });
+      markerNodes.set(station.id,group);markers.append(group);
+    }
+    svg.addEventListener('pointerdown',event=>{if(event.button!==0||event.pointerType==='touch'||event.target.closest('[data-station]'))return;hasDragged=false;drag={x:event.clientX,y:event.clientY,view:{...view}};svg.setPointerCapture(event.pointerId);});
+    svg.addEventListener('pointermove',event=>{if(!drag)return;const dx=event.clientX-drag.x,dy=event.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>5)hasDragged=true;const bounds=svg.getBoundingClientRect(),scale=Math.min(bounds.width/drag.view.w,bounds.height/drag.view.h);view.x=drag.view.x-dx/scale;view.y=drag.view.y-dy/scale;setView();});
+    const end=()=>{drag=null;setTimeout(()=>{hasDragged=false;},0);};svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);
+    reset();
+  }
+  function renderTable(){
+    const term=$('search').value.trim().toLocaleLowerCase('nl'),stations=data.stations.filter(s=>(s.name+' '+String(s.id).padStart(3,'0')).toLocaleLowerCase('nl').includes(term)).sort((a,b)=>a.name.localeCompare(b.name,'nl'));
+    $('table').replaceChildren(...stations.map(station=>{const tr=element('tr'),cell=element('th'),button=element('button',station.name);cell.scope='row';button.type='button';button.className='snowmap-table-button';button.addEventListener('click',()=>{choose(station.id);$('details').scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});});cell.append(button);tr.append(element('td',String(station.id).padStart(3,'0')),cell,element('td',station.mean===null?'Geen volledige normaal':number.format(station.mean)),element('td',station.years+' / 30'));return tr;}));
+    $('table-count').textContent=stations.length+' stations';
+  }
+  async function init(){
+    try{
+      const response=await fetch('winter-data/sneeuwdek-normalen-1991-2020.json?v=20261119');if(!response.ok)throw Error('Sneeuwdeknormalen niet bereikbaar.');data=await response.json();geo=data.geometry;
+      const normals=data.stations.filter(s=>s.mean!==null),mapped=normals.filter(s=>s.lat!==null);
+      $('status').textContent=`${mapped.length} stationnormalen op de kaart · 1991–2020. Grijs: geen 30 volledige meetjaren.`;
+      const groups=[['Met volledige normaal',s=>s.mean!==null],['Geen volledige normaal',s=>s.mean===null]];
+      $('station').replaceChildren(...groups.map(([label,test])=>{const group=element('optgroup');group.label=label;for(const s of data.stations.filter(test).sort((a,b)=>a.name.localeCompare(b.name,'nl')))group.append(new Option(`${s.name} (${String(s.id).padStart(3,'0')})`,s.id));return group;}));
+      $('canvas').hidden=false;renderMap();renderTable();
+      $('station').disabled=false;$('station').addEventListener('change',()=>choose($('station').value));$('search').disabled=false;$('search').addEventListener('input',renderTable);
+      $('zoom-in').addEventListener('click',()=>zoom(1.5));$('zoom-out').addEventListener('click',()=>zoom(1/1.5));$('reset').addEventListener('click',reset);$('reset').disabled=false;
+      choose(normals.find(s=>s.id===550)?.id||normals[0].id);
+      section.dataset.state='ready';
+    }catch(error){section.dataset.state='error';$('status').textContent='De sneeuwdekkaart kon niet worden geladen. De stationnormalen blijven beschikbaar als CSV.';console.error(error);}
+  }
+  if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){observer.disconnect();init();}},{rootMargin:'450px'});observer.observe(section);}else init();
+})();

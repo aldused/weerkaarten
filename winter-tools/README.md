@@ -70,3 +70,22 @@ python3 winter-tools/bouw_winterstatistieken.py \
 ```
 
 Sneeuwdek en Hellmann lopen per winterseizoen. Voor de vorstvrije periode gebruikt de generator de laatste vorstdag in januari t/m juni en de eerste in juli t/m december van hetzelfde kalenderjaar. Een gat tussen de twee vorstdagen blijft een ontbrekende duur. Een ontbrekende sneeuwdekmeting sluit een reeks af. Het Hellmanngetal wordt uitsluitend berekend als alle daggemiddelden van november t/m maart beschikbaar zijn.
+
+## Kaart sneeuwdekdagen 1991–2020
+
+```bash
+python3 winter-tools/bouw_sneeuwdek_normalenkaart.py
+```
+
+Deze generator gebruikt de bestaande KNMI-SX-dagarchieven en de meegeleverde
+`bronnen/Neerslagstations-1991-2020.csv` uit de officiële KNMI-stationslijst.
+De kaart hergebruikt de kaartprojectie en grenzen van de neerslagstationspagina.
+Per kalenderjaar telt iedere geldige positieve SX-code als een sneeuwdekdag,
+ook 997–999. Een ontbrekende of tegenstrijdige dag maakt dat jaar onvolledig.
+Een normaalwaarde verschijnt uitsluitend bij 30 volledige kalenderjaren van
+1991 t/m 2020; onvolledige stations blijven herkenbaar in kaart en tabel.
+Dubbele identieke waarnemingen tellen eenmaal mee. Bij meer dan één positie
+onder hetzelfde stationsnummer verschijnt het station alleen in de tabel.
+De gegenereerde JSON bevat controlesommen van alle bronbestanden; de CSV bevat
+stationnormalen en meetdekking. Het is een berekening uit bronmetingen, geen
+ruimtelijke interpolatie of correctie voor stationsverplaatsingen.
