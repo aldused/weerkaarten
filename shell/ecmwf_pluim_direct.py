@@ -1563,13 +1563,17 @@ def main(argv: list[str]) -> int:
         flush=True,
     )
 
-    shape = (51, len(stations), len(steps))
+    sample_stations, ranking_groups = stations, []
+    if args.fields in ('core','complete') and not (args.no_write or args.slug or args.test_step or args.limit_steps):
+        from pluim_top3_landelijk import sampling_configuration
+        sample_stations, raw_params, ranking_groups = sampling_configuration(args.repo_dir, stations, raw_params)
+    shape = (51, len(sample_stations), len(steps))
     step_to_index = {step: index for index, step in enumerate(steps)}
     metrics = Metrics(started_monotonic=time.monotonic())
     max_temp_bytes = int(args.max_temp_gib * 1024**3)
     grid_points: tuple[GridPoint, ...] | None = None
     resumed = (
-        load_checkpoint(run_checkpoint, run, steps, stations, raw_params, shape)
+        load_checkpoint(run_checkpoint, run, steps, sample_stations, raw_params, shape)
         if run_checkpoint is not None else None
     )
     if resumed is None:
@@ -1609,13 +1613,13 @@ def main(argv: list[str]) -> int:
                 with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers,mp_context=multiprocessing.get_context('spawn')) as pool:
                     def submit(pool,job):
                         number,h,params=job
-                        return pool.submit(process_native_batch,args.source,run,cycle,h,params,stations,grid_points,str(temp_dir),max_temp_bytes//args.workers)
+                        return pool.submit(process_native_batch,args.source,run,cycle,h,params,sample_stations,grid_points,str(temp_dir),max_temp_bytes//args.workers)
                     for number,result in bounded_batch_results(pool,jobs,submit,args.workers):
                         grid_points=merge_native_batch(raw,step_to_index,grid_points,result)
                         metrics.grib_bytes+=result['bytes'];metrics.download_seconds+=result['download'];metrics.decode_seconds+=result['decode'];metrics.batches+=1
                         metrics.peak_temp_bytes=max(metrics.peak_temp_bytes,result['peak']*args.workers)
                         print(f"  parallel batch {number}: steps {result['steps']}, download {result['download']:.1f}s, decode {result['decode']:.1f}s",flush=True)
-                        if run_checkpoint is not None:save_checkpoint(run_checkpoint,run,steps,stations,raw_params,raw,grid_points,metrics)
+                        if run_checkpoint is not None:save_checkpoint(run_checkpoint,run,steps,sample_stations,raw_params,raw,grid_points,metrics)
             else:
                 for batch_number, batch_steps in enumerate(chunks(steps, args.batch_steps), start=1):
                     batch_indexes = [step_to_index[step] for step in batch_steps]
@@ -1667,7 +1671,7 @@ def main(argv: list[str]) -> int:
                             True,
                             batch_steps,
                             batch_params,
-                            stations,
+                            sample_stations,
                             step_to_index,
                             raw,
                             grid_points,
@@ -1677,7 +1681,7 @@ def main(argv: list[str]) -> int:
                             False,
                             batch_steps,
                             batch_params,
-                            stations,
+                            sample_stations,
                             step_to_index,
                             raw,
                             grid_points,
@@ -1709,7 +1713,7 @@ def main(argv: list[str]) -> int:
                             run_checkpoint,
                             run,
                             steps,
-                            stations,
+                            sample_stations,
                             raw_params,
                             raw,
                             grid_points,
@@ -1805,6 +1809,12 @@ def main(argv: list[str]) -> int:
                 args.out_dir,
                 meta_path,
             )
+            if ranking_groups:
+                try:
+                    from pluim_top3_landelijk import queue_direct
+                    queue_direct(args.repo_dir, run, steps, fields, ranking_groups, len(stations))
+                except Exception as error:
+                    print(f"NL_TOP3_WAIT: landelijke wachtrij kon niet worden opgeslagen: {error}", file=sys.stderr, flush=True)
             if run_checkpoint is not None:
                 run_checkpoint.unlink(missing_ok=True)
             print("WRITTEN:" + " ".join(str(path) for path in written), flush=True)

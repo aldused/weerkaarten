@@ -41,6 +41,15 @@
     panel.append(body);
     target.before(panel);
     let wantedDays = Number(new URLSearchParams(location.search).get('top3_dagen')) || 5, generation = 0;
+    let countryPromise=null,countryFetched=0;
+    function country() {
+      if(!countryPromise||Date.now()-countryFetched>60000){
+        countryFetched=Date.now();
+        countryPromise=fetch('https://data.weerlab.nl/pluim_top3_landelijk.json',{cache:'no-cache',signal:AbortSignal.timeout(10000)})
+          .then(r=>r.ok?r.json():null).catch(()=>null);
+      }
+      return countryPromise;
+    }
     function unavailable(message) {
       grid.replaceChildren();
       status.textContent = message;
@@ -54,10 +63,13 @@
         await runs.state.archiveReady;
         if (token !== generation) return;
         const run = runs.selectedRunIso();
+        const expanded=await country();
+        if(token!==generation)return;
+        const expandedEntry=expanded?.complete===true&&expanded.runs?.find(e=>e.complete===true&&Date.parse(e.run)===Date.parse(run));
         const manifest = runs.state.archiveManifest;
-        const entry = manifest?.complete === true && manifest.runs?.find(e => e.complete === true && Date.parse(e.run) === Date.parse(run));
+        const entry = expandedEntry || (manifest?.complete === true && manifest.runs?.find(e => e.complete === true && Date.parse(e.run) === Date.parse(run)));
         const summary = entry?.top3_nl;
-        if (summary?.schema !== 1 || summary.member_count !== 51 || !summary.periods?.length) {
+        if (![1,2].includes(summary?.schema) || summary.member_count !== 51 || !summary.periods?.length) {
           unavailable('Voor deze exacte modelrun is de landelijke top 3 nog niet compleet.');
           return;
         }
@@ -74,7 +86,15 @@
         select.disabled = false;
         const runDate = new Date(run);
         const dateLabel = new Intl.DateTimeFormat('nl-NL', {timeZone:'UTC', day:'numeric', month:'short', year:'numeric'}).format(runDate);
-        status.textContent = `Run ${dateLabel} · ${String(runDate.getUTCHours()).padStart(2,'0')} UTC · ${summary.station_count} locaties · t/m ${dates.format(period.end_ms)}`;
+        const coverage=summary.grid_count?`${summary.station_count} plaatsen / ${summary.grid_count} modelpunten`:`${summary.station_count} locaties`;
+        status.textContent = `Run ${dateLabel} · ${String(runDate.getUTCHours()).padStart(2,'0')} UTC · ${coverage} · t/m ${dates.format(period.end_ms)}`;
+        method.lastElementChild.textContent=summary.grid_count
+          ? `Alle ${summary.station_count} Nederlandse plaatsen uit de plaatsencatalogus worden meegenomen. Plaatsen op hetzelfde modelpunt delen één resultaat; de top 3 bevat drie verschillende modelpunten. Bronrooster: ${summary.source?.resolution||summary.source?.grid}. Neerslag omvat regen en sneeuw; sneeuwsom is vallende sneeuw, geen sneeuwdek.${summary.source?.grid==='O1280'?' Bij deze bron wordt sneeuw afgeleid uit neerslag bij temperaturen onder 0 °C.':''} Tijdstippen bij de plaatsen zijn Nederlandse tijd. Nieuwe 00/06/12/18 UTC-runs verschijnen na verwerking.`
+          : 'Dit is een vergelijking van de beschikbare Nederlandse pluimlocaties; de uitgebreide landelijke berekening voor deze run volgt zodra die compleet is. Neerslag omvat regen én het waterequivalent van sneeuw. Sneeuwsom is vallende sneeuw, geen sneeuwdekdikte. Tijdstippen zijn Nederlandse tijd.';
+        if(summary.grid_count){
+          const credit=make('a','','GeoNames (CC BY 4.0)');credit.href='https://www.geonames.org/';credit.target='_blank';credit.rel='noopener';
+          method.lastElementChild.append(' Plaatsencatalogus: ',credit);
+        }
         grid.replaceChildren(...categories.map(([key, title, metric, unit, color]) => {
           const card = make('section', 'pluim-top3-card');
           card.style.setProperty('--top3-color', color);
@@ -94,11 +114,18 @@
             url.searchParams.set('lat', row.lat);
             url.searchParams.set('lon', row.lon);
             url.searchParams.set('run', String(runDate.getUTCHours()).padStart(2,'0'));
+            ['top3_punt','top3_versie','top3_run'].forEach(key=>url.searchParams.delete(key));
+            if(summary.path&&row.point){
+              url.searchParams.set('top3_punt',row.point);
+              url.searchParams.set('top3_versie',summary.revision);
+              url.searchParams.set('top3_run',entry.run.replaceAll('-','').slice(0,11));
+            }
             link.href = url.href;
             const value = row.value > 0 && row.value < .05 ? '< 0,1' : number.format(row.value);
             link.append(make('span', 'pluim-top3-place', row.name), make('span', 'pluim-top3-value', `${value} ${unit}`));
             if (row.time_ms != null) link.append(make('span', 'pluim-top3-detail', dates.format(row.time_ms)));
             else if (key === 'snow') link.append(make('span', 'pluim-top3-detail', `Kans op ≥ 1 cm: ${Math.round(row.chance_1cm)}%`));
+            if(row.equivalent_count>1)link.append(make('span','pluim-top3-detail',`Zelfde modelpunt: ${row.equivalent_places.join(', ')}${row.equivalent_count>4?` en ${row.equivalent_count-4} andere ${row.equivalent_count===5?'plaats':'plaatsen'}`:''}`));
             item.append(link); list.append(item);
           });
           card.append(list);

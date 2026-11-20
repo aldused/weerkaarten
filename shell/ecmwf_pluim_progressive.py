@@ -144,9 +144,11 @@ def main(argv=None):
         print('PROGRESSIVE_WAIT: first complete native intervals not available', flush=True)
         return 0
     params = direct.FIELD_SETS[args.fields]
-    shape = (51, len(stations), len(steps))
+    from pluim_top3_landelijk import sampling_configuration
+    sample_stations, params, ranking_groups = sampling_configuration(args.repo_dir, stations, params)
+    shape = (51, len(sample_stations), len(steps))
     path = direct.checkpoint_path(run, args.fields)
-    resumed = direct.load_checkpoint(path, run, steps, stations, params, shape)
+    resumed = direct.load_checkpoint(path, run, steps, sample_stations, params, shape)
     metrics = direct.Metrics(started_monotonic=time.monotonic())
     if resumed:
         raw, grid, stored = resumed
@@ -183,13 +185,13 @@ def main(argv=None):
             with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers, mp_context=multiprocessing.get_context('spawn')) as pool:
                 def submit(pool, job):
                     _, h, p = job
-                    return pool.submit(direct.process_native_batch, args.source, run, run.hour, h, p, stations, grid, temp, int(args.max_temp_gib * 1024**3) // args.workers)
+                    return pool.submit(direct.process_native_batch, args.source, run, run.hour, h, p, sample_stations, grid, temp, int(args.max_temp_gib * 1024**3) // args.workers)
                 for number, result in direct.bounded_batch_results(pool, jobs, submit, args.workers,
                         on_error=lambda number, error: print(f"PROGRESSIVE_RETRY: batch {number}: {error}", flush=True)):
                     grid = direct.merge_native_batch(raw, index, grid, result)
                     metrics.grib_bytes += result['bytes']; metrics.download_seconds += result['download']; metrics.decode_seconds += result['decode']; metrics.batches += 1
                     metrics.peak_temp_bytes = max(metrics.peak_temp_bytes, result['peak'] * args.workers)
-                    direct.save_checkpoint(path, run, steps, stations, params, raw, grid, metrics)
+                    direct.save_checkpoint(path, run, steps, sample_stations, params, raw, grid, metrics)
                     print(f"PROGRESSIVE_BATCH: steps={result['steps']}", flush=True)
                     publish_if_grown()
         finally:
