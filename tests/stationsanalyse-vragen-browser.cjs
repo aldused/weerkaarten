@@ -41,7 +41,7 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   assert.equal(await page.locator('[data-record]').count(),4);
   assert.equal(await page.locator('.q-frost-card').count(),4);
   for(const text of ['−0,1 °C tot −5,0 °C','−5,1 °C tot −10,0 °C','−10,1 °C tot −15,0 °C','−15,1 °C of lager'])assert((await page.locator('#vorst').innerText()).includes(text));
-  assert.equal(await page.inputValue('#q-start'),'01-07');assert.equal(await page.inputValue('#q-end'),'30-06');
+  assert.equal(await page.inputValue('#q-start'),'01-08');assert.equal(await page.inputValue('#q-end'),'31-07');
   assert.equal(await page.locator('.q-simple-year-table tbody th').first().evaluate(e=>getComputedStyle(e).position),'static');
   assert(await page.locator('.q-simple-year-table tbody tr').count()>100);
   assert.match(await page.locator('.q-simple-year-table tbody').textContent(),/historisch/);
@@ -86,7 +86,7 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   assert.equal(await page.inputValue('#q-start'),'01-12');assert.equal(await page.inputValue('#q-end'),'29-02');
   await page.click('.q-submit');await ready(page);
   await page.locator('[data-frost-class="moderate"]').click();await ready(page);
-  assert.equal(await page.inputValue('#q-start'),'01-07');assert.equal(await page.inputValue('#q-end'),'30-06');
+  assert.equal(await page.inputValue('#q-start'),'01-08');assert.equal(await page.inputValue('#q-end'),'31-07');
   await page.click('#q-scope-all');await ready(page);
   for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`No page overflow at ${width}px`);}
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(screenshots,'all-years-mobile.png'),fullPage:true});
@@ -109,6 +109,6 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   }
   const tied=fixture.locator('[data-record="earlyFirst"] .q-tied-stations');assert.match(await tied.innerText(),/Alle 3 stations/);await tied.locator('summary').click();assert.match(await fixture.locator('[data-record="earlyFirst"]').innerText(),/Historisch dorp/);
   await fixture.close();assert.deepEqual(errors,[]);
-  console.log('PASS: default national all-year records, one-year view and shareable links, Castricum May 1944 historical observation, full July–June frost season, four exact frost classes, October–April winter year, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
+  console.log('PASS: default national all-year records, one-year view and shareable links, Castricum May 1944 historical observation, full August–July frost season, four exact frost classes, October–April winter year, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());

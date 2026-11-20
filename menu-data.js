@@ -1177,7 +1177,7 @@ const MENU_PRODUCTS = [
     "section": "Seizoenen & bijzondere dagen",
     "icon": "tabel",
     "href": "index.html#eerstelaatste",
-    "src": "stationsanalyse.html?v=20261120-volledig-vorstseizoen",
+    "src": "stationsanalyse.html?v=20261120-vorstseizoen-augustus",
     "thumbnail": null,
     "facets": {},
     "keywords": "Eerste laatste vorst ijsdag warm zomers tropisch neerslag windstoot zon gemiddelde datum ranglijst seizoen reeks",

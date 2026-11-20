@@ -65,11 +65,19 @@ test('a custom period starting 29 February correctly anchors the clamped 28 Febr
 test('Castricum 9 May 1944 remains visible as historical moderate frost in the full frost season',()=>{
  const H=require('../stationsanalyse-records.js');
  const historic=H.historicalRecords({waarnemingen:[{datum:'1944-05-09',station:'Castricum',parameter:'TN',waarde:-5.4}]});
- const daily=series('1943-07-01','1944-06-30',{'1944-03-06':-60});
- const options={field:'TN',op:'between',threshold:-10,upper:-5.1,from:1943,to:1943,today,start:'07-01',end:'06-30'};
+ const daily=series('1943-08-01','1944-07-31',{'1943-09-27':-60,'1944-03-06':-60});
+ const options={field:'TN',op:'between',threshold:-10,upper:-5.1,from:1943,to:1943,today,start:'08-01',end:'07-31'};
  const full=C.analyzeNetwork([{id:'De Bilt',json:daily}],historic,options),last=full.periods[0].last;
+ assert.equal(iso(full.periods[0].first.time),'1943-09-27','September frost is included');
  assert.equal(iso(last.time),'1944-05-09');assert.equal(last.observations[0].station,'Castricum');assert.equal(last.observations[0].value,-5.4);assert.equal(last.observations[0].historical,true);
  assert.equal(iso(full.rank('last',true)[0].last.time),'1944-05-09');
  const winter=C.analyzeNetwork([{id:'De Bilt',json:daily}],historic,{...options,start:'10-01',end:'04-30'});
  assert.equal(iso(winter.periods[0].last.time),'1944-03-06','October–April remains an explicit narrower selection');
+});
+
+test('the August–July frost season includes September and both boundary days',()=>{
+ const j=series('2023-07-31','2024-08-01',{'2023-07-31':-60,'2023-08-01':-60,'2023-09-27':-60,'2024-07-31':-60,'2024-08-01':-60});
+ const a=analyze(j,{field:'TN',op:'between',threshold:-10,upper:-5.1,from:2023,to:2023,start:'08-01',end:'07-31'});
+ assert.equal(a.periods[0].expected,366);assert.equal(a.periods[0].hits,3);
+ assert.equal(iso(a.periods[0].first.time),'2023-08-01');assert.equal(iso(a.periods[0].last.time),'2024-07-31');
 });
