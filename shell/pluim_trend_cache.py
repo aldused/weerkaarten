@@ -951,6 +951,99 @@ def canonical_sha256(value: object) -> str:
     ).hexdigest()
 
 
+# Explicit Dutch locations: border/foreign stations are not a national ranking.
+# Wielen is excluded because the archived name and coordinates disagree.
+TOP3_NL_SLUGS = frozenset((
+    "amsterdam", "arcen", "debilt", "deelen", "denhelder", "groningen",
+    "eindhoven", "enschede", "gilzerijen", "hoekvanholland", "hoogeveen",
+    "ijsselmeer", "leeuwarden", "maastricht", "rotterdam", "terschelling",
+    "valkenburg", "vlieland", "vlissingen", "volkel", "woensdrecht",
+    "wateringen", "dordrecht", "soestdijk", "rhoon", "ridderkerk",
+))
+TOP3_PERIOD_DAYS = (1, 3, 5, 10, 15)
+
+
+def build_nl_top3(station_runs: dict[str, dict], fields: list[str]) -> dict | None:
+    """Small same-run rankings; never download station archives in the browser.
+
+    Temperature and wind use extrema of the 51-member mean at each timestamp.
+    Precipitation/snow use the mean of each member's interval sum over (t0,end].
+    Missing members or locations invalidate that entire category, not just a row.
+    """
+    if not TOP3_NL_SLUGS.issubset(station_runs):
+        return None
+    locations = [s for s in STATIONS if s[1] in TOP3_NL_SLUGS]
+    runs = [station_runs[slug] for _, slug, _, _ in locations]
+    run_iso = runs[0].get("run")
+    try:
+        start = int(parse_utc(run_iso).timestamp() * 1000)
+    except (TypeError, ValueError):
+        return None
+    times = runs[0].get("times_ms")
+    if (not isinstance(times, list) or len(times) < 2 or times[0] != start
+            or any(not is_finite_number(t) for t in times)
+            or any(not 0 < b-a <= 6*3600000 for a, b in zip(times, times[1:]))
+            or any(r.get("run") != run_iso or r.get("times_ms") != times
+                   or r.get("source", {}).get("run_initialisation", run_iso) != run_iso
+                   for r in runs)):
+        return None
+
+    periods = []
+    for days in TOP3_PERIOD_DAYS:
+        end = start + days * 86400000
+        if end not in times:
+            continue  # A short run cannot masquerade as a 10/15-day forecast.
+        last = times.index(end) + 1
+        rankings = {}
+        for field, keys in (
+            ("temperature_2m", ("cold", "mild")),
+            ("wind_speed_10m", ("wind",)),
+            ("snowfall", ("snow",)),
+            ("precipitation", ("precipitation",)),
+        ):
+            rows = {key: [] for key in keys}
+            valid = field in fields
+            if valid:
+                for (name, slug, lat, lon), run in zip(locations, runs):
+                    matrix = run.get("members", {}).get(field)
+                    first = 1 if field in ("snowfall", "precipitation") else 0
+                    if (not isinstance(matrix, list) or len(matrix) != 51
+                            or any(not isinstance(row, list) or len(row) != len(times)
+                                   or any(not is_finite_number(v) for v in row[first:last])
+                                   for row in matrix)):
+                        valid = False
+                        break
+                    if field != "temperature_2m" and any(v < 0 for row in matrix for v in row[first:last]):
+                        valid = False
+                        break
+                    base = dict(name=name, slug=slug, lat=lat, lon=lon)
+                    if field in ("snowfall", "precipitation"):
+                        totals = [math.fsum(row[1:last]) for row in matrix]
+                        row = dict(base, value=math.fsum(totals)/51)
+                        if field == "snowfall":
+                            row["chance_1cm"] = sum(v >= 1 for v in totals)*100/51
+                        rows[keys[0]].append(row)
+                    else:
+                        means = [math.fsum(row[i] for row in matrix)/51 for i in range(last)]
+                        for key in keys:
+                            index = (min if key == "cold" else max)(range(last), key=means.__getitem__)
+                            rows[key].append(dict(base, value=means[index], time_ms=times[index]))
+            for key in keys:
+                if not valid:
+                    rankings[key] = None
+                    continue
+                candidates = rows[key]
+                if key in ("snow", "precipitation"):
+                    candidates = [row for row in candidates if row["value"] > 1e-9]
+                candidates.sort(key=lambda row: (row["value"] if key == "cold" else -row["value"], row["slug"]))
+                rankings[key] = [
+                    {k: round(v, 4) if isinstance(v, float) else v for k, v in row.items()}
+                    for row in candidates[:3]
+                ]
+        periods.append(dict(days=days, start_ms=start, end_ms=end, rankings=rankings))
+    return dict(schema=1, station_count=len(locations), member_count=51, periods=periods)
+
+
 def build_capability_payload(
     out_dir: Path,
     stations: list[tuple[str, str, float, float]] | None = None,
@@ -1035,6 +1128,12 @@ def build_capability_payload(
             }
             if sparse_fields:
                 entry["sparse_fields"] = sparse_fields
+            if complete:
+                top3 = build_nl_top3(
+                    {slug: runs_by_station[slug][run_iso] for slug in runs_by_station}, fields
+                )
+                if top3 is not None:
+                    entry["top3_nl"] = top3
             runs_out.append(entry)
 
     semantic = {
