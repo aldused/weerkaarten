@@ -61,3 +61,15 @@ test('a custom period starting 29 February correctly anchors the clamped 28 Febr
  const j=series('2021-02-28','2021-02-28',{},'TN',-1),a=analyze(j,{from:2021,to:2021,start:'02-29',end:'02-29'});
  assert.equal(a.completeCount,1);assert.equal(a.meanFirst,'02-28');assert.equal(a.rank('first')[0].first.position,-1);
 });
+
+test('Castricum 9 May 1944 remains visible as historical moderate frost in the full frost season',()=>{
+ const H=require('../stationsanalyse-records.js');
+ const historic=H.historicalRecords({waarnemingen:[{datum:'1944-05-09',station:'Castricum',parameter:'TN',waarde:-5.4}]});
+ const daily=series('1943-07-01','1944-06-30',{'1944-03-06':-60});
+ const options={field:'TN',op:'between',threshold:-10,upper:-5.1,from:1943,to:1943,today,start:'07-01',end:'06-30'};
+ const full=C.analyzeNetwork([{id:'De Bilt',json:daily}],historic,options),last=full.periods[0].last;
+ assert.equal(iso(last.time),'1944-05-09');assert.equal(last.observations[0].station,'Castricum');assert.equal(last.observations[0].value,-5.4);assert.equal(last.observations[0].historical,true);
+ assert.equal(iso(full.rank('last',true)[0].last.time),'1944-05-09');
+ const winter=C.analyzeNetwork([{id:'De Bilt',json:daily}],historic,{...options,start:'10-01',end:'04-30'});
+ assert.equal(iso(winter.periods[0].last.time),'1944-03-06','October–April remains an explicit narrower selection');
+});

@@ -41,14 +41,28 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   assert.equal(await page.locator('[data-record]').count(),4);
   assert.equal(await page.locator('.q-frost-card').count(),4);
   for(const text of ['−0,1 °C tot −5,0 °C','−5,1 °C tot −10,0 °C','−10,1 °C tot −15,0 °C','−15,1 °C of lager'])assert((await page.locator('#vorst').innerText()).includes(text));
-  assert.equal(await page.inputValue('#q-start'),'01-10');assert.equal(await page.inputValue('#q-end'),'30-04');
+  assert.equal(await page.inputValue('#q-start'),'01-07');assert.equal(await page.inputValue('#q-end'),'30-06');
   assert.equal(await page.locator('.q-simple-year-table tbody th').first().evaluate(e=>getComputedStyle(e).position),'static');
   assert(await page.locator('.q-simple-year-table tbody tr').count()>100);
   assert.match(await page.locator('.q-simple-year-table tbody').textContent(),/historisch/);
   assert.equal(await page.locator('#q-year option').evaluateAll(es=>es.some(e=>e.textContent.includes('onvolledig'))),false);
   assert.equal(await page.locator('#q-answer-title').count(),0,'No long station list in a large headline');
+  assert.equal(await page.inputValue('#q-simple-window'),'frostseason');
+  const late=page.locator('[data-record="lateLast"]');
+  assert.match(await late.innerText(),/9 mei/);assert.match(await late.textContent(),/Castricum/);assert.match(await late.textContent(),/5,4/);
   await page.screenshot({path:path.join(screenshots,'all-years-desktop.png'),fullPage:true});
   await page.click('#q-view-year');assert.equal(await page.locator('#q-year').isVisible(),true);
+  await page.selectOption('#q-year','1943/1944');
+  assert.match(await page.locator('.q-year-cards').textContent(),/9 mei 1944/);
+  assert.match(await page.locator('.q-year-cards').textContent(),/Castricum/);
+  assert.match(await page.locator('.q-year-cards').textContent(),/5,4/);
+  await page.selectOption('#q-simple-window','winterjaar');await ready(page);
+  assert.equal(await page.inputValue('#q-start'),'01-10');assert.equal(await page.inputValue('#q-end'),'30-04');
+  assert.match(await page.locator('#q-simple-period .q-frost-note').innerText(),/mei en juni valt buiten/);
+  assert.doesNotMatch(await page.locator('.q-year-cards').textContent(),/9 mei 1944/);
+  await page.reload();await ready(page);assert.equal(await page.inputValue('#q-simple-window'),'winterjaar');
+  await page.selectOption('#q-simple-window','frostseason');await ready(page);
+  assert.match(await page.locator('.q-year-cards').textContent(),/9 mei 1944/);
   await page.selectOption('#q-year','2022/2023');
   assert.match(await page.locator('.q-year-cards').innerText(),/19 november/);
   assert.equal(await page.locator('.q-year-cards .q-date-card').count(),2);
@@ -72,7 +86,7 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   assert.equal(await page.inputValue('#q-start'),'01-12');assert.equal(await page.inputValue('#q-end'),'29-02');
   await page.click('.q-submit');await ready(page);
   await page.locator('[data-frost-class="moderate"]').click();await ready(page);
-  assert.equal(await page.inputValue('#q-start'),'01-10');assert.equal(await page.inputValue('#q-end'),'30-04');
+  assert.equal(await page.inputValue('#q-start'),'01-07');assert.equal(await page.inputValue('#q-end'),'30-06');
   await page.click('#q-scope-all');await ready(page);
   for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`No page overflow at ${width}px`);}
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(screenshots,'all-years-mobile.png'),fullPage:true});
@@ -89,12 +103,12 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   const hitMap=new Map(hits),days=[];for(let t=Date.UTC(2020,9,1);t<Date.UTC(2023,10,19);t+=86400000){const raw=new Date(t).toISOString().slice(0,10).replaceAll('-','');days.push([raw,hitMap.get(raw)??0]);}
   await fixture.route('**/dagdata_*.json*',r=>r.fulfill({json:{kolommen:['YYYYMMDD','TN'],data:r.request().url().includes('_260.')?days:r.request().url().includes('_215.')?[['20221001',-80]]:[]}}));
   await fixture.route('**/records_nl_extreme.json*',r=>r.fulfill({json:{waarnemingen:[{station:'Historisch dorp',datum:'20221001',parameter:'TN',waarde:-7}]}}));
-  await fixture.goto(url+'?station=all&preset=frost-moderate-first&view=all#vorst');await ready(fixture);
+  await fixture.goto(url+'?station=all&preset=frost-moderate-first&view=all&window=winterjaar#vorst');await ready(fixture);
   for(const [key,day,year]of [['earlyFirst','1 oktober','2022/2023'],['lateFirst','5 december','2020/2021'],['earlyLast','15 januari','2021/2022'],['lateLast','30 april','2022/2023']]){
    const card=fixture.locator(`[data-record="${key}"]`);assert.equal(await card.locator('.q-big-date').innerText(),day);assert.match(await card.locator('.q-record-year').innerText(),new RegExp(year));
   }
   const tied=fixture.locator('[data-record="earlyFirst"] .q-tied-stations');assert.match(await tied.innerText(),/Alle 3 stations/);await tied.locator('summary').click();assert.match(await fixture.locator('[data-record="earlyFirst"]').innerText(),/Historisch dorp/);
   await fixture.close();assert.deepEqual(errors,[]);
-  console.log('PASS: default national all-year records, one-year view and shareable links, four exact frost classes, October–April winter year, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
+  console.log('PASS: default national all-year records, one-year view and shareable links, Castricum May 1944 historical observation, full July–June frost season, four exact frost classes, October–April winter year, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());
