@@ -8,6 +8,8 @@ const html=fs.readFileSync(path.join(root,'historisch.html'),'utf8');
 const code=html.slice(html.indexOf('function historicalValues('),html.indexOf('let dayRequest='));
 const context=vm.createContext({});vm.runInContext(code,context);
 const values=(date,param)=>context.historicalValues(data,date,param);
+assert.equal(values('19031203','TN')['20'],-5.6);
+assert.deepEqual(Object.entries(data.stations).filter(([,s])=>s.dailySeries).map(([id])=>id).sort(),['130','170','20']);
 assert.equal(values('19340929','TX')['20'],28);
 assert.equal(values('19340929','TN')['20'],13.1);
 assert.equal(values('19340929','TG')['20'],undefined);

@@ -52,6 +52,10 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   assert.match(await late.innerText(),/9 mei/);assert.match(await late.textContent(),/Castricum/);assert.match(await late.textContent(),/5,4/);
   await page.screenshot({path:path.join(screenshots,'all-years-desktop.png'),fullPage:true});
   await page.click('#q-view-year');assert.equal(await page.locator('#q-year').isVisible(),true);
+  await page.selectOption('#q-year','1903/1904');
+  assert.match(await page.locator('.q-year-cards .q-date-card').first().textContent(),/3 december 1903/);
+  assert.match(await page.locator('.q-year-cards .q-date-card').first().textContent(),/Winterswijk/);
+  assert.match(await page.locator('.q-year-cards .q-date-card').first().textContent(),/5,6/);
   await page.selectOption('#q-year','1943/1944');
   assert.match(await page.locator('.q-year-cards').textContent(),/9 mei 1944/);
   assert.match(await page.locator('.q-year-cards').textContent(),/Castricum/);
@@ -95,6 +99,10 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   await page.reload();await page.waitForFunction(()=>document.querySelector('#q-status')?.dataset.state==='error');
   assert.match(await page.locator('#q-status').innerText(),/historisch recordarchief/);
   await page.unroute('**/records_nl_extreme.json*');await page.click('#q-scope-all');await ready(page);
+  await page.route('**/historische-dagwaarden.json*',r=>r.fulfill({status:503,body:'offline'}));
+  await page.reload();await page.waitForFunction(()=>document.querySelector('#q-status')?.dataset.state==='error');
+  assert.match(await page.locator('#q-status').innerText(),/volledige historische dagreeksen/);
+  await page.unroute('**/historische-dagwaarden.json*');await page.click('#q-scope-all');await ready(page);
   // Independent fixture: compare calendar positions across different years, preserve ties,
   // ignore September/May, and exclude a running winter from records.
   const fixture=await browser.newPage({viewport:{width:1280,height:1000}});fixture.on('pageerror',e=>errors.push(e.message));
@@ -102,6 +110,7 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   const hits=[['20201205',-60],['20210301',-60],['20211101',-60],['20220115',-60],['20220930',-60],['20221001',-60],['20230430',-60],['20230501',-60],['20231020',-60]];
   const hitMap=new Map(hits),days=[];for(let t=Date.UTC(2020,9,1);t<Date.UTC(2023,10,19);t+=86400000){const raw=new Date(t).toISOString().slice(0,10).replaceAll('-','');days.push([raw,hitMap.get(raw)??0]);}
   await fixture.route('**/dagdata_*.json*',r=>r.fulfill({json:{kolommen:['YYYYMMDD','TN'],data:r.request().url().includes('_260.')?days:r.request().url().includes('_215.')?[['20221001',-80]]:[]}}));
+  await fixture.route('**/historische-dagwaarden.json*',r=>r.fulfill({json:{units:'physical',stations:{20:{naam:'Historisch basisstation',dailySeries:true}},days:Object.fromEntries(days.map(([day])=>[day,{20:{TN:1}}]))}}));
   await fixture.route('**/records_nl_extreme.json*',r=>r.fulfill({json:{waarnemingen:[{station:'Historisch dorp',datum:'20221001',parameter:'TN',waarde:-7}]}}));
   await fixture.goto(url+'?station=all&preset=frost-moderate-first&view=all&window=winterjaar#vorst');await ready(fixture);
   for(const [key,day,year]of [['earlyFirst','1 oktober','2022/2023'],['lateFirst','5 december','2020/2021'],['earlyLast','15 januari','2021/2022'],['lateLast','30 april','2022/2023']]){
@@ -109,6 +118,6 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   }
   const tied=fixture.locator('[data-record="earlyFirst"] .q-tied-stations');assert.match(await tied.innerText(),/Alle 3 stations/);await tied.locator('summary').click();assert.match(await fixture.locator('[data-record="earlyFirst"]').innerText(),/Historisch dorp/);
   await fixture.close();assert.deepEqual(errors,[]);
-  console.log('PASS: default national all-year records, one-year view and shareable links, Castricum May 1944 historical observation, full August–July frost season, four exact frost classes, October–April winter year, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
+  console.log('PASS: default national all-year records, one-year view and shareable links, Winterswijk December 1903 and Castricum May 1944 historical observations, full historical source retry, full August–July frost season, four exact frost classes, October–April winter year, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());

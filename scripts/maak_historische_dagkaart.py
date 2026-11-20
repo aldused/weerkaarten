@@ -13,7 +13,8 @@ PARAMS = {'tx': 'TX', 'tn': 'TN', 'tg': 'TG', 'rh': 'RH', 'sq': 'SQ', 'fg': 'FG'
 
 def build(source_dir):
     registry = json.loads((ROOT / 'record-stations.json').read_text())['stations']
-    stations = {s['id']: {'naam': name, 'lon': s['coordinates'][0], 'lat': s['coordinates'][1]}
+    stations = {s['id']: {'naam': name, 'lon': s['coordinates'][0], 'lat': s['coordinates'][1],
+                             'dailySeries': s['import']['type'] in ('historical_csv', 'epen_csv')}
                 for name, s in registry.items() if s['coordinates']}
     days = {}
     def add(date, station, param, value):

@@ -56,6 +56,25 @@ function analyze(json,options){
  const rank=(side,descending=false,limit=10)=>{const sorted=eventPeriods.slice().sort((a,b)=>(descending?-1:1)*(a[side].position-b[side].position)||a.year-b.year);let rank=0,prev=null;return sorted.map((p,i)=>{const value=p[side].position;if(value!==prev)rank=i+1;prev=value;return {...p,rank};}).filter((p,i)=>i<limit||p[side].position===sorted[limit-1]?.[side].position);};
  return {field,variable,op,threshold,upper,start,end,cross,from,to,today,sourceFirst:first,sourceLast:last,periods,completeCount:complete.length,eventCount:eventPeriods.length,noEvent,excluded:periods.length-complete.length,meanFirst:meanDate(avg('first'),start),meanLast:meanDate(avg('last'),start),meanFirstOffset:avg('first'),meanLastOffset:avg('last'),rank};
 }
+// The day map feed has physical units. Only declared daily series certify coverage;
+// isolated historical observations continue to come from the curated record archive.
+function historicalSources(json){
+ if(json?.units!=='physical'||!json.days||!json.stations)throw Error('Ongeldige historische dagreeksen.');
+ const series=new Map();
+ for(const [id,station]of Object.entries(json.stations))if(station.dailySeries===true)series.set(id,{id:station.naam,historical:true,values:[],fields:new Set()});
+ if(!series.size)throw Error('De volledige historische dagreeksen ontbreken in de bron.');
+ for(const [date,stations]of Object.entries(json.days)){
+  if(day(date)===null)continue;
+  for(const [id,values]of Object.entries(stations)){
+   const source=series.get(id);if(!source)continue;
+   const row={};for(const [field,value]of Object.entries(values))if(variables[field]&&Number.isFinite(value)){row[field]=value*variables[field].factor;source.fields.add(field);}
+   if(Object.keys(row).length)source.values.push([date,row]);
+  }
+ }
+ return [...series.values()].filter(s=>s.values.length).map(source=>{
+  const fields=[...source.fields];return {id:source.id,historical:true,json:{kolommen:['YYYYMMDD',...fields],data:source.values.map(([date,row])=>[date,...fields.map(f=>row[f]??null)])}};
+ });
+}
 // National observations are a union of station-days, never an average of temperatures.
 // Sparse historic records cannot certify absence elsewhere, so national periods stay incomplete.
 function analyzeNetwork(sources,records,options){
@@ -71,7 +90,7 @@ function analyzeNetwork(sources,records,options){
  }
  for(const source of sources){const di=source.json.kolommen.indexOf('YYYYMMDD'),vi=source.json.kolommen.indexOf(field);if(di<0||vi<0)continue;
   const dates=new Set();let first=Infinity,last=-Infinity;
-  for(const row of source.json.data){const t=day(row[di]),v=decode(row[vi],variable);add(t,v,source.id);if(t!==null&&v&&match(v,op,threshold,upper)!==null){dates.add(t);first=Math.min(first,t);last=Math.max(last,t);}}
+  for(const row of source.json.data){const t=day(row[di]),v=decode(row[vi],variable);add(t,v,source.id,source.historical===true);if(t!==null&&v&&match(v,op,threshold,upper)!==null){dates.add(t);first=Math.min(first,t);last=Math.max(last,t);}}
   if(dates.size)coverage.push({dates,first,last});
  }
  for(const record of records)if(record.parameter===field&&Number.isFinite(record.waarde))add(day(record.datum),{value:record.waarde,trace:false},record.station,true);
@@ -98,5 +117,5 @@ function analyzeNetwork(sources,records,options){
  result.rank=(side,descending=false,limit=10)=>{const sorted=eventPeriods.slice().sort((a,b)=>(descending?-1:1)*(a[side].position-b[side].position)||a.year-b.year);let rank=0,previous=null;return sorted.map((p,i)=>{if(p[side].position!==previous)rank=i+1;previous=p[side].position;return {...p,rank};}).filter((p,i)=>i<limit||p[side].position===sorted[limit-1]?.[side].position);};
  return {...result,national:true,recordPeriodCount:result.periods.filter(p=>p.dailyComplete).length,completeCount:0,eventCount:0,noEvent:0,excluded:result.periods.length,meanFirst:null,meanLast:null,meanFirstOffset:null,meanLastOffset:null};
 }
-const api={DAY,variables,day,boundary,position,meanDate,decode,match,analyze,analyzeNetwork};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ThresholdQuestions=api;
+const api={DAY,variables,day,boundary,position,meanDate,decode,match,analyze,historicalSources,analyzeNetwork};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ThresholdQuestions=api;
 })(typeof window==='undefined'?globalThis:window);

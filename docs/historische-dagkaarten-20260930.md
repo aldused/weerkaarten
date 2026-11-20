@@ -24,3 +24,20 @@ node tests/historical-days.test.cjs
 Controle: Winterswijk 29-09-1934 TX 28,0 °C en TN 13,1 °C, ontbrekende TG,
 Warnsveld 23-08-1944 TX 38,6 °C, Epen en Oost-Maarland, bronuitval,
 desktopkaart en mobiele breedte. Bestaande recordregressies blijven slagen.
+
+## Eerste & laatste
+
+`stationsanalyse-vragen.js` laadt dezelfde `historische-dagwaarden.json` als
+de dagkaart, naast de KNMI-dagreeksen en het aanvullende recordarchief.
+`stationsanalyse-vragen-core.js` zet de fysieke eenheden om naar het formaat
+van de daganalyse. De stationsmetadata markeren `dailySeries` uitsluitend
+voor de volledige beschikbare CSV-reeksen van Winterswijk, Epen en
+Oost-Maarland. Losse recordnoteringen krijgen daarmee geen schijnbare
+dagdekking. Historische waarnemingen blijven herkenbaar in de resultaten;
+een bestaande KNMI-dagwaarde voor dezelfde meetplaats en datum heeft voorrang.
+
+Een ontbrekende historische feed wordt zichtbaar gemeld en kan opnieuw
+worden geladen. Regrescontrole: eerste matige vorst in seizoen 1903/1904 is
+3 december 1903 in Winterswijk (−5,6 °C), vóór De Bilt op 6 december.
+De vier vorstklassen worden daarnaast over alle historische referentiejaren
+vergeleken met de volledige dagkaartfeed.

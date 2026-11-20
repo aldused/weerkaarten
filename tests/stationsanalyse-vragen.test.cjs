@@ -81,3 +81,39 @@ test('the August–July frost season includes September and both boundary days',
  assert.equal(a.periods[0].expected,366);assert.equal(a.periods[0].hits,3);
  assert.equal(iso(a.periods[0].first.time),'2023-08-01');assert.equal(iso(a.periods[0].last.time),'2024-07-31');
 });
+
+test('full historical daily feed includes Winterswijk 3 December 1903 in national moderate frost',()=>{
+ const feed=require('../historische-dagwaarden.json'),sources=C.historicalSources(feed);
+ assert.deepEqual(sources.map(s=>s.id).sort(),['Epen','Oost-Maarland','Winterswijk']);
+ const modern=series('1903-08-01','1904-07-31',{'1903-12-06':-60});
+ const result=C.analyzeNetwork([{id:'De Bilt',json:modern},...sources],[],{field:'TN',op:'between',threshold:-10,upper:-5.1,start:'08-01',end:'07-31',from:1903,to:1903,today});
+ const first=result.periods[0].first;
+ assert.equal(iso(first.time),'1903-12-03');assert.equal(first.observations[0].station,'Winterswijk');assert.equal(first.observations[0].value,-5.6);assert.equal(first.observations[0].historical,true);
+ assert.equal(feed.days['19031203']['20'].TN,first.observations[0].value,'The map and analysis share the same physical observation');
+});
+
+test('historical physical units, daily-series coverage and sparse curated measurements stay distinct',()=>{
+ const feed={units:'physical',stations:{a:{naam:'Volledige historie',dailySeries:true},b:{naam:'Los historisch record',dailySeries:false}},days:{'20240101':{a:{TN:-5.6,TX:1.3,TG:null},b:{TN:-20}}}};
+ const sources=C.historicalSources(feed);assert.equal(sources.length,1);assert.equal(sources[0].id,'Volledige historie');
+ assert.equal(sources[0].json.data[0][sources[0].json.kolommen.indexOf('TN')],-56);assert(!sources[0].json.kolommen.includes('TG'));
+ const options={field:'TN',op:'between',threshold:-10,upper:-5.1,start:'01-01',end:'01-01',from:2024,to:2024,today};
+ const result=C.analyzeNetwork(sources,[],options);assert.equal(result.periods[0].dailyComplete,true);assert.equal(result.periods[0].first.value,-5.6);
+ const precedence=C.analyzeNetwork([{id:'Volledige historie',json:{kolommen:['YYYYMMDD','TN'],data:[['20240101',-70]]}},...sources],[],options);
+ assert.equal(precedence.periods[0].first.value,-7,'KNMI daily value precedes the supplemental historical value for the same station/day');
+ assert.throws(()=>C.historicalSources({...feed,units:'KNMI-tenths'}));
+});
+
+test('every historical frost-class boundary agrees with the full day-map feed across all years',()=>{
+ const feed=require('../historische-dagwaarden.json'),sources=C.historicalSources(feed);
+ const ids=new Set(Object.entries(feed.stations).filter(([,s])=>s.dailySeries).map(([id])=>id));
+ for(const [threshold,upper]of [[-5,-.1],[-10,-5.1],[-15,-10.1],[-100,-15.1]]){
+  const result=C.analyzeNetwork(sources,[],{field:'TN',op:'between',threshold,upper,start:'08-01',end:'07-31',from:1893,to:2020,today});
+  const matching=new Map();
+  for(const [date,stations]of Object.entries(feed.days)){
+   const hit=Object.entries(stations).some(([id,row])=>ids.has(id)&&typeof row.TN==='number'&&row.TN>=threshold&&row.TN<=upper);
+   if(!hit)continue;const d=C.day(date),year=Number(date.slice(0,4))-(date.slice(4,6)<'08');
+   const dates=matching.get(year)||[];dates.push(d);matching.set(year,dates);
+  }
+  for(const period of result.periods){const dates=matching.get(period.year)||[];assert.equal(period.first?.time??null,dates.length?Math.min(...dates):null);assert.equal(period.last?.time??null,dates.length?Math.max(...dates):null);}
+ }
+});
