@@ -117,3 +117,18 @@ test('every historical frost-class boundary agrees with the full day-map feed ac
   for(const period of result.periods){const dates=matching.get(period.year)||[];assert.equal(period.first?.time??null,dates.length?Math.min(...dates):null);assert.equal(period.last?.time??null,dates.length?Math.max(...dates):null);}
  }
 });
+
+
+test('latest observed first moderate frost includes February 1975 and 1983 despite station gaps',()=>{
+ const rows=[];
+ for(const [start,end,first]of [['1974-08-01','1975-07-31','1975-02-09'],['1982-08-01','1983-07-31','1983-02-09'],['2019-08-01','2020-07-31','2020-01-21']])rows.push(...series(start,end,{[first]:-55}).data);
+ const sources=[{id:'Leeuwarden',json:{kolommen:['YYYYMMDD','TN'],data:rows}},{id:'Hoek van Holland',json:series('1974-08-22','1974-08-24',{'1974-08-23':null})}];
+ const a=C.analyzeNetwork(sources,[],{field:'TN',op:'between',threshold:-10,upper:-5.1,start:'08-01',end:'07-31',from:1974,to:2019,today});
+ const ranking=a.rank('first',true,1);
+ assert.deepEqual(ranking.map(p=>p.year),[1974,1982]);assert(ranking.every(p=>p.rank===1));
+ assert.equal(a.periods.find(p=>p.year===1974).dailyComplete,false);
+ assert.equal(iso(ranking[0].first.time),'1975-02-09');
+ assert(a.rank('first',true).findIndex(p=>p.year===2019)>1);
+ assert(a.periods.every(p=>!p.complete),'Observed comparisons do not certify a complete national series');
+ assert.equal(a.meanFirst,null);
+});

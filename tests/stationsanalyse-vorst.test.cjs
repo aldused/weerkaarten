@@ -17,7 +17,7 @@ const a=C.analyzeNetwork([
  {id:'Valkenburg',json:json([['20241010',-60],['20241011',-80],['20250301',-55]])}
 ],[{station:'Historisch dorp',datum:'20241001',parameter:'TN',waarde:-6},{station:'De Bilt',datum:'20241011',parameter:'TN',waarde:-5.1}],opts);
 const p=a.periods[0];assert.equal(p.first.time,C.day('20241001'));assert.equal(p.first.observations[0].station,'Historisch dorp');
-assert.equal(p.last.time,C.day('20250301'));assert.equal(p.last.observations.length,2);assert.equal(p.hits,4,'Count dates, not station-days');assert.equal(p.complete,false);assert.equal(a.meanFirst,null);assert.equal(a.rank('first').length,0,'Sparse historical observations are not definitive all-year records');
+assert.equal(p.last.time,C.day('20250301'));assert.equal(p.last.observations.length,2);assert.equal(p.hits,4,'Count dates, not station-days');assert.equal(p.complete,false);assert.equal(a.meanFirst,null);assert.equal(a.rank('first').length,1,'National rankings show observed dates, including gaps, without certifying completeness');
 const none=C.analyzeNetwork([{id:'A',json:json([['20241001',0]])}],[],opts);assert.equal(none.periods[0].first,null);assert.equal(none.rank('first').length,0);
 const future=C.analyzeNetwork([{id:'A',json:json([['20260101',-60]])}],[],{...opts,from:2025,to:2025});assert.equal(future.periods[0].hits,0,'Today excluded');
 // A complete single-station period retains definitive records and mean dates.
@@ -44,3 +44,5 @@ assert.equal(seasons.recordPeriodCount,3);
 const gap=C.analyzeNetwork([{id:'A',json:json(daily)},{id:'B',json:json([['20211101',0],['20211103',0]])}],[],seasonOptions);
 assert.equal(gap.recordPeriodCount,2,'A gap in one active station cannot be hidden by complete observations elsewhere');
 assert.equal(gap.periods.find(p=>p.year===2021).dailyComplete,false);
+assert.equal(gap.comparisonPeriodCount,3,'Station gaps remain visible but do not silently remove national observed dates');
+assert(gap.rank('first').some(p=>p.year===2021));

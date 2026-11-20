@@ -41,3 +41,16 @@ worden geladen. Regrescontrole: eerste matige vorst in seizoen 1903/1904 is
 3 december 1903 in Winterswijk (−5,6 °C), vóór De Bilt op 6 december.
 De vier vorstklassen worden daarnaast over alle historische referentiejaren
 vergeleken met de volledige dagkaartfeed.
+
+
+Landelijke datumranglijsten vergelijken dezelfde gevonden grensdatums als de
+jaartabel, voor alle afgesloten seizoenen met een gevonden gebeurtenis.
+Meetgaten in een afzonderlijke stationsreeks sluiten een seizoen niet stilzwijgend
+uit: ze worden bij de recordkaart en de jaartabel vermeld. De vergelijking is
+expliciet die van waargenomen datums; ontbrekende gegevens certificeren geen
+landelijke afwezigheid. Nationale gemiddelden en definitieve aantallen blijven
+uitgeschakeld; één station vereist voor definitieve records nog steeds volledige
+perioden. Regrescontrole: de laatste gevonden eerste matige vorst valt op
+9 februari, gedeeld door 1974/1975 en 1982/1983, vóór de rangpositie van
+21 januari 2020. Het ontbrekende TN op 23 augustus 1974 in Hoek van Holland
+mag de gevonden grensdatum van 1974/1975 niet uit de vergelijking laten verdwijnen.

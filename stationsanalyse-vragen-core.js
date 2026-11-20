@@ -112,10 +112,12 @@ function analyzeNetwork(sources,records,options){
   p.complete=false;p.status=p.running?'lopend':p.valid?'onvolledig':'geen gegevens';
   for(const side of ['first','last'])if(p[side])p[side].observations=hits.get(p[side].time);
  }
- const eventPeriods=result.periods.filter(p=>p.first&&p.dailyComplete);
+ // National dates are observed boundaries, including periods with station gaps.
+ // A complete-only subset would contradict the dates in the annual overview.
+ const eventPeriods=result.periods.filter(p=>p.first&&!p.running);
 
  result.rank=(side,descending=false,limit=10)=>{const sorted=eventPeriods.slice().sort((a,b)=>(descending?-1:1)*(a[side].position-b[side].position)||a.year-b.year);let rank=0,previous=null;return sorted.map((p,i)=>{if(p[side].position!==previous)rank=i+1;previous=p[side].position;return {...p,rank};}).filter((p,i)=>i<limit||p[side].position===sorted[limit-1]?.[side].position);};
- return {...result,national:true,recordPeriodCount:result.periods.filter(p=>p.dailyComplete).length,completeCount:0,eventCount:0,noEvent:0,excluded:result.periods.length,meanFirst:null,meanLast:null,meanFirstOffset:null,meanLastOffset:null};
+ return {...result,national:true,comparisonPeriodCount:eventPeriods.length,recordPeriodCount:result.periods.filter(p=>p.dailyComplete).length,completeCount:0,eventCount:0,noEvent:0,excluded:result.periods.length,meanFirst:null,meanLast:null,meanFirstOffset:null,meanLastOffset:null};
 }
 const api={DAY,variables,day,boundary,position,meanDate,decode,match,analyze,historicalSources,analyzeNetwork};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ThresholdQuestions=api;
 })(typeof window==='undefined'?globalThis:window);

@@ -39,6 +39,11 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   await page.locator('[data-frost-class="moderate"]').click();await ready(page);
 
   assert.equal(await page.locator('[data-record]').count(),4);
+  const latestFirst=page.locator('[data-record="lateFirst"]');
+  assert.equal(await latestFirst.locator('.q-big-date').innerText(),'9 februari');
+  assert.match(await latestFirst.locator('.q-record-year').innerText(),/1974\/1975.*9 februari 1975/);
+  assert.match(await latestFirst.textContent(),/9 februari 1983/);
+  assert.match(await latestFirst.locator('.q-coverage-note').first().innerText(),/Meetgaten/);
   assert.equal(await page.locator('.q-frost-card').count(),4);
   for(const text of ['−0,1 °C tot −5,0 °C','−5,1 °C tot −10,0 °C','−10,1 °C tot −15,0 °C','−15,1 °C of lager'])assert((await page.locator('#vorst').innerText()).includes(text));
   assert.equal(await page.inputValue('#q-start'),'01-08');assert.equal(await page.inputValue('#q-end'),'31-07');
