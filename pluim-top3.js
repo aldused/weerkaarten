@@ -5,8 +5,8 @@
     ['cold', 'Koudste pluim', 'Laagste temperatuur', '°C', '#3584c6'],
     ['mild', 'Zachtste pluim', 'Hoogste temperatuur', '°C', '#dd6e32'],
     ['wind', 'Meeste wind', 'Hoogste windsnelheid op 10 m', 'km/u', '#268a89'],
-    ['snow', 'Meeste sneeuw', 'Sneeuwsom', 'cm', '#7d65b4'],
-    ['precipitation', 'Meeste neerslag', 'Neerslagsom', 'mm', '#3d63b2'],
+    ['snow', 'Meeste sneeuw', 'Hoogste sneeuwsom van één lid', 'cm', '#7d65b4'],
+    ['precipitation', 'Meeste neerslag', 'Hoogste neerslagsom van één lid', 'mm', '#3d63b2'],
   ];
   const dates = new Intl.DateTimeFormat('nl-NL', {timeZone:'Europe/Amsterdam', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
   const number = new Intl.NumberFormat('nl-NL', {minimumFractionDigits:1, maximumFractionDigits:1});
@@ -34,7 +34,7 @@
     const grid = make('div', 'pluim-top3-grid');
     const method = make('div', 'pluim-top3-method');
     method.append(
-      make('p', '', 'Gerangschikt op het gemiddelde van alle 51 ensembleberekeningen. Bij temperatuur en wind telt het laagste of hoogste ensemblegemiddelde op één tijdstip; sneeuw en neerslag worden eerst per lid opgeteld. Klik op een plaats om de bijbehorende pluim te openen.'),
+      make('p', '', 'Gerangschikt op de uiterste berekening van alle 51 ensembleleden. Bij temperatuur en wind telt de laagste of hoogste waarde van één lid op één tijdstip. Sneeuw en neerslag worden eerst voor elk lid over de hele periode opgeteld; de grootste som van één lid telt. Dit zijn uiterste scenario’s, geen gemiddelde verwachting. Klik op een plaats om de bijbehorende pluim te openen.'),
       make('p', '', 'Dit is een vergelijking van de beschikbare Nederlandse pluimlocaties. Neerslag omvat regen én het waterequivalent van sneeuw. Sneeuwsom is vallende sneeuw, geen voorspelde sneeuwdekdikte. Tijdstippen bij de plaatsen zijn Nederlandse tijd; 00/06/12/18 UTC zijn modelruns en verschijnen na verwerking.')
     );
     body.append(controls, grid, method);
@@ -65,12 +65,14 @@
         const run = runs.selectedRunIso();
         const expanded=await country();
         if(token!==generation)return;
-        const expandedEntry=expanded?.complete===true&&expanded.runs?.find(e=>e.complete===true&&Date.parse(e.run)===Date.parse(run));
+        const isExtreme = e => e?.complete===true && Date.parse(e.run)===Date.parse(run)
+          && e.top3_nl?.schema===3 && e.top3_nl.ranking_method==='member_extremes_v1';
+        const expandedEntry=expanded?.complete===true&&expanded.runs?.find(isExtreme);
         const manifest = runs.state.archiveManifest;
-        const entry = expandedEntry || (manifest?.complete === true && manifest.runs?.find(e => e.complete === true && Date.parse(e.run) === Date.parse(run)));
+        const entry = expandedEntry || (manifest?.complete === true && manifest.runs?.find(isExtreme));
         const summary = entry?.top3_nl;
-        if (![1,2].includes(summary?.schema) || summary.member_count !== 51 || !summary.periods?.length) {
-          unavailable('Voor deze exacte modelrun is de landelijke top 3 nog niet compleet.');
+        if (summary?.schema !== 3 || summary.ranking_method !== 'member_extremes_v1' || summary.member_count !== 51 || !summary.periods?.length) {
+          unavailable('Voor deze exacte modelrun wordt de top 3 met uiterste ensembleberekeningen nog voorbereid.');
           return;
         }
         const periods = summary.periods.filter(p => p.start_ms === Date.parse(run) && p.end_ms === p.start_ms + p.days*86400000);
@@ -98,7 +100,7 @@
         grid.replaceChildren(...categories.map(([key, title, metric, unit, color]) => {
           const card = make('section', 'pluim-top3-card');
           card.style.setProperty('--top3-color', color);
-          card.append(make('h3', '', title), make('p', 'pluim-top3-metric', `${metric} · ensemblegemiddelde`));
+          card.append(make('h3', '', title), make('p', 'pluim-top3-metric', metric));
           const ranking = period.rankings?.[key];
           if (!Array.isArray(ranking) || !ranking.length) {
             card.append(make('p', 'pluim-top3-empty', !Array.isArray(ranking)
@@ -114,17 +116,19 @@
             url.searchParams.set('lat', row.lat);
             url.searchParams.set('lon', row.lon);
             url.searchParams.set('run', String(runDate.getUTCHours()).padStart(2,'0'));
-            ['top3_punt','top3_versie','top3_run'].forEach(key=>url.searchParams.delete(key));
+            ['top3_punt','top3_versie','top3_run','top3_lid'].forEach(key=>url.searchParams.delete(key));
             if(summary.path&&row.point){
               url.searchParams.set('top3_punt',row.point);
               url.searchParams.set('top3_versie',summary.revision);
               url.searchParams.set('top3_run',entry.run.replaceAll('-','').slice(0,11));
+              url.searchParams.set('top3_lid',row.member);
             }
             link.href = url.href;
             const value = row.value > 0 && row.value < .05 ? '< 0,1' : number.format(row.value);
             link.append(make('span', 'pluim-top3-place', row.name), make('span', 'pluim-top3-value', `${value} ${unit}`));
+            link.append(make('span', 'pluim-top3-detail', row.member === 0 ? 'Controleberekening' : `Ensemblelid ${row.member}`));
             if (row.time_ms != null) link.append(make('span', 'pluim-top3-detail', dates.format(row.time_ms)));
-            else if (key === 'snow') link.append(make('span', 'pluim-top3-detail', `Kans op ≥ 1 cm: ${Math.round(row.chance_1cm)}%`));
+            if (key === 'snow') link.append(make('span', 'pluim-top3-detail', `Kans op ≥ 1 cm: ${Math.round(row.chance_1cm)}%`));
             if(row.equivalent_count>1)link.append(make('span','pluim-top3-detail',`Zelfde modelpunt: ${row.equivalent_places.join(', ')}${row.equivalent_count>4?` en ${row.equivalent_count-4} andere ${row.equivalent_count===5?'plaats':'plaatsen'}`:''}`));
             item.append(link); list.append(item);
           });

@@ -3,6 +3,7 @@
   'use strict';
   const query=new URLSearchParams(location.search);
   const point=query.get('top3_punt'),revision=query.get('top3_versie'),token=query.get('top3_run');
+  const selectedMember=/^(?:[0-9]|[1-4][0-9]|50)$/.test(query.get('top3_lid')||'') ? Number(query.get('top3_lid')) : null;
   if (!point && !revision && !token) return;
   const valid=/^(?:o1280_\d+|ifs025_\d+_\d+)$/.test(point||'') && /^[a-f0-9]{64}$/.test(revision||'') && /^\d{8}T(?:00|06|12|18)$/.test(token||'');
   const originalFetch=window.fetch.bind(window);
@@ -71,10 +72,11 @@
     if (document.querySelector('.pluim-top3-exactrun')) return;
     const bar=document.createElement('div');bar.className='pluim-top3-exactrun';
     const link=document.createElement('a'),url=new URL(location.href);
-    ['top3_punt','top3_versie','top3_run'].forEach(key=>url.searchParams.delete(key));
+    ['top3_punt','top3_versie','top3_run','top3_lid'].forEach(key=>url.searchParams.delete(key));
     url.searchParams.set('station','De Bilt');url.searchParams.set('lat','52.101');url.searchParams.set('lon','5.178');
     link.href=url.href;link.textContent='Terug naar de landelijke top 3';
-    bar.append(document.createTextNode(`Exacte landelijke pluim · ${token.slice(9)} UTC · `),link);
+    const memberLabel=selectedMember===null ? '' : selectedMember===0 ? ' · uiterste waarde uit de controleberekening' : ` · uiterste waarde uit ensemblelid ${selectedMember}`;
+    bar.append(document.createTextNode(`Exacte landelijke pluim · ${token.slice(9)} UTC${memberLabel} · `),link);
     document.querySelector('.toolbar')?.before(bar);
     ready.then(doc=>{const input=document.getElementById('plaatsInput');if(input)input.value=doc.name;}).catch(()=>{});
   };

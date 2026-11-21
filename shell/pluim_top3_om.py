@@ -15,7 +15,7 @@ import time
 import numpy as np
 import requests
 
-from pluim_top3_landelijk import NAME, catalog, canonical, scores, publish_run
+from pluim_top3_landelijk import NAME, RANKING_METHOD, catalog, canonical, scores, publish_run
 
 MODEL='ecmwf_ifs_europe_ensemble'
 ROOT='https://openmeteo.s3.amazonaws.com/data_run/'+MODEL
@@ -165,7 +165,8 @@ def update_native_runs(repo,state,publish=True):
             existing=json.loads((repo/NAME).read_text()) if (repo/NAME).exists() else {}
             previous=next((r for r in existing.get('runs',[]) if r['run']==entry['run']),{})
             source=previous.get('top3_nl',{}).get('source',{})
-            if source.get('native_revision')==version and source.get('catalog_revision')==city_sha:
+            if (previous.get('top3_nl',{}).get('ranking_method')==RANKING_METHOD
+                    and source.get('native_revision')==version and source.get('catalog_revision')==city_sha):
                 continue
             print(f'NL_TOP3_BUILD: {entry["run"]}, {len(cities)} plaatsen, {len(groups)} modelpunten',flush=True)
             with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:

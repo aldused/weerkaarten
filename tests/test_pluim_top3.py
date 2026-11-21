@@ -28,14 +28,15 @@ class NationalTop3Test(unittest.TestCase):
         result = result or trend.build_nl_top3(self.runs, self.fields)
         return next(p for p in result['periods'] if p['days'] == days)
 
-    def test_extrema_of_mean_not_single_outlier(self):
-        # One wild outlier must not win over the entire ensemble.
+    def test_actual_single_member_extreme_wins_over_ensemble_mean(self):
         self.runs['arcen']['members']['wind_speed_10m'][0][0] = 1000
+        self.runs['debilt']['members']['temperature_2m'][50][5] = -70
+        self.runs['rotterdam']['members']['temperature_2m'][12][10] = 80
         ranking = self.period()['rankings']
-        self.assertEqual(ranking['cold'][0]['slug'], 'amsterdam')
-        self.assertEqual(ranking['mild'][0]['slug'], 'woensdrecht')
-        self.assertEqual(ranking['wind'][0]['slug'], 'woensdrecht')
-        self.assertEqual(ranking['cold'][0]['time_ms'], self.start)
+        self.assertEqual((ranking['cold'][0]['slug'],ranking['cold'][0]['member'],ranking['cold'][0]['value']),('debilt',50,-70))
+        self.assertEqual((ranking['mild'][0]['slug'],ranking['mild'][0]['member'],ranking['mild'][0]['value']),('rotterdam',12,80))
+        self.assertEqual((ranking['wind'][0]['slug'],ranking['wind'][0]['member'],ranking['wind'][0]['value']),('arcen',0,1000))
+        self.assertEqual(ranking['cold'][0]['time_ms'], self.times[5])
 
     def test_interval_sums_exclude_t0_and_are_not_rates(self):
         ranking = self.period()['rankings']['precipitation']
@@ -50,8 +51,25 @@ class NationalTop3Test(unittest.TestCase):
             row[1:3] = [.6, .6]
         row = self.period()['rankings']['snow'][0]
         self.assertEqual(row['slug'], 'debilt')
-        self.assertAlmostEqual(row['value'], .4)
+        self.assertAlmostEqual(row['value'], 1.2)
+        self.assertEqual(row['member'],0)
         self.assertAlmostEqual(row['chance_1cm'], 100/3, places=4)
+
+    def test_rain_sum_uses_one_consistent_member_and_excludes_later_days(self):
+        self.runs['arcen']['members']['precipitation'][23][1:41]=[100]*40
+        self.runs['debilt']['members']['precipitation'][4][41]=99999
+        result=trend.build_nl_top3(self.runs,self.fields)
+        self.assertEqual(result['schema'],3)
+        self.assertEqual(result['ranking_method'],'member_extremes_v1')
+        row=self.period(result)['rankings']['precipitation'][0]
+        self.assertEqual((row['slug'],row['member'],row['value']),('arcen',23,4000))
+
+    def test_snow_totals_never_combine_different_members(self):
+        members=self.runs['arcen']['members']['snowfall']
+        members[1][1]=5;members[2][2]=5
+        self.runs['debilt']['members']['snowfall'][3][1:3]=[4,4]
+        row=self.period()['rankings']['snow'][0]
+        self.assertEqual((row['slug'],row['member'],row['value']),('debilt',3,8))
 
     def test_short_run_has_no_longer_period(self):
         result = trend.build_nl_top3(self.runs, self.fields)

@@ -14,6 +14,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'shell'))
 import pluim_top3_landelijk as national
 from pluim_top3_om import GaussianArea
+import pluim_top3_om as native
 
 
 class CountryRankingsTest(unittest.TestCase):
@@ -53,11 +54,15 @@ class CountryRankingsTest(unittest.TestCase):
 
     def test_extrema_of_all_51_members_and_interval_totals(self):
         self.fields['wind_speed_10m'][0,0,10]=1000
+        self.fields['temperature_2m'][50,3,15]=-70
+        self.fields['temperature_2m'][12,0,24]=60
         self.fields['precipitation'][:,:,0]=999
         ranking=self.period()['rankings']
-        self.assertEqual(ranking['cold'][0]['name'],'Plaats0')
-        self.assertEqual(ranking['mild'][0]['name'],'Plaats3')
-        self.assertEqual(ranking['wind'][0]['name'],'Plaats3')
+        self.assertEqual((ranking['cold'][0]['name'],ranking['cold'][0]['member'],ranking['cold'][0]['value']),('Plaats3',50,-70))
+        self.assertEqual(ranking['cold'][0]['time_ms'],self.times[15])
+        self.assertEqual((ranking['mild'][0]['name'],ranking['mild'][0]['member'],ranking['mild'][0]['value']),('Plaats0',12,60))
+        self.assertEqual((ranking['wind'][0]['name'],ranking['wind'][0]['member'],ranking['wind'][0]['value']),('Plaats0',0,1000))
+        self.assertEqual(ranking['wind'][0]['time_ms'],self.times[10])
         self.assertEqual(ranking['precipitation'][0]['value'],4*120)
         self.assertEqual(ranking['snow'],[])
 
@@ -74,8 +79,45 @@ class CountryRankingsTest(unittest.TestCase):
     def test_snow_is_summed_per_member_before_probability(self):
         self.fields['snowfall'][:17,2,1:3]=.6
         row=self.period()['rankings']['snow'][0]
-        self.assertAlmostEqual(row['value'],.4)
+        self.assertAlmostEqual(row['value'],1.2)
+        self.assertEqual(row['member'],0)
         self.assertAlmostEqual(row['chance_1cm'],100/3,places=4)
+
+    def test_wettest_member_wins_and_future_intervals_are_excluded(self):
+        self.fields['precipitation'][23,0,1:121]=10
+        self.fields['precipitation'][5,1,121]=99999
+        row=self.period()['rankings']['precipitation'][0]
+        self.assertEqual((row['name'],row['member'],row['value']),('Plaats0',23,1200))
+
+    def test_totals_never_switch_members_between_intervals(self):
+        for field,category in [('precipitation','precipitation'),('snowfall','snow')]:
+            self.fields[field][:]=0
+            self.fields[field][1,0,1]=5
+            self.fields[field][2,0,2]=5
+            self.fields[field][3,1,1:3]=4
+            row=self.period()['rankings'][category][0]
+            self.assertEqual((row['name'],row['member'],row['value']),('Plaats1',3,8))
+
+    def test_ranked_values_are_reproducible_from_the_exact_member_documents(self):
+        self.fields['temperature_2m'][44,3,65]=-25
+        self.fields['snowfall'][17,1,15:19]=2.5
+        summary,documents=self.result()
+        self.assertEqual(summary['schema'],3)
+        self.assertEqual(summary['ranking_method'],'member_extremes_v1')
+        for period in summary['periods']:
+            stop=self.times.index(period['end_ms'])+1
+            for category,field in [('cold','temperature_2m'),('mild','temperature_2m'),('wind','wind_speed_10m'),('snow','snowfall'),('precipitation','precipitation')]:
+                for row in period['rankings'][category]:
+                    values=documents[row['point']]['members'][field][row['member']]
+                    expected=sum(values[1:stop]) if category in ('snow','precipitation') else values[self.times.index(row['time_ms'])]
+                    self.assertAlmostEqual(row['value'],expected,places=4)
+
+    def test_ties_choose_earliest_time_then_lowest_member(self):
+        self.fields['temperature_2m'][12,0,10]=-10
+        self.fields['temperature_2m'][1,0,20]=-10
+        self.fields['temperature_2m'][13,0,10]=-10
+        row=self.period()['rankings']['cold'][0]
+        self.assertEqual((row['time_ms'],row['member']),(self.times[10],12))
 
     def test_missing_member_nonfinite_and_negative_data_block_publication(self):
         for value in (np.nan,np.inf,-1):
@@ -106,6 +148,38 @@ class CountryRankingsTest(unittest.TestCase):
             self.assertEqual(len(doc['members']['temperature_2m']),51)
             self.assertEqual(doc['times_ms'],self.times)
             np.testing.assert_array_equal(doc['members']['temperature_2m'],self.fields['temperature_2m'][:,0,:])
+
+    def test_unchanged_source_with_old_mean_rankings_is_rebuilt(self):
+        cities=national.catalog(ROOT)
+        meta={'created_at':national.iso(self.run)}
+        source={'native_revision':native.hashlib.sha256(national.canonical(meta)).hexdigest(),
+                'catalog_revision':native.hashlib.sha256(national.canonical(cities)).hexdigest()}
+        entry={'run':national.iso(self.run),'complete':True,'top3_nl':{'schema':2,'source':source}}
+        with tempfile.TemporaryDirectory() as tmp:
+            repo=Path(tmp)
+            (repo/'pluim_archive_meta.json').write_text(json.dumps({'runs':[entry]}))
+            (repo/national.NAME).write_text(json.dumps({'runs':[entry]}))
+            raw={key:self.fields.get(key,np.zeros_like(self.fields['temperature_2m'])) for key in native.RAW}
+            with patch.object(native,'catalog',return_value=cities),patch.object(GaussianArea,'groups',return_value=self.groups),patch.object(native,'metadata',return_value=(meta,self.times)),patch.object(native,'read_field',side_effect=lambda field,*args:(field,raw[field],'etag')),patch.object(native,'publish_run') as published:
+                native.update_native_runs(repo,repo,publish=False)
+                self.assertEqual(published.call_count,1)
+                summary=published.call_args.args[3]
+                self.assertEqual(summary['ranking_method'],national.RANKING_METHOD)
+                entry['top3_nl']=summary
+                (repo/national.NAME).write_text(json.dumps({'runs':[entry]}))
+                native.update_native_runs(repo,repo,publish=False)
+                self.assertEqual(published.call_count,1)
+
+    def test_legacy_native_average_cannot_block_corrected_coarse_extremes(self):
+        summary,documents=self.result()
+        with tempfile.TemporaryDirectory() as tmp:
+            repo=Path(tmp)/'repo';repo.mkdir();state=Path(tmp)/'state'
+            old={'run':national.iso(self.run),'complete':True,'top3_nl':{'schema':2,'source':{'grid':'O1280'}}}
+            (repo/national.NAME).write_text(json.dumps({'runs':[old]}))
+            self.assertTrue(national.publish_run(repo,state,self.run,summary,documents,publish=False))
+            native_summary={**summary,'source':{**summary['source'],'grid':'O1280'}}
+            self.assertTrue(national.publish_run(repo,state,self.run,native_summary,documents,publish=False))
+            self.assertFalse(national.publish_run(repo,state,self.run,summary,documents,publish=False))
 
     def test_grib_sampler_keeps_public_station_registry_separate(self):
         from ecmwf_pluim_direct import Station

@@ -25,6 +25,7 @@ import numpy as np
 
 NAME = 'pluim_top3_landelijk.json'
 DAYS = (1, 3, 5, 10, 15)
+RANKING_METHOD = 'member_extremes_v1'
 REQUIRED = ('temperature_2m', 'wind_speed_10m', 'precipitation', 'snowfall', 'wind_gusts_10m')
 STATE = Path('/Volumes/WEERLAB/Modeldata/ECMWF/pluimen/top3')
 
@@ -131,7 +132,6 @@ def scores(groups, run, times_ms, fields, source):
         raise ValueError('Onvolledige landelijke ENS-gegevens')
     if any(np.any(a < 0) for key,a in arrays.items() if key != 'temperature_2m'):
         raise ValueError('Negatieve neerslag, sneeuw of windsnelheid')
-    means = {key:np.mean(a, axis=0, dtype=np.float64) for key,a in arrays.items()}
     periods, winner_ids = [], set()
     for days in DAYS:
         match = np.flatnonzero(times == start+days*86400000)
@@ -146,11 +146,15 @@ def scores(groups, run, times_ms, fields, source):
         ):
             if operation == 'sum':
                 totals = np.sum(arrays[field][:,:,1:n], axis=-1, dtype=np.float64)
-                values = np.mean(totals, axis=0)
+                member_indices = np.argmax(totals, axis=0)
+                values = totals[member_indices, np.arange(len(groups))]
                 indices = None
             else:
-                indices = (np.argmin if operation == 'min' else np.argmax)(means[field][:,:n], axis=-1)
-                values = means[field][np.arange(len(groups)),indices]
+                # One actual member/time pair; ties use earliest time, then member.
+                samples = arrays[field][:,:,:n].transpose(1,2,0).reshape(len(groups),-1)
+                extreme = (np.argmin if operation == 'min' else np.argmax)(samples, axis=-1)
+                indices, member_indices = np.divmod(extreme, 51)
+                values = samples[np.arange(len(groups)),extreme]
             order = sorted(range(len(groups)), key=lambda i: (values[i] if operation == 'min' else -values[i], groups[i]['places'][0]['name']))
             rows = []
             for i in order:
@@ -160,6 +164,7 @@ def scores(groups, run, times_ms, fields, source):
                 place = group['places'][0]
                 row = {key:place[key] for key in ('name','lat','lon')}
                 row.update(slug=group['id'], point=group['id'], value=round(float(values[i]),4),
+                           member=int(member_indices[i]),
                            equivalent_count=len(group['places']),
                            equivalent_places=[p['name'] for p in group['places'][1:4]])
                 if indices is not None:
@@ -174,7 +179,7 @@ def scores(groups, run, times_ms, fields, source):
         periods.append(dict(days=days, start_ms=start, end_ms=int(times[n-1]), rankings=rankings))
     if not periods:
         raise ValueError('Geen complete landelijke vergelijkingsperiode')
-    summary = dict(schema=2, station_count=sum(len(g['places']) for g in groups),
+    summary = dict(schema=3, ranking_method=RANKING_METHOD, station_count=sum(len(g['places']) for g in groups),
                    grid_count=len(groups), member_count=51, periods=periods,
                    source=source, independent_grid_points=True)
     digest = hashlib.sha256(canonical(dict(run=iso(run),summary=summary)))
@@ -215,7 +220,8 @@ def publish_run(repo, state, run, summary, documents, publish=True):
         if existing == entry and (not publish or (state/'published-revision').exists() and (state/'published-revision').read_text().strip()==old.get('revision')):
             return False
         # A later coarse-grid delivery must not displace a complete native result.
-        if existing and existing['top3_nl'].get('source',{}).get('grid')=='O1280' and summary['source'].get('grid')!='O1280':
+        if (existing and existing['top3_nl'].get('ranking_method')==RANKING_METHOD
+                and existing['top3_nl'].get('source',{}).get('grid')=='O1280' and summary['source'].get('grid')!='O1280'):
             return False
         runs = sorted([r for r in old.get('runs',[]) if r['run']!=entry['run']]+[entry],key=lambda r:r['run'],reverse=True)[:8]
         if entry not in runs:

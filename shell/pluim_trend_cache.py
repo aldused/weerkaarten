@@ -966,8 +966,8 @@ TOP3_PERIOD_DAYS = (1, 3, 5, 10, 15)
 def build_nl_top3(station_runs: dict[str, dict], fields: list[str]) -> dict | None:
     """Small same-run rankings; never download station archives in the browser.
 
-    Temperature and wind use extrema of the 51-member mean at each timestamp.
-    Precipitation/snow use the mean of each member's interval sum over (t0,end].
+    Temperature and wind use the extreme actual member/time pair.
+    Precipitation/snow use the greatest single-member interval sum over (t0,end].
     Missing members or locations invalidate that entire category, not just a row.
     """
     if not TOP3_NL_SLUGS.issubset(station_runs):
@@ -1019,15 +1019,17 @@ def build_nl_top3(station_runs: dict[str, dict], fields: list[str]) -> dict | No
                     base = dict(name=name, slug=slug, lat=lat, lon=lon)
                     if field in ("snowfall", "precipitation"):
                         totals = [math.fsum(row[1:last]) for row in matrix]
-                        row = dict(base, value=math.fsum(totals)/51)
+                        member = max(range(51), key=totals.__getitem__)
+                        row = dict(base, value=totals[member], member=member)
                         if field == "snowfall":
                             row["chance_1cm"] = sum(v >= 1 for v in totals)*100/51
                         rows[keys[0]].append(row)
                     else:
-                        means = [math.fsum(row[i] for row in matrix)/51 for i in range(last)]
                         for key in keys:
-                            index = (min if key == "cold" else max)(range(last), key=means.__getitem__)
-                            rows[key].append(dict(base, value=means[index], time_ms=times[index]))
+                            index, member = (min if key == "cold" else max)(
+                                ((i,m) for i in range(last) for m in range(51)),
+                                key=lambda pair: matrix[pair[1]][pair[0]])
+                            rows[key].append(dict(base, value=matrix[member][index], member=member, time_ms=times[index]))
             for key in keys:
                 if not valid:
                     rankings[key] = None
@@ -1041,7 +1043,7 @@ def build_nl_top3(station_runs: dict[str, dict], fields: list[str]) -> dict | No
                     for row in candidates[:3]
                 ]
         periods.append(dict(days=days, start_ms=start, end_ms=end, rankings=rankings))
-    return dict(schema=1, station_count=len(locations), member_count=51, periods=periods)
+    return dict(schema=3, ranking_method='member_extremes_v1', station_count=len(locations), member_count=51, periods=periods)
 
 
 def build_capability_payload(
