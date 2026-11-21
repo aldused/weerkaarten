@@ -18,7 +18,7 @@ ROOT = Path('/Users/aldus/KNMI_Project')
 MIRROR = 'https://storage.googleapis.com/ecmwf-open-data'
 # Extra rasterrand voor interpolatie tot aan de schermrand.
 WEST, SOUTH, EAST, NORTH = 1.7, 48.8, 8.4, 54.3
-FIELDS = ('t2m', 'ws', 'tcc', 'rain', 'snow', 'fzra', 'ipel', 'vis', 'msl', 'ptot', 't850', 't500', 'sdep', 'frz')
+FIELDS = ('t2m', 'td2m', 'ws', 'tcc', 'rain', 'snow', 'fzra', 'ipel', 'vis', 'msl', 'ptot', 't850', 't500', 'sdep', 'frz')
 THREAD = local()
 PRECIP_TYPES = {1: 1, 5: 2, 6: 3, 7: 4, 3: 5, 8: 6, 12: 7}
 

@@ -8,6 +8,10 @@ en een handmatig gekozen run blijven geselecteerd zolang die beschikbaar zijn.
 De updater leest de bestaande ECMWF-caches voor 0,25° en 0,1° en de regionale
 modelbestanden in het KNMI-project. Elke resolutie heeft een eigen runlijst.
 De pagina opent standaard op 0,25°, dat eerder verschijnt bij ECMWF.
+Dauwpunttemperatuur op 2 m komt uit het eigen model: het ECMWF-veld `td2m`
+of het regionale binaire veld `dauwpunt`. De updater vult bestaande ECMWF-runs
+ook aan wanneer alleen dit kaartveld nog ontbreekt. Oudere regionale runs
+zonder bewaarde dauwpuntdata tonen hiervoor geen waarde.
 Extra velden worden rechtstreeks van ECMWF, DWD en KNMI opgehaald
 voor hetzelfde runnummer. Het KNMI-proces gebruikt de bestaande API-toegang via
 `KNMI_API_KEY` of `pascal/.env`.

@@ -23,6 +23,7 @@ NATIVE = {
 GRID = {'lon0': 1.7, 'lat0': 54.3, 'dx': .025, 'dy': -.025, 'w': 269, 'h': 221}
 ENC = {
     't2m': dict(kind='linear', offset=-50.5, scale=.5, lo=1),
+    'td2m': dict(kind='linear', offset=-50.5, scale=.5, lo=1),
     't850': dict(kind='linear', offset=-70.5, scale=.5, lo=1),
     't500': dict(kind='linear', offset=-70.5, scale=.5, lo=1),
     'frz': dict(kind='linear', offset=-25, scale=25, lo=1),
@@ -184,6 +185,8 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
         out = {'t2m': temp, 'ws': np.hypot(u, v), 'u': u, 'v': v, 'tcc': clouds,
                'vis': f['zicht'][0], 'msl': f['druk'][0]/100, 'rain': f['neerslag'][0]}
         out.update({k: v for k,v in extra.get(t, {}).items() if np.any(np.isfinite(v))})
+        if 'dauwpunt' in f:
+            out['td2m'] = f['dauwpunt'][0]
         total = f.get('cumul')
         if total is not None:
             out['ptot'] = total[0]

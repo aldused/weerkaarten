@@ -1,8 +1,10 @@
 """Publiceer actuele Benelux-modelruns op de bestaande Weerlab-databucket."""
 import argparse
+import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 import fcntl
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -79,10 +81,12 @@ def ecmwf_run(root, rid, manifest, cache, old=None):
         def frame(lead):
             if not needs(lead):
                 step = old_steps[lead]
-                if 'frz' not in step['keys'] and 'frz' in m['steps'][str(lead)]['layers']:
+                missing = [key for key in ('frz','td2m') if key not in step['keys']
+                           and key in m['steps'][str(lead)]['layers']]
+                if missing:
                     step = dict(step,keys=step['keys'].copy())
-                    field = crop_layer(root/rid,lead,'frz',region,m['grid'])
-                    add_bytes(step,{'frz':field.tobytes()})
+                    add_bytes(step,{key:crop_layer(root/rid,lead,key,region,m['grid']).tobytes()
+                                    for key in missing})
                 return step
             extras = {}
             file = cache/f'{rid}-{lead:03}.npz'
@@ -120,7 +124,7 @@ def regional(key, project, cache, previous):
     raw = meta_path.read_bytes()
     fingerprint = digest(raw)
     prior = next((r for r in previous if r.get('_source')==fingerprint),None)
-    if prior and prior.get('_complete') and all('frz' in s['keys'] for s in prior['steps']):
+    if prior and prior.get('_complete') and all({'frz','td2m'} <= set(s['keys']) for s in prior['steps']):
         return GRID,previous
     try:
         run = native_model(meta_path.parent,key,ruc_solar=key=='icond2ruc',
@@ -137,6 +141,23 @@ def regional(key, project, cache, previous):
     # Keep a complete version if an optional field briefly fails on the same run.
     old = next((r for r in previous if r['id']==run['id'] and r.get('_complete')),None)
     if old and not run['_complete']:
+        # Bewaar de complete kaartvelden en vul het nieuwe dauwpuntveld aan
+        # wanneer een aanvullende bron op dezelfde run tijdelijk achterloopt.
+        patched = dict(old,enc={**old['enc'],'td2m':run['enc']['td2m']})
+        new_steps = {s['lead']:s for s in run['steps']}
+        patched['steps'] = []
+        for original in old['steps']:
+            step = dict(original,keys=original['keys'].copy())
+            fresh = new_steps.get(step['lead'])
+            if fresh and 'td2m' not in step['keys'] and 'td2m' in fresh['keys'] and fresh['valid']==step['valid']:
+                raw = gzip.decompress(base64.b64decode(fresh['data']))
+                size = GRID['w']*GRID['h']
+                offset = fresh['keys'].index('td2m')*size
+                add_bytes(step,{'td2m':raw[offset:offset+size]})
+            patched['steps'].append(step)
+        if any('td2m' in s['keys'] and 'td2m' not in original['keys']
+               for s,original in zip(patched['steps'],old['steps'])):
+            return GRID,retain([patched,*[r for r in previous if r['id']!=patched['id']]])
         return GRID,previous
     return GRID,retain([run,*[r for r in previous if r['id']!=run['id']]])
 
@@ -158,11 +179,11 @@ def ecmwf(key, project, cache, previous):
             source_grid = source['grid']
             grid = crop_grid(source_grid,crop_bounds(source_grid))
             old = prior.get(rid)
-            missing_freezing = old and any('frz' not in s['keys'] and
-                'frz' in source_step['layers'] for s in old['steps']
+            missing_fields = old and any(any(field not in s['keys'] and field in source_step['layers']
+                for field in ('frz','td2m')) for s in old['steps']
                 if (source_step:=source['steps'].get(str(s['lead']))))
             # Herbruik bestaande oudere snapshots en vul ontbrekende runs aan uit de broncache.
-            if old and not missing_freezing and (old.get('_source')==digest(manifest) and old.get('_complete') or
+            if old and not missing_fields and (old.get('_source')==digest(manifest) and old.get('_complete') or
                         not old.get('_source') and i>=2):
                 continue
             grid,new = ecmwf_run(root,rid,manifest,cache,old)

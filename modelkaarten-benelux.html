@@ -115,6 +115,7 @@
     <button type="button" data-layer="weather" aria-pressed="true">Significant weer</button>
     <button type="button" data-layer="ptypeMap" aria-pressed="false">Neerslagtype</button>
     <button type="button" data-layer="t2m" aria-pressed="false">Temperatuur</button>
+    <button type="button" data-layer="td2m" aria-pressed="false">Dauwpunt</button>
     <button type="button" data-layer="windchill" aria-pressed="false">Gevoelstemperatuur</button>
     <button type="button" data-layer="t850" aria-pressed="false">Temp. 850 hPa</button>
     <button type="button" data-layer="t500" aria-pressed="false">Temp. 500 hPa</button>
@@ -240,9 +241,9 @@ const state = {...HOME, layer:'weather', unit:'kmh', idx:0, run:runs[0], frame:n
 const comparison = {active:false, run:null, step:null, frame:null, loading:false, failed:false};
 const titles = {weather:'Significant weer', t2m:'Temperatuur op 2 m', ws:'Wind op 10 m', gust:'Windstoten op 10 m',
   ptot:'Neerslagsom', sun:'Zon-minuten', t850:'Temperatuur op 850 hPa', t500:'Temperatuur op 500 hPa',
-  sdep:'Sneeuwhoogte (cm)', frz:'0 °C-niveau', ptypeMap:'Neerslagtype'};
+  sdep:'Sneeuwhoogte (cm)', frz:'0 °C-niveau', ptypeMap:'Neerslagtype',td2m:'Dauwpunttemperatuur op 2 m'};
 titles.windchill='Gevoelstemperatuur · JAG/TI';
-const temperatureLayers = ['t2m','windchill','t850','t500'];
+const temperatureLayers = ['t2m','td2m','windchill','t850','t500'];
 const precip = [
   '', 'Regen', 'Sneeuw', 'Natte sneeuw', 'Regen en sneeuw', 'IJzel / onderkoelde regen', 'IJsregen', '',
   'Neerslagtype onbekend'
@@ -438,7 +439,7 @@ async function interpolateFrame(step,run){
   const [before,after]=await Promise.all([load(left,run),load(right,run)]);
   // Neerslagtype en bijbehorende intensiteit komen samen uit de dichtstbijzijnde stap.
   const fields={...(fraction<.5?before:after)};
-  for(const key of ['t2m','t850','t500','ws','u','v','tcc','vis','msl','ptot','sdep','frz']){
+  for(const key of ['t2m','td2m','t850','t500','ws','u','v','tcc','vis','msl','ptot','sdep','frz']){
     const a=before[key], b=after[key];
     if(a&&b)fields[key]=Float32Array.from(a,(x,i)=>x+(b[i]-x)*fraction);
     else delete fields[key];
@@ -582,10 +583,10 @@ function paintRaster(ctx,fields){
         ? jagtiTemperature(rasterValue(fields.t2m,x,y,k),rasterValue(fields.ws,x,y,k))
         : rasterValue(scalar,x,y,k);
       if(!Number.isFinite(v)){
-        if(['sdep','frz','windchill'].includes(layer) && (xx+yy)%8<3){out[pos]=117;out[pos+1]=131;out[pos+2]=149;out[pos+3]=85;}
+        if(['sdep','frz','td2m','windchill'].includes(layer) && (xx+yy)%8<3){out[pos]=117;out[pos+1]=131;out[pos+2]=149;out[pos+3]=85;}
         continue;
       }
-      if(layer==='t2m'||layer==='windchill') color=tempLut[clamp(Math.floor(v)+52,0,tempLut.length-1)];
+      if(['t2m','td2m','windchill'].includes(layer)) color=tempLut[clamp(Math.floor(v)+52,0,tempLut.length-1)];
       else if(upperLut[layer]) color=upperLut[layer][clamp(Math.floor(v)+72,0,109)];
       else if(layer==='ptot') color=totalRGB[Math.max(0,totals.findLastIndex(t=>v>=t))];
       else if(layer==='sdep') color=snowRGB[Math.max(0,snowLevels.findLastIndex(t=>v>=t))];
@@ -820,7 +821,11 @@ function updateLegend(){
       link.href='https://cdn.knmi.nl/system/downloads/files/000/000/016/original/gevoelstemperatuur.pdf?1433939065';
       link.target='_blank';link.rel='noopener';
       $('legend-note').append(' ',link);
-    }else note('Kleurbanden per 1 °C. Plaatswaarden op één decimaal, geïnterpoleerd uit het modelraster.');
+    }else{
+      if(state.layer==='td2m')target.append(legendRow('Geen modelwaarde','repeating-linear-gradient(135deg,#8d9aab 0 2px,#e5e9ee 2px 4px)'));
+      note((state.layer==='td2m'?'Dauwpunt op 2 m volgens het gekozen model. Grijze arcering: ontbrekende brondata. ':'')+
+        'Kleurbanden per 1 °C. Plaatswaarden op één decimaal, geïnterpoleerd uit het modelraster.');
+    }
   }else{
     if(state.unit==='bft'){
       legendScale(bftColors.map(rgb),Array.from({length:13},(_,i)=>i===12?'12 Bft':String(i)));
@@ -862,6 +867,11 @@ function valuesAt(lon,lat,f=state.frame){
   const wind=Number.isFinite(w) ? 'Wind: '+num(w)+' km/u · '+beaufort(w)+' Bft'+dir : '';
   const gust=Number.isFinite(g) ? 'Stoot'+(f.gustPeriod?' '+f.gustPeriod+' u':'')+': '+num(g)+' km/u · ≈ '+beaufort(g)+' Bft' : '';
   const temp=Number.isFinite(t)?'Temperatuur: '+num(t,1)+' °C':'';
+  if(state.layer==='td2m'){
+    const dew=bilinear(f.td2m,x,y);
+    return [Number.isFinite(dew)?'Dauwpunt: '+num(dew,1)+' °C':
+      'Geen dauwpunttemperatuur beschikbaar voor deze modelrun.',temp].filter(Boolean);
+  }
   if(state.layer==='windchill'){
     const feels=jagtiTemperature(t,w);
     const message=Number.isFinite(feels)?'Gevoelstemperatuur (JAG/TI): '+num(feels,1)+' °C':
@@ -1020,6 +1030,9 @@ function showNotice(message='',id='notice'){
   $(id).textContent=message;$(id).hidden=!message;
 }
 function noticeFor(f,step){
+  if(state.layer==='td2m'&&!f?.td2m){
+    return 'Voor deze modelrun of verwachtingstijd is geen dauwpunttemperatuur beschikbaar.';
+  }
   if(state.layer==='gust'&&!f?.gust){
     return step.lead===0?'Windstoten hebben een tijdvak. Kies een latere verwachtingstijd.':'Geen gecontroleerd windstootveld voor deze verwachtingstijd.';
   }
@@ -1498,7 +1511,7 @@ function restoreLocation(fragment=location.hash){
   waitingForDefault=requestedModel===defaultModel&&!models[defaultModel].runs.length?fragment:undefined;
   const requestedLayer={temp:'t2m',wind:'ws',windstoten:'gust',neerslag:'weather',nsomm:'ptot',cumul:'ptot',zon:'sun',
     hoogte_850:'t850',hoogte_500:'t500',nulgradenniveau:'frz',sneeuw:'sdep',neerslagtype:'ptypeMap',
-    gevoelstemperatuur:'windchill',windchill:'windchill'}[params.get('param')];
+    gevoelstemperatuur:'windchill',windchill:'windchill',dauwpunt:'td2m',td2m:'td2m'}[params.get('param')];
   stop();
   setModel(requestedModel==='ecmwf_om'?'ecmwf':requestedModel);
   const runId=hash.get('run'),compareId=hash.get('vergelijk');
