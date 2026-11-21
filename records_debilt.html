@@ -557,8 +557,10 @@
 <script src="record-stations.js?v=20261103-year-records"></script>
 <link rel="stylesheet" href="records-archive.css?v=20261007-2">
 <script defer src="records-archive.js?v=20261007-2"></script>
-<link rel="stylesheet" href="records-menu.css?v=20261013-1">
-<script defer src="records-menu.js?v=20261013-1"></script>
+<link rel="stylesheet" href="records-menu.css?v=20261121-koude-winterjaren">
+<script src="records-cold-core.js?v=20261121"></script>
+<script src="records-cold-days.js?v=20261121"></script>
+<script defer src="records-menu.js?v=20261121-koude-winterjaren"></script>
 <script defer src="record-map-links.js?v=20261103-1"></script>
 </head>
 <body class="climate-page climate-records_debilt">
@@ -1464,10 +1466,11 @@
   <div class="wd-thr-tabs" id="kd-catTabs"></div>
   <div class="wd-blok" style="background:none;border:none;padding:0;margin:0 0 4px;"><div class="hsub" id="kd-uitleg"></div></div>
   <div class="wd-view-toggle">
-    <button class="wd-vbtn actief" data-view="jaar" onclick="kdSetView('jaar')">Per jaar</button>
+    <button class="wd-vbtn actief" data-view="jaar" onclick="kdSetView('jaar')">Per winterjaar</button>
     <button class="wd-vbtn" data-view="seizoen" onclick="kdSetView('seizoen')">Per seizoen</button>
     <button class="wd-vbtn" data-view="maand" onclick="kdSetView('maand')">Per maand</button>
     <button class="wd-vbtn" data-view="reeksen" onclick="kdSetView('reeksen')">📈 Reeksen</button>
+    <button class="wd-vbtn" data-view="stations" onclick="kdShowStationRecords()">Records per station · alle stations</button>
   </div>
 
   <div class="wd-leeg" id="kd-leeg" style="display:none;">Voor dit station is geen dagelijkse temperatuurreeks beschikbaar.</div>
@@ -1482,10 +1485,10 @@
       <div class="wd-axis" id="kd-axis"></div>
     </div>
     <details>
-      <summary>Toon volledige jaartabel ▾</summary>
+      <summary id="kd-year-summary">Toon volledige winterjaartabel</summary>
       <div class="wd-blok" style="margin-top:10px;">
         <table class="wd-tabel">
-          <thead><tr><th>Jaar</th><th>Aantal dagen</th><th>Periode</th></tr></thead>
+          <thead><tr><th id="kd-year-heading">Winterjaar</th><th>Aantal dagen</th><th>Meetdagen</th></tr></thead>
           <tbody id="kd-jaarTbody"></tbody>
         </table>
       </div>
@@ -1509,6 +1512,7 @@
   </div>
 
   <div id="kd-viewReeksen" style="display:none;"></div>
+  <div id="kd-viewStations" style="display:none;"></div>
 </div>
 
 <script>
@@ -4844,9 +4848,9 @@ const WD_REEKS = [
 ];
 const KD_REEKS = [
   {label:"Lichte vorst",        thr:"TN<0",   key:"tn", test:v=>v<0,    col:"#93c5fd", unit:"dagen"},
-  {label:"Matige vorst",        thr:"TN≤−5",  key:"tn", test:v=>v<=-5,  col:"#60a5fa", unit:"dagen"},
-  {label:"Strenge vorst",       thr:"TN≤−10", key:"tn", test:v=>v<=-10, col:"#3b82f6", unit:"dagen"},
-  {label:"Zeer strenge vorst",  thr:"TN≤−15", key:"tn", test:v=>v<=-15, col:"#2563eb", unit:"dagen"},
+  {label:"Matige vorst",        thr:"TN<−5",  key:"tn", test:v=>v< -5,  col:"#60a5fa", unit:"dagen"},
+  {label:"Strenge vorst",       thr:"TN<−10", key:"tn", test:v=>v< -10, col:"#3b82f6", unit:"dagen"},
+  {label:"Zeer strenge vorst",  thr:"TN<−15", key:"tn", test:v=>v< -15, col:"#2563eb", unit:"dagen"},
   {label:"Extreem koude dagen", thr:"TN≤−20", key:"tn", test:v=>v<=-20, col:"#1e40af", unit:"dagen"},
   {label:"IJsdagen",            thr:"TX<0",   key:"tx", test:v=>v<0,    col:"#0ea5e9", unit:"dagen"},
 ];
@@ -5442,241 +5446,6 @@ function wdRenderSeizoen(c) {
   });
 }
 
-// ── Koude dagen (KNMI vorstbanden) ──────────────────────────────────────────
-// Vorstbanden op minimumtemperatuur (tn); IJsdag op maximumtemperatuur (tx<0).
-// tx/tn = KNMI officiële etmaalwaarden, dus klimatologische dag-conventie zit er al in.
-const KD_LABELS = ["Vorst","IJsdag","Lichte vorst","Matige vorst","Strenge vorst","Zeer strenge vorst","Extreem koude dagen"];
-const KD_DESC   = ["tn < 0°C","tx < 0°C (hele dag vorst)","0 tot −5°C","−5 tot −10°C","−10 tot −15°C","kouder dan −15°C","tn ≤ −20°C"];
-const KD_COLORS = ["#93c5fd","#38bdf8","#60a5fa","#3b82f6","#2563eb","#1e3a8a","#5b21b6"];
-const KD_VAR    = ["tn","tx","tn","tn","tn","tn","tn"];   // welke etmaalwaarde de test gebruikt
-const KD_TEST   = [
-  v => v < 0,                  // Vorst (tn < 0)
-  v => v < 0,                  // IJsdag (tx < 0)
-  v => v < 0 && v > -5,        // Lichte vorst
-  v => v <= -5 && v > -10,     // Matige vorst
-  v => v <= -10 && v > -15,    // Strenge vorst
-  v => v <= -15,               // Zeer strenge vorst
-  v => v <= -20,               // Extreem koud
-];
-let kdCat = 0;                   // start op 'Vorst'
-let kdView = "jaar";
-let kdTabsGebouwd = false;
-let kdCache = null, kdCacheTag = "";
-
-// Tellingen uit dagelijkse tn. Eén station: dat station. "Alle stations": nationaal —
-// laagste tn per datum over alle groepstations (koudste plek), dan in band ingedeeld.
-function kdCompute() {
-  const isMulti = Array.isArray(multiData) && multiData.length > 1;
-  const bronnen = isMulti ? multiData.filter(d => d && d.maanddetail)
-                          : (data && data.maanddetail ? [data] : []);
-  if (!bronnen.length) return null;
-  const tag = (isMulti ? "multi:" + bronnen.length : "single:" + data.station + ":" + data.tm);
-  if (kdCache && kdCacheTag === tag) return kdCache;
-
-  // grid[y][m][dag] = { tn, tx } = laagste tn én laagste tx over alle bronstations
-  // (koudste plek per datum). tn voor vorstbanden, tx voor ijsdag.
-  const grid = {};
-  for (const ds of bronnen) {
-    const md = ds.maanddetail;
-    for (const y in md) {
-      const ym = (grid[y] || (grid[y] = {}));
-      for (const m in md[y]) {
-        const mm = (ym[m] || (ym[m] = {}));
-        for (const dd of (md[y][m].dagen || [])) {
-          const g = mm[dd.dag] || (mm[dd.dag] = { tn: Infinity, tx: Infinity });
-          if (dd.tn !== null && dd.tn !== undefined && dd.tn < g.tn) g.tn = dd.tn;
-          if (dd.tx !== null && dd.tx !== undefined && dd.tx < g.tx) g.tx = dd.tx;
-        }
-      }
-    }
-  }
-
-  const perYear = {};
-  const monthTotal = {}, monthBest = {}, seasonTotal = {}, seasonAcc = {};
-  KD_TEST.forEach((_, i) => {
-    monthTotal[i] = Array(13).fill(0); monthBest[i] = Array(13).fill(null);
-    seasonTotal[i] = [0,0,0,0]; seasonAcc[i] = [{},{},{},{}];
-  });
-  for (const y in grid) {
-    const yi = +y; const counts = KD_TEST.map(() => 0);
-    for (const m in grid[y]) {
-      const mi = +m; const mc = KD_TEST.map(() => 0);
-      for (const dag in grid[y][m]) {
-        const g = grid[y][m][dag];
-        KD_TEST.forEach((fn, i) => { const v = g[KD_VAR[i]]; if (v !== Infinity && fn(v)) { counts[i]++; mc[i]++; } });
-      }
-      const sIdx = ktSeizoenVan(mi), sJaar = ktSeizoenJaar(yi, mi);
-      KD_TEST.forEach((fn, i) => {
-        monthTotal[i][mi] += mc[i];
-        if (mc[i] > 0) {
-          const b = monthBest[i][mi]; if (!b || mc[i] > b[0]) monthBest[i][mi] = [mc[i], yi];
-          seasonTotal[i][sIdx] += mc[i];
-          seasonAcc[i][sIdx][sJaar] = (seasonAcc[i][sIdx][sJaar] || 0) + mc[i];
-        }
-      });
-    }
-    perYear[yi] = counts;
-  }
-  const seasonBest = {};
-  KD_TEST.forEach((_, i) => { seasonBest[i] = seasonAcc[i].map(acc => {
-    let best = null; for (const sj in acc) { if (!best || acc[sj] > best[0]) best = [acc[sj], +sj]; } return best;
-  }); });
-
-  kdCache = { perYear, monthTotal, monthBest, seasonTotal, seasonBest, bron: isMulti ? "alle stations" : data.station };
-  kdCacheTag = tag;
-  return kdCache;
-}
-
-function kdSetView(v) {
-  kdView = v;
-  document.querySelectorAll("#sectie-koudedagen .wd-vbtn").forEach(b => b.classList.toggle("actief", b.dataset.view === v));
-  document.getElementById("kd-viewJaar").style.display    = v === "jaar"    ? "" : "none";
-  document.getElementById("kd-viewSeizoen").style.display = v === "seizoen" ? "" : "none";
-  document.getElementById("kd-viewMaand").style.display   = v === "maand"   ? "" : "none";
-  document.getElementById("kd-viewReeksen").style.display = v === "reeksen" ? "" : "none";
-  const verberg = v === "reeksen" ? "none" : "";
-  document.getElementById("kd-catTabs").style.display = verberg;
-  document.getElementById("kd-uitleg").parentElement.style.display = verberg;
-  kdRender();
-}
-
-function kdRender() {
-  if (!kdTabsGebouwd) {
-    const tt = document.getElementById("kd-catTabs"); tt.innerHTML = "";
-    KD_LABELS.forEach((lab, i) => {
-      const d = document.createElement("div");
-      d.className = "wd-thr-tab"; d.dataset.i = i;
-      d.innerHTML = `<span class="tlabel">${lab}</span><span class="tdesc">${KD_DESC[i]}</span>`;
-      d.onclick = () => { kdCat = i; kdRender(); };
-      tt.appendChild(d);
-    });
-    kdTabsGebouwd = true;
-  }
-  if (kdView === "reeksen") { if (typeof updateBreadcrumb === "function") updateBreadcrumb(); kdRenderReeksen(); return; }
-  document.querySelectorAll("#sectie-koudedagen .wd-thr-tab").forEach(d => {
-    const a = +d.dataset.i === kdCat;
-    d.classList.toggle("actief", a);
-    d.style.background = a ? KD_COLORS[+d.dataset.i] : "";
-  });
-  document.getElementById("kd-uitleg").textContent =
-    `${KD_LABELS[kdCat]} = dagen met een ${KD_VAR[kdCat] === "tx" ? "maximum" : "minimum"}temperatuur ${KD_DESC[kdCat]}.`;
-  if (typeof updateBreadcrumb === "function") updateBreadcrumb();
-
-  const c = kdCompute();
-  if (!c) {
-    document.getElementById("kd-leeg").style.display = "";
-    ["jaar", "seizoen", "maand", "reeksen"].forEach(v => {
-      document.getElementById(`kd-view${v[0].toUpperCase()}${v.slice(1)}`).style.display = "none";
-    });
-    return;
-  }
-  document.getElementById("kd-leeg").style.display = "none";
-  document.getElementById("kd-viewJaar").style.display    = kdView === "jaar"    ? "" : "none";
-  document.getElementById("kd-viewSeizoen").style.display = kdView === "seizoen" ? "" : "none";
-  document.getElementById("kd-viewMaand").style.display   = kdView === "maand"   ? "" : "none";
-  document.getElementById("kd-viewReeksen").style.display = kdView === "reeksen" ? "" : "none";
-  if (kdView === "jaar") kdRenderJaar(c);
-  else if (kdView === "seizoen") kdRenderSeizoen(c);
-  else kdRenderMaand(c);
-}
-
-function kdRenderJaar(c) {
-  const ys = Object.keys(c.perYear).map(Number).sort((a,b) => a-b);
-  const val = y => c.perYear[y][kdCat];
-  const ranked = ys.map(y => [y, val(y)]).filter(r => r[1] > 0).sort((a,b) => b[1]-a[1] || b[0]-a[0]);
-
-  const medals = ["🥇","🥈","🥉"], rangtxt = ["Record","2e plek","3e plek"];
-  const pod = document.getElementById("kd-podium"); pod.innerHTML = "";
-  for (let i=0;i<3;i++) {
-    const r = ranked[i]; const div = document.createElement("div");
-    div.className = "wd-pcard" + (i===0 ? " p1" : "");
-    if (r) {
-      div.innerHTML = `<div class="wd-medal">${medals[i]}</div><div class="rang">${rangtxt[i]}</div>
-        <div class="jaar">${r[0]}</div><div class="aantal"><b>${r[1]}</b> ${r[1]===1?"dag":"dagen"}</div>`;
-    } else {
-      div.innerHTML = `<div class="wd-medal">—</div><div class="rang">${rangtxt[i]}</div>
-        <div class="jaar" style="color:var(--tekst2)">—</div><div class="aantal">geen</div>`;
-    }
-    pod.appendChild(div);
-  }
-
-  const met20 = ys.filter(y => y <= WD_EEUWGRENS && val(y) > 0).length;
-  const met21 = ys.filter(y => y >  WD_EEUWGRENS && val(y) > 0).length;
-  const tot20 = ys.filter(y => y <= WD_EEUWGRENS).length;
-  const tot21 = ys.filter(y => y >  WD_EEUWGRENS).length;
-  document.getElementById("kd-eeuw").innerHTML = `
-    <div class="wd-ecard">
-      <div class="etitel">Vorige eeuw · t/m 1999</div>
-      <div class="ebig">${met20} <small>van ${tot20} jaar</small></div>
-      <div class="emeta">jaren met minstens één dag in deze categorie</div>
-    </div>
-    <div class="wd-ecard e21">
-      <div class="etitel">Deze eeuw · vanaf 2000</div>
-      <div class="ebig">${met21} <small>van ${tot21} jaar</small></div>
-      <div class="emeta">jaren met minstens één dag in deze categorie</div>
-    </div>`;
-
-  const max = Math.max(1, ...ys.map(val));
-  const recordYear = ranked[0] ? ranked[0][0] : null;
-  const bars = document.getElementById("kd-bars"); bars.innerHTML = "";
-  ys.forEach(y => {
-    const v = val(y); const b = document.createElement("div");
-    b.className = "wd-bar" + (y === recordYear ? " hl" : "");
-    b.style.height = (v/max*100) + "%";
-    b.style.background = v > 0 ? KD_COLORS[kdCat] : "var(--kaart2)";
-    b.innerHTML = `<span class="bt">${y}: ${v} ${v===1?"dag":"dagen"}</span>`;
-    bars.appendChild(b);
-  });
-  const y0 = ys[0], y1 = ys[ys.length-1], ym = Math.round((y0+y1)/2);
-  document.getElementById("kd-axis").innerHTML = `<span>${y0}</span><span>${ym}</span><span>${y1}</span>`;
-  document.getElementById("kd-barTitel").textContent = `${KD_LABELS[kdCat]} per jaar — ${c.bron}`;
-  document.getElementById("kd-barSub").textContent = recordYear
-    ? `Hoogste balk (goud) = recordjaar ${recordYear}. Beweeg over een balk voor het aantal.`
-    : `Dit is in de hele reeks van ${c.bron} nog niet voorgekomen.`;
-
-  const tb = document.getElementById("kd-jaarTbody"); tb.innerHTML = "";
-  ys.slice().reverse().forEach(y => {
-    const v = val(y); const tr = document.createElement("tr"); if (v === 0) tr.className = "z0";
-    tr.innerHTML = `<td>${y}</td><td>${v || "–"}</td><td>${y <= WD_EEUWGRENS ? "1900s" : "2000s"}</td>`;
-    tb.appendChild(tr);
-  });
-}
-
-function kdRenderMaand(c) {
-  const tot  = c.monthTotal[kdCat];
-  const best = c.monthBest[kdCat];
-  const max  = Math.max(1, ...tot);
-  document.getElementById("kd-mTitel").textContent = `${KD_LABELS[kdCat]} per kalendermaand — ${c.bron}`;
-  const mb = document.getElementById("kd-mbars"); mb.innerHTML = "";
-  for (let m=1;m<=12;m++) {
-    const v = tot[m]; const col = document.createElement("div"); col.className = "wd-mbar-col";
-    const bestTxt = best[m] ? `record: ${best[m][0]} in ${best[m][1]}` : "";
-    col.innerHTML = `
-      <div class="wd-mbar-val">${v || ""}</div>
-      <div class="wd-mbar" style="height:${v/max*150}px;background:${v>0?KD_COLORS[kdCat]:"var(--kaart2)"}"></div>
-      <div class="wd-mbar-lbl">${NL_MAANDEN[m]}</div>
-      <div class="wd-mbar-best">${bestTxt}</div>`;
-    mb.appendChild(col);
-  }
-}
-
-function kdRenderSeizoen(c) {
-  const tot  = c.seasonTotal[kdCat];
-  const best = c.seasonBest[kdCat];
-  const max  = Math.max(1, ...tot);
-  document.getElementById("kd-sTitel").textContent = `${KD_LABELS[kdCat]} per seizoen — ${c.bron}`;
-  const mb = document.getElementById("kd-sbars"); mb.innerHTML = "";
-  KT_SEIZOENEN.forEach((naam, s) => {
-    const v = tot[s]; const col = document.createElement("div"); col.className = "wd-mbar-col";
-    const bestTxt = best[s] ? `record: ${best[s][0]} in ${ktSeizoenLabel(s, best[s][1])}` : "";
-    col.innerHTML = `
-      <div class="wd-mbar-val">${v || ""}</div>
-      <div class="wd-mbar" style="width:75%;height:${v/max*150}px;background:${v>0?KD_COLORS[kdCat]:"var(--kaart2)"}"></div>
-      <div class="wd-mbar-lbl">${naam}</div>
-      <div class="wd-mbar-best">${bestTxt}</div>`;
-    mb.appendChild(col);
-  });
-}
 
 </script>
 
