@@ -1018,7 +1018,7 @@ const MENU_PRODUCTS = [
     "section": "Maand & seizoen",
     "icon": "records",
     "href": "index.html#winter",
-    "src": "winter.html?v=20261119-sneeuwmaanden",
+    "src": "winter.html?v=20261121-landelijke-vorst",
     "thumbnail": null,
     "facets": {},
     "keywords": "winter sneeuw sneeuwdagen sneeuwval vorstdagen ijsdagen vorst dooi onder nul boven nul ijzel ijsvorming gladheid KNMI",

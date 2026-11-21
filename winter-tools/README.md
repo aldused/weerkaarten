@@ -157,3 +157,38 @@ en zijn voor beide klimaatperioden en kaartsoorten gelijk.
 De CSV-link exporteert de gekozen maand of het gekozen seizoen met de
 bijbehorende gemiddelden en meetdekking. Een directe novemberlink gebruikt
 `winter.html?sneeuwkaart=sneeuwval&sneeuwperiode=1991-2020&sneeuwtijdvak=month-11#sneeuwdekkaart`.
+
+
+## Eerste landelijke vorst per winterjaar
+
+`winter-data/eerste-vorst.json` bevat voor alle beschikbare winterjaren de
+**eerste waargenomen** datum per vorstklasse en station. De browser kiest per
+klasse de vroegste datum van alle stations en bewaart alle stations die die
+datum delen. Er wordt geen stationsgemiddelde en geen filter van 90% dekking
+gebruikt voor die landelijke grensdatum. Ontbrekende jaren en meetgaten zijn
+geen bewijs dat het niet heeft gevroren.
+
+Winterjaar is 1 augustus t/m 31 juli, met het eindjaar als sleutel. Dit staat
+los van het sneeuwseizoen juli–juni. Dagminima komen uit `dagdata_<id>.json`
+voor het volledige stationsregister; de volledige historische dagreeksen
+van Winterswijk, Epen en Oost-Maarland en losse historische TN-recordnoteringen
+worden toegevoegd. Een dagelijkse bron blijft leidend bij overlap. Datums
+worden ontdubbeld per station; vandaag en toekomstige dagen tellen niet mee.
+Vorstklassen blijven de vier afzonderlijke KNMI-banden, op normale meethoogte.
+
+Bij nieuwe dagdata opnieuw bouwen vanuit de Weerlab-root:
+
+```sh
+python3 winter-tools/bouw_eerste_vorst.py \
+  --daily /pad/naar/weerlabbestanden \
+  --records /pad/naar/weerlabbestanden/records_nl_extreme.json
+python3 tests/test_eerste_vorst.py
+NODE_PATH=<playwright-modules> node tests/seizoenskalender-vorst-browser.cjs
+```
+
+De kalender toont alle vier eerste landelijke datums naast elkaar. Met
+**Landelijke vorstdatums als CSV** exporteer je één regel per winterjaar,
+ISO-datums, stationsnamen, temperaturen en een aanduiding van lopende jaren.
+De CSV met individuele stations blijft daarnaast beschikbaar. Sneeuwval en
+sneeuwdek behouden hun eigen bronnen en berekening; sneeuwklimaatgemiddelden
+staan onder een uitklapbare toelichting.
