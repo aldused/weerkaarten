@@ -41,6 +41,7 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(len(records[0]['revisions']), 1)
         later['warnings'][0]['parts'][0].update(status='cancelled', version_dt='2026-11-10T10:00:00Z')
         record = next(r for r in public_history([doc, later]) if r['part_id'] == doc['warnings'][0]['parts'][0]['part_uuid'])
+        self.assertEqual(record['warning_set_id'], doc['warnings'][0]['warning_set_uuid'])
         self.assertEqual(record['issued'], '2026-11-10T08:59:00Z')
         self.assertEqual(record['status'], 'cancelled')
         self.assertEqual(len(record['revisions']), 2)

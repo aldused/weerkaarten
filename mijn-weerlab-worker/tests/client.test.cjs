@@ -38,3 +38,30 @@ test('rapid product visits are queued while a history write is in flight',async(
  h.answer(3,{userId:'a',dashboard:{...original,revision:3,recent:['c','b','a']}});await new Promise(setImmediate);
  assert.equal(h.api.ready(),true);
 });
+
+ test('refreshes a stale catalog and saves a newly added product in one click',async()=>{
+  const h=harness();await h.initialize('a');const save=h.api.toggle('nieuwe-pagina');
+  assert.equal(h.pending[2].url,'/api/mijn-weerlab/catalog?refresh=1');
+  h.answer(2,{products:[{id:'a',name:'A'},{id:'nieuwe-pagina',name:'Nieuw'}]});
+  await new Promise(setImmediate);
+  const sent=JSON.parse(h.pending[3].options.body);
+  assert.equal(sent.favorites.length,2);assert.equal(sent.favorites[1].productId,'nieuwe-pagina');
+  h.answer(3,{userId:'a',dashboard:{...sent,revision:2}});await save;
+  assert.equal(h.api.ids().join(','),'a,nieuwe-pagina');
+ });
+ test('a failed catalog refresh does not change existing favorites',async()=>{
+  const h=harness();await h.initialize('a');const save=h.api.toggle('nieuwe-pagina');h.pending[2].reject(Error('offline'));await save;
+  assert.equal(h.api.ids().join(','),'a');assert.equal(h.pending.length,3);assert.equal(h.api.error(),'offline');
+ });
+ test('a catalog refresh cannot restore data after logout',async()=>{
+  const h=harness();await h.initialize('a');const save=h.api.toggle('nieuwe-pagina');h.emit('pagehide');
+  h.answer(2,{products:[{id:'nieuwe-pagina',name:'Nieuw'}]});await save;
+  assert.equal(h.api.ids().length,0);assert.equal(h.pending.length,3);
+ });
+
+test('an outdated product catalog exposes a visible save error after refreshing',async()=>{
+ const h=harness();await h.initialize('a');const request=h.api.toggle('missing');
+ h.answer(2,{products:[{id:'a',name:'A'}]});await request;
+ assert.match(h.api.error(),/actuele productlijst/);
+ assert.equal(h.pending.length,3);assert.equal(h.api.ids().join(','),'a');
+});

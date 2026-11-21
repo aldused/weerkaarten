@@ -1,6 +1,46 @@
 // Generated from menu-data.js.
 export const catalog=[
   {
+    "id": "wegdek",
+    "name": "Wegdek en strooien",
+    "description": "Actuele wegdektemperatuur, Rijkswaterstaat-verwachting en strooiroutes.",
+    "section": "Metingen",
+    "category": "nu",
+    "href": "index.html#wegdek",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
+    "id": "wintersport",
+    "name": "Wintersportweer",
+    "description": "Sneeuwhoogtes en sneeuwverwachtingen voor Europese skigebieden.",
+    "section": "Europa",
+    "category": "verwachting",
+    "href": "index.html#wintersport",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
+    "id": "stormen-windstoten",
+    "name": "Stormen en windstoten",
+    "description": "Zoek historische stormen en vergelijk de zwaarste windstoten.",
+    "section": "Records & extremen",
+    "category": "terugkijken",
+    "href": "index.html#stormen-windstoten",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
+    "id": "mosmix-werkstation",
+    "name": "MOS/MIX · weer in ontwikkeling",
+    "description": "Alle onderdelen in één omgeving · zes kaarten, grote kaart en 9-daagse minikaarten",
+    "section": "Nederland · MOS/MIX",
+    "category": "verwachting",
+    "href": "index.html#mosmix-werkstation",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
     "id": "wolkenbasis-actueel",
     "name": "Actuele wolkenbasis · Benelux",
     "description": "Gemeten wolkenhoogten bij KNMI-stations en luchthavens",
@@ -31,12 +71,32 @@ export const catalog=[
     "available": true
   },
   {
+    "id": "waarschuwingen-archief",
+    "name": "Waarschuwingen · overzicht en archief",
+    "description": "Code geel, oranje en rood per maand en datum, met reden, gebied en geldigheid. Oranje en rood vanaf 2010.",
+    "section": "Waarschuwingen",
+    "category": "terugkijken",
+    "href": "index.html#waarschuwingen-archief",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
     "id": "waarschuwingen",
     "name": "KNMI-waarschuwingen",
     "description": "Actuele KNMI-waarschuwingen op de kaart, met gebied, geldigheid en toelichting.",
     "section": "Waarschuwingen",
     "category": "nu",
     "href": "index.html#waarschuwingen",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
+    "id": "wereldweer",
+    "name": "Wereldweer",
+    "description": "Actueel weernieuws uit Europa en de wereld, de hele dag bijgewerkt: honderden bronnen in de eigen taal, officiële waarschuwingen, interactieve kaart, wat er aankomt en de dagelijkse editie.",
+    "section": "Wereldweer",
+    "category": "nu",
+    "href": "index.html#wereldweer",
     "requiresProductGate": false,
     "available": true
   },
@@ -68,6 +128,16 @@ export const catalog=[
     "category": "nu",
     "href": "index.html#radar",
     "requiresProductGate": false,
+    "available": true
+  },
+  {
+    "id": "neerslagaccumulatie",
+    "name": "Neerslagaccumulatie",
+    "description": "Hoeveel neerslag er viel · KNMI-radar per km, elk tijdvak",
+    "section": "Beeld",
+    "category": "nu",
+    "href": "index.html#neerslagaccumulatie",
+    "requiresProductGate": true,
     "available": true
   },
   {
@@ -163,7 +233,7 @@ export const catalog=[
   {
     "id": "zeetemp",
     "name": "Zeewatertemperatuur",
-    "description": "Zeewatertemperatuur Europa en golven aan de Hollandse kust",
+    "description": "Zeewatertemperatuur Europa en Noordzee · NOAA-daganalyse",
     "section": "Water & kust",
     "category": "nu",
     "href": "index.html#zeetemp",
@@ -192,8 +262,8 @@ export const catalog=[
   },
   {
     "id": "modelkaarten",
-    "name": "Weerkaarten Nederland",
-    "description": "Vergelijk temperatuur, regen, wind en wolken",
+    "name": "Modelkaarten Benelux",
+    "description": "Significant weer, temperatuur, wind, neerslagsom en zon-minuten",
     "section": "",
     "category": "verwachting",
     "href": "index.html#weerkaarten-modelkaarten",
@@ -217,16 +287,6 @@ export const catalog=[
     "section": "",
     "category": "verwachting",
     "href": "index.html#weerkaarten-sigvier",
-    "requiresProductGate": false,
-    "available": true
-  },
-  {
-    "id": "hres10",
-    "name": "Weerkaarten Europa",
-    "description": "ECMWF en GFS, met straalstroom en eigen CAMS-kaarten voor Saharastof",
-    "section": "",
-    "category": "verwachting",
-    "href": "index.html#weerkaarten-hres10",
     "requiresProductGate": false,
     "available": true
   },
@@ -257,16 +317,6 @@ export const catalog=[
     "section": "",
     "category": "verwachting",
     "href": "index.html#weerkaarten-efi24",
-    "requiresProductGate": false,
-    "available": true
-  },
-  {
-    "id": "clusters",
-    "name": "Weerscenario’s",
-    "description": "Groepen mogelijke ontwikkelingen · ECMWF",
-    "section": "",
-    "category": "verwachting",
-    "href": "index.html#weerkaarten-clusters",
     "requiresProductGate": false,
     "available": true
   },
@@ -303,7 +353,7 @@ export const catalog=[
   {
     "id": "pluim-viewer",
     "name": "Weerpluim per plaats",
-    "description": "De verwachting én onzekerheid voor jouw plaats",
+    "description": "Eén locatie, vijf modellen en één grote grafiek · inclusief HARMONIE",
     "section": "Pluimen",
     "category": "verwachting",
     "href": "index.html#pluim",
@@ -377,16 +427,6 @@ export const catalog=[
     "section": "Pluimen",
     "category": "verwachting",
     "href": "index.html#pluim-wolken",
-    "requiresProductGate": false,
-    "available": true
-  },
-  {
-    "id": "pluim-trend",
-    "name": "Hoe verandert de verwachting?",
-    "description": "Vergelijk de laatste acht modelberekeningen",
-    "section": "Pluimen",
-    "category": "verwachting",
-    "href": "index.html#pluim-trend",
     "requiresProductGate": false,
     "available": true
   },
@@ -501,6 +541,26 @@ export const catalog=[
     "available": true
   },
   {
+    "id": "winter",
+    "name": "Winter in Nederland",
+    "description": "Sneeuwdagen, vorst en dooi, en ijzelmeldingen per KNMI-station.",
+    "section": "Maand & seizoen",
+    "category": "terugkijken",
+    "href": "index.html#winter",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
+    "id": "sneeuwdekarchief",
+    "name": "Sneeuwdek in Nederland",
+    "description": "Verken de sneeuwdekkalender en dagmetingen van KNMI-neerslagstations.",
+    "section": "Maand & seizoen",
+    "category": "terugkijken",
+    "href": "index.html#sneeuwdekarchief",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
     "id": "zomerstatistieken",
     "name": "Zomerbalans",
     "description": "Warme dagen en warmtegetal van april tot en met oktober.",
@@ -541,6 +601,16 @@ export const catalog=[
     "available": true
   },
   {
+    "id": "klimatologie",
+    "name": "Klimatologie · temperatuur & neerslag",
+    "description": "Ontdek de jaarcyclus, maandgrafieken en de snelste afkoeling met klimaatdata 1991–2020.",
+    "section": "Zon & seizoenen",
+    "category": "terugkijken",
+    "href": "index.html#klimatologie",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
     "id": "klimaatarchief",
     "name": "Klimaatarchief",
     "description": "Vergelijk maanden, seizoenen en jaren met historische metingen.",
@@ -557,6 +627,16 @@ export const catalog=[
     "section": "Records & extremen",
     "category": "terugkijken",
     "href": "index.html#records",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
+    "id": "jaaruitersten",
+    "name": "Temperatuurextremen 1901–2026",
+    "description": "Bekijk het jaarminimum, jaarmaximum en winterminimum met links naar de historische dagkaarten.",
+    "section": "Records & extremen",
+    "category": "terugkijken",
+    "href": "index.html#jaaruitersten",
     "requiresProductGate": false,
     "available": true
   },
@@ -592,8 +672,8 @@ export const catalog=[
   },
   {
     "id": "eerstelaatste",
-    "name": "Eerste en laatste warme of koude dag",
-    "description": "Wanneer begon of eindigde de periode met vorst, zomerse of tropische dagen?",
+    "name": "Eerste & laatste weergrenzen",
+    "description": "Eerste en laatste overschrijdingen, gemiddelde datums, datumranglijsten en reeksen voor temperatuur, neerslag, windstoten en zon.",
     "section": "Seizoenen & bijzondere dagen",
     "category": "terugkijken",
     "href": "index.html#eerstelaatste",
@@ -641,8 +721,18 @@ export const catalog=[
     "available": true
   },
   {
+    "id": "weerkaart",
+    "name": "Weerkaart",
+    "description": "ECMWF 0,1° · neerslag, bewolking, temperatuur en luchtdruk · 15 uitsneden, tot 15 dagen vooruit",
+    "section": "Analyse",
+    "category": "verwachting",
+    "href": "index.html#weerkaart",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
     "id": "weerkaart-europa",
-    "name": "Weerkaart Europa",
+    "name": "Weerkaart Europa · ECMWF",
     "description": "ECMWF · KNMI en DMI HARMONIE Europa · HARMONIE 43 en 46 Benelux",
     "section": "Analyse",
     "category": "verwachting",
@@ -657,6 +747,16 @@ export const catalog=[
     "section": "Analyse",
     "category": "professioneel",
     "href": "index.html#skewt",
+    "requiresProductGate": false,
+    "available": true
+  },
+  {
+    "id": "modeltijdseries",
+    "name": "Modeltijdseries",
+    "description": "ECMWF · HARMONIE 43/46 · tabel + meteogram",
+    "section": "Analyse",
+    "category": "professioneel",
+    "href": "index.html#modeltijdseries",
     "requiresProductGate": false,
     "available": true
   },

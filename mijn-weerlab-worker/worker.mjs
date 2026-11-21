@@ -1,8 +1,7 @@
 import {DurableObject} from 'cloudflare:workers';
 import {identity} from './auth.mjs';
 import {emptyDashboard,validateDashboard,importDashboard,InputError} from './model.mjs';
-import {catalog} from './catalog.mjs';
-const catalogMap=new Map(catalog.map(p=>[p.id,p]));
+import {getCatalog} from './live-catalog.mjs';
 export const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-store','Vary':'Cookie','X-Content-Type-Options':'nosniff'}});
 export default {async fetch(request,env) {
   try {
@@ -11,7 +10,7 @@ export default {async fetch(request,env) {
     const person=await identity(request,env);if(!person)return json({error:'Je sessie is verlopen. Log opnieuw in.',code:'SESSION_EXPIRED'},401);
     if(!['GET','PUT','POST'].includes(request.method))return json({error:'Methode niet toegestaan.'},405);
     if(request.method!=='GET'&&(request.headers.get('Origin')!==env.SITE_ORIGIN||request.headers.get('X-Weerlab-Request')!=='1'))return json({error:'Geen toegang.'},403);
-    if(request.method==='GET'&&path==='/catalog')return json({products:catalog});
+    if(request.method==='GET'&&path==='/catalog')return json({products:await getCatalog(env,{refresh:url.searchParams.get('refresh')==='1'})});
     if(!((request.method==='GET'||request.method==='PUT')&&path==='/dashboard'||request.method==='POST'&&path==='/import'))return json({error:'Onbekende aanvraag.'},404);
     let body;
     if(request.method!=='GET'){
@@ -46,6 +45,10 @@ export class Accounts extends DurableObject {
 export class Dashboard extends DurableObject {
   async fetch(request){
     const input=request.method==='GET'?undefined:await request.json();
+    let products=await getCatalog(this.env);
+    const incoming=[...(Array.isArray(input?.favorites)?input.favorites:[]),...(Array.isArray(input?.savedPages)?input.savedPages:[])];
+    if(incoming.some(item=>item?.productId&&!products.some(p=>p.id===item.productId)))products=await getCatalog(this.env,{refresh:true});
+    const catalogMap=new Map(products.map(p=>[p.id,p]));
     return this.ctx.storage.transaction(async tx=>{
       const current=await tx.get('dashboard')||emptyDashboard(),userId=request.headers.get('X-User-Id');
       if(request.method==='GET')return json({userId,dashboard:current});

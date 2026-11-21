@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const source = fs.readFileSync(new URL('../waarschuwingen-archief.js', import.meta.url), 'utf8');
-const {localDay, recordDays, matches, incompleteYellow} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+const {localDay, recordDays, matches, incompleteYellow, phenomenonGroup, monthlyStatistics} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 assert.equal(localDay('2026-11-20T23:30:00Z'), '2026-11-21');
 // Local midnight is an exclusive end, including across the DST change.
 assert.deepEqual(recordDays({onset:'2026-10-24T22:00:00Z',expires:'2026-10-25T23:00:00Z'}), ['2026-10-25']);
@@ -16,3 +16,26 @@ assert.ok(matches(spanning,2026,'11','alle'));
 assert.ok(incompleteYellow({all_colors_since:'2026-11-02'},2026,'11'));
 assert.ok(!incompleteYellow({all_colors_since:'2026-10-01'},2026,'11'));
 console.log('Waarschuwingenarchief: lokale datums, maandgrenzen, filters en onvolledige dekking gecontroleerd');
+
+const warning=(id,set,code='geel',onset='2026-11-21T04:00:00Z',expires='2026-11-21T09:00:00Z')=>({id,warning_set_id:set,source_kind:'public',phenomenon:'Gladheid',codes:[code],onset,expires,headline:'Gladheid op bruggen',description:'',areas:['Gelderland']});
+const twoAreas=[warning('part-a','set-1'),{...warning('part-b','set-1'),areas:['Utrecht']}];
+assert.equal(monthlyStatistics(twoAreas,2026,'11').total.counts.geel,1,'extra gebieden tellen niet dubbel');
+assert.equal(monthlyStatistics([...twoAreas,twoAreas[0]],2026,'11').total.counts.geel,1,'herhaalde records tellen niet dubbel');
+assert.equal(monthlyStatistics([...twoAreas,warning('part-c','set-2')],2026,'11').total.counts.geel,2,'afzonderlijke waarschuwingen blijven afzonderlijk');
+const escalated=[...twoAreas,warning('part-orange','set-1','oranje')];
+assert.deepEqual(monthlyStatistics(escalated,2026,'11').total.counts,{geel:1,oranje:1,rood:0});
+assert.deepEqual(monthlyStatistics(escalated,2026,'11','oranje').total.counts,{geel:0,oranje:1,rood:0});
+assert.equal(monthlyStatistics(twoAreas,2026,'11','alle','utrecht').total.counts.geel,1);
+assert.equal(monthlyStatistics(twoAreas,2026,'11','alle','','Windstoten').rows.length,0);
+const crossing=[warning('crossing','set-crossing','geel','2026-10-31T22:00:00Z','2026-11-01T03:00:00Z')];
+assert.equal(monthlyStatistics(crossing,2026,'10').total.counts.geel,1);
+assert.equal(monthlyStatistics(crossing,2026,'11').total.counts.geel,1);
+assert.equal(monthlyStatistics(crossing,2026,'alle').total.counts.geel,1);
+const old=(id,onset,expires)=>({...warning(id,null,'geel',onset,expires),source_kind:'legacy'});
+const periods=[old('old-a','2026-11-01T00:00:00Z','2026-11-01T06:00:00Z'),old('old-b','2026-11-01T05:00:00Z','2026-11-01T10:00:00Z'),old('old-c','2026-11-02T00:00:00Z','2026-11-02T06:00:00Z')];
+assert.equal(monthlyStatistics(periods,2026,'11').total.counts.geel,2);
+assert.equal(monthlyStatistics(periods,2026,'11').total.approximate.geel,true);
+assert.equal(phenomenonGroup({phenomenon:'Gladheid & sneeuw'}),'Gladheid / sneeuw');
+assert.equal(phenomenonGroup({phenomenon:'Zware onweersbuien met windstoten'}),'Onweersbuien');
+assert.equal(phenomenonGroup({phenomenon:'Zeer zware windstoten door storm Poly'}),'Windstoten');
+console.log('Maandtellingen: landelijke waarschuwingen, kleurwissels, maandgrenzen en oude perioden gecontroleerd');

@@ -66,7 +66,24 @@ window.MijnWeerlab=(()=>{
     const [route,query='']=url.hash.slice(1).split(/\?(.*)/s);
     return {id:crypto.randomUUID(),title:page.title,productId:page.id||null,menuRoute:page.id?null:route,query:new URLSearchParams(query).toString()};
   }
-  function togglePage(page){const next=pageReference(page);return change(n=>{
+  async function ensureProduct(id){
+    if(products.some(p=>p.id===id))return true;
+    if(!data||busy||loading||retry)return false;
+    const owner=userId,attempt=generation;loading=true;status='loading';message='';refresh();
+    try{
+      const list=await request('/catalog?refresh=1');
+      if(owner!==userId||attempt!==generation)return false;
+      products=list.products.filter(p=>p.id!=='modellenbespreking');
+      if(!products.some(p=>p.id===id))throw Error('Deze pagina staat nog niet in de actuele productlijst. Probeer het zo nog eens.');
+      status='saved';return true;
+    }catch(error){if(owner===userId&&attempt===generation){status='error';message=error.message;}return false;}
+    finally{if(attempt===generation){loading=false;refresh();}}
+  }
+  async function togglePage(page){
+    const next=pageReference(page);
+    const exists=data?.savedPages?.some(p=>p.productId===next.productId&&p.menuRoute===next.menuRoute&&p.query===next.query);
+    if(next.productId&&!exists&&!products.some(p=>p.id===next.productId)&&!await ensureProduct(next.productId))return false;
+    return change(n=>{
     n.savedPages??=[];const at=n.savedPages.findIndex(p=>p.productId===next.productId&&p.menuRoute===next.menuRoute&&p.query===next.query);
     if(at>=0)n.savedPages.splice(at,1);else n.savedPages.push(next);
   });}
@@ -91,7 +108,7 @@ window.MijnWeerlab=(()=>{
     return out;
   }
   function productChoices(q){return products.filter(p=>[p.name,p.description,p.section].join(' ').toLocaleLowerCase('nl').includes(q.toLocaleLowerCase('nl'))).map(p=>`<div class="mw-product"><span><strong>${esc(p.name)}</strong><small>${esc(p.section)}${p.requiresProductGate?' · Eigen producttoegang blijft vereist':''}</small></span><button data-mw="choose" data-id="${esc(p.id)}" ${data.favorites.some(f=>f.productId===p.id)?'disabled':disabled()}>${data.favorites.some(f=>f.productId===p.id)?'Toegevoegd':'Toevoegen'}</button></div>`).join('');}
-  function toggle(id,categoryId=null){if(!data||busy)return;if(!products.some(p=>p.id===id)){message='Dit product staat niet in de actuele productcatalogus.';refresh();return;}return change(next=>{const at=next.favorites.findIndex(f=>f.productId===id);if(at>=0)next.favorites.splice(at,1);else next.favorites.push({id:crypto.randomUUID(),productId:id,customName:'',categoryId});});}
+  async function toggle(id,categoryId=null){if(!data||busy||loading)return;if(!data.favorites.some(f=>f.productId===id)&&!products.some(p=>p.id===id)&&!await ensureProduct(id))return false;return change(next=>{const at=next.favorites.findIndex(f=>f.productId===id);if(at>=0)next.favorites.splice(at,1);else next.favorites.push({id:crypto.randomUUID(),productId:id,customName:'',categoryId});});}
   function move(id,targetId,categoryId){if(id===targetId&&data?.favorites.find(f=>f.id===id)?.categoryId===categoryId)return;return change(next=>{const at=next.favorites.findIndex(f=>f.id===id);if(at<0)return;const [item]=next.favorites.splice(at,1);item.categoryId=categoryId;const index=next.favorites.findIndex(f=>f.id===targetId);next.favorites.splice(index<0?next.favorites.length:index,0,item);});}
   document.addEventListener('click',event=>{
     const b=event.target.closest('[data-mw]');if(!b)return;

@@ -34,6 +34,64 @@ export function incompleteYellow(coverage, year, month) {
   const start = `${year}-${month === 'alle' ? '01' : month}-01`;
   return start < coverage.all_colors_since;
 }
+
+export function phenomenonGroup(record) {
+  const name=fold(record.phenomenon);
+  if (/gladheid\s*(?:&|en|\/)\s*sneeuw|sneeuw en gladheid/.test(name)) return 'Gladheid / sneeuw';
+  if (/ladheid|ijzel|ijsregen/.test(name)) return 'Gladheid';
+  if (/sneeuw/.test(name)) return 'Sneeuw';
+  if (/onweer|onweers/.test(name)) return 'Onweersbuien';
+  if (/hozen/.test(name)) return 'Wind- en waterhozen';
+  if (/wind|storm/.test(name)) return 'Windstoten';
+  if (/regen|neerslag|wateroverlast/.test(name)) return 'Regen';
+  if (/hitte/.test(name)) return 'Hitte';
+  if (/kou/.test(name)) return 'Kou';
+  if (/mist|zicht/.test(name)) return 'Mist / slecht zicht';
+  if (/temperatuur/.test(name)) return 'Temperatuur';
+  return 'Niet nader vermeld';
+}
+const eventsCache = new WeakMap();
+export function warningEvents(records) {
+  if (eventsCache.has(records)) return eventsCache.get(records);
+  const identified=new Map(), legacy=[];
+  for (const record of records) {
+    const phenomenon=phenomenonGroup(record);
+    if (record.source_kind==='legacy') {legacy.push(record);continue;}
+    const id=record.source_kind==='public' ? record.warning_set_id : record.id;
+    const key=record.source_kind+'|'+(id||record.id)+'|'+phenomenon;
+    if (!identified.has(key)) identified.set(key,{phenomenon,records:[],approximate:false,pending:record.source_kind==='public'&&!id});
+    identified.get(key).records.push(record);
+  }
+  // The old province cube has no national WarningSet identity. Count continuous
+  // nationwide periods, explicitly labelled as an approximation of issuances.
+  legacy.sort((a,b)=>phenomenonGroup(a).localeCompare(phenomenonGroup(b))||Date.parse(a.onset)-Date.parse(b.onset));
+  const periods=[];
+  for (const record of legacy) {
+    const phenomenon=phenomenonGroup(record), start=Date.parse(record.onset), end=Date.parse(record.expires);
+    const previous=periods.at(-1);
+    if (previous?.phenomenon===phenomenon && start<=previous.end) {previous.records.push(record);previous.end=Math.max(previous.end,end);}
+    else periods.push({phenomenon,records:[record],end,approximate:true,pending:false});
+  }
+  const events=[...identified.values(),...periods];eventsCache.set(records,events);return events;
+}
+export function monthlyStatistics(records,year,month='alle',color='alle',search='',phenomenon='alle') {
+  const rows=new Map();let pending=false;
+  for (const event of warningEvents(records)) {
+    if (phenomenon!=='alle'&&event.phenomenon!==phenomenon) continue;
+    for (const code of COLORS) {
+      if (color!=='alle'&&code!==color) continue;
+      if (!event.records.some(r=>r.codes.includes(code)&&matches(r,year,month,code,search))) continue;
+      pending ||= event.pending;
+      if (!rows.has(event.phenomenon)) rows.set(event.phenomenon,{phenomenon:event.phenomenon,counts:{geel:0,oranje:0,rood:0},approximate:{geel:false,oranje:false,rood:false}});
+      const row=rows.get(event.phenomenon);row.counts[code]++;row.approximate[code] ||= event.approximate;
+    }
+  }
+  const result=[...rows.values()].sort((a,b)=>a.phenomenon.localeCompare(b.phenomenon,'nl'));
+  const total={counts:{geel:0,oranje:0,rood:0},approximate:{geel:false,oranje:false,rood:false}};
+  for (const row of result) for (const code of COLORS) {total.counts[code]+=row.counts[code];total.approximate[code] ||= row.approximate[code];}
+  return {rows:result,total,pending};
+}
+
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -97,6 +155,7 @@ if (typeof document !== 'undefined') {
   if (window.parent !== window) document.body.classList.add('embedded');
   const $ = id => document.getElementById(id);
   let archive = null, shown = 60;
+  let selectedPhenomenon = new URLSearchParams(location.search).get('fenomeen') || 'alle';
   const nowDay = localDay(Date.now()), params = new URLSearchParams(location.search);
   let year = Number(params.get('jaar')) || Number(nowDay.slice(0, 4));
   let month = /^(alle|0[1-9]|1[0-2])$/.test(params.get('maand') || '') ? params.get('maand') : nowDay.slice(5, 7);
@@ -106,6 +165,7 @@ if (typeof document !== 'undefined') {
   function saveFilters() {
     const p = new URLSearchParams(location.search);
     p.set('jaar', String(year)); p.set('maand', month);
+    if(selectedPhenomenon==='alle')p.delete('fenomeen');else p.set('fenomeen',selectedPhenomenon);
     if (color === 'alle') p.delete('code'); else p.set('code', color);
     if ($('search').value.trim()) p.set('zoek', $('search').value.trim()); else p.delete('zoek');
     history.replaceState(null, '', location.pathname + '?' + p.toString());
@@ -121,6 +181,53 @@ if (typeof document !== 'undefined') {
     }
     const all = el('button', '', 'Alle maanden van dit jaar'); all.dataset.month = 'alle'; all.type = 'button'; all.setAttribute('aria-pressed', String(month === 'alle')); $('months').append(all);
   }
+
+  function renderStatistics(){
+    const caption=`${month==='alle'?'Heel':MONTHS[Number(month)-1]} ${year}`;
+    $('statistics-title').textContent=`${caption}: aantal codes per fenomeen`;
+    const selected=monthlyStatistics(archive.records,year,month,color,$('search').value,selectedPhenomenon);
+    const root=$('statistics'), yearRoot=$('year-statistics');root.replaceChildren();yearRoot.replaceChildren();
+    if(selected.pending){root.append(el('p','muted','De maandtellingen worden voorbereid. De afzonderlijke meldingen zijn hieronder al te bekijken.'));return;}
+    const today=localDay(Date.now());
+    function cell(row,code,period){
+      const node=el('td','count-value');
+      const active=code==='total'?COLORS.filter(c=>color==='alle'||c===color):[code];
+      const future=year===Number(today.slice(0,4))&&period!=='alle'&&period>today.slice(5,7);
+      if(future||code!=='total'&&color!=='alle'&&code!==color){node.textContent='—';node.title=future?'Deze maand is nog niet aangebroken':'Andere kleurcode geselecteerd';return node;}
+      const value=active.reduce((n,c)=>n+row.counts[c],0);
+      const unknown=active.includes('geel')&&incompleteYellow(archive.coverage,year,period);
+      const approximate=active.some(c=>row.approximate[c]);
+      node.textContent=unknown&&!value?'—':`${approximate?'≈ ':''}${value}${unknown?'*':''}`;
+      node.title=unknown?'De geschiedenis voor code geel is hier nog onvolledig.':approximate?'Oude gele waarschuwingen: samengevoegde aaneengesloten perioden.':`${value} afgegeven ${value===1?'code':'codes'}`;
+      if(unknown||approximate)node.classList.add('count-provisional');
+      return node;
+    }
+    function table(firstLabel,rows,periods){
+      const table=el('table','count-table'),head=el('thead'),heading=el('tr');
+      const first=el('th','',firstLabel);first.scope='col';heading.append(first);
+      for(const code of [...COLORS,'total']){const th=el('th','',code==='total'?'Totaal':code[0].toUpperCase()+code.slice(1));th.scope='col';if(code!=='total')th.className='count-head-'+code;heading.append(th);}
+      head.append(heading);const body=el('tbody');
+      rows.forEach((row,index)=>{
+        const tr=el('tr'),label=el('th','',row.label);label.scope='row';
+        if(row.month){const button=el('button','count-month',row.label);button.type='button';button.dataset.countMonth=row.month;label.replaceChildren(button);}
+        tr.append(label);for(const code of [...COLORS,'total'])tr.append(cell(row,code,periods[index]));body.append(tr);
+      });table.append(head,body);return table;
+    }
+    const rows=selected.rows.map(row=>({...row,label:row.phenomenon}));
+    if(!rows.length&&selectedPhenomenon!=='alle')rows.push({...selected.total,label:selectedPhenomenon});
+    if(rows.length){rows.push({...selected.total,label:'Totaal geselecteerde codes'});root.append(table('Fenomeen',rows,rows.map(()=>month)));}
+    else root.append(el('p','neutral','Geen geregistreerde waarschuwingen bij deze selectie. Controleer de vermelde archiefdekking.'));
+    const annualRows=[];
+    for(let index=0;index<12;index++){
+      const value=String(index+1).padStart(2,'0');
+      const result=monthlyStatistics(archive.records,year,value,color,$('search').value,selectedPhenomenon);
+      annualRows.push({...result.total,label:MONTHS[index],month:value});
+    }
+    yearRoot.append(table('Maand',annualRows,annualRows.map(r=>r.month)));
+    $('year-statistics-title').textContent=`Vergelijk alle maanden van ${year}${selectedPhenomenon==='alle'?'':': '+selectedPhenomenon}`;
+    $('statistics-note').textContent=`De telling volgt je gekozen fenomeen, kleurcode en zoekterm. Elke waarschuwing telt maximaal één keer per kleur per geldigheidsmaand.${year===Number(today.slice(0,4))&&(month==='alle'||month===today.slice(5,7))?' De huidige periode loopt nog; stand t/m '+dateOnly(today)+'.':''}`;
+  }
+
   function render() {
     if (!archive) return;
     $('year').value = String(year);
@@ -129,10 +236,11 @@ if (typeof document !== 'undefined') {
     const c = archive.coverage;
     $('coverage').textContent = `Oranje en rood: KNMI-jaaroverzichten vanaf 2010. Geel: ingelezen vanaf ${dateOnly(c.all_colors_since)}.${c.legacy_complete ? '' : ' Oudere gele meldingen worden automatisch aangevuld, terug tot februari 2023.'}`;
     const title = `${month === 'alle' ? 'Alle maanden' : MONTHS[Number(month) - 1]} ${year}`;
-    const selected = archive.records.filter(r => matches(r, year, month, color, $('search').value)).sort((a, b) => recordDays(b).at(-1).localeCompare(recordDays(a).at(-1)) || a.id.localeCompare(b.id));
+    const selected = archive.records.filter(r => matches(r, year, month, color, $('search').value) && (selectedPhenomenon==='alle'||phenomenonGroup(r)===selectedPhenomenon)).sort((a, b) => recordDays(b).at(-1).localeCompare(recordDays(a).at(-1)) || a.id.localeCompare(b.id));
     $('result-heading').replaceChildren(el('h3', '', title), el('span', '', `${selected.length} ${selected.length === 1 ? 'vermelding' : 'vermeldingen'}`));
     const incomplete = incompleteYellow(c, year, month);
     $('period-note').textContent = incomplete && color !== 'oranje' && color !== 'rood' ? (year < 2023 ? 'Voor deze periode is code geel niet beschikbaar in deze bronnen. Je ziet hier het officiële archief voor oranje en rood.' : 'De gele meldingen zijn voor deze periode nog niet volledig ingelezen. Ontbrekende gele meldingen betekenen niet dat er geen waarschuwingen waren.') : '';
+    renderStatistics();
     const root = $('archive'); root.replaceChildren();
     if (!selected.length) root.append(el('p', 'neutral', incomplete && color !== 'oranje' && color !== 'rood' ? 'Geen ingelezen meldingen bij deze selectie. De historische reeks voor code geel is hier onvolledig.' : 'Geen meldingen gevonden bij deze selectie. Pas de maand, kleurcode of zoekterm aan.'));
     let previousMonth = null, group;
@@ -188,7 +296,13 @@ if (typeof document !== 'undefined') {
             $('year').replaceChildren();
             for (let y = Number(nowDay.slice(0, 4)); y >= 2010; y--) { const option = el('option', '', String(y)); option.value = String(y); $('year').append(option); }
             if (year < 2010 || year > Number(nowDay.slice(0, 4))) year = Number(nowDay.slice(0, 4));
-            $('year').disabled = false; render();
+            $('year').disabled = false;
+            const phenomena=[...new Set(archive.records.map(phenomenonGroup))].sort((a,b)=>a.localeCompare(b,'nl'));
+            if(selectedPhenomenon!=='alle'&&!phenomena.includes(selectedPhenomenon))selectedPhenomenon='alle';
+            $('phenomenon').replaceChildren();
+            for(const value of ['alle',...phenomena]){const option=el('option','',value==='alle'?'Alle fenomenen':value);option.value=value;$('phenomenon').append(option);}
+            $('phenomenon').value=selectedPhenomenon;
+            render();
           } catch {
             $('coverage').textContent = archive ? 'Archief kon niet worden ververst. Je ziet de eerder geladen gegevens.' : 'Het archief is tijdelijk niet beschikbaar.';
             if (!archive) $('archive').replaceChildren(el('p', 'error', 'Het archief kon niet worden geladen. Probeer opnieuw met Verversen.'));
@@ -201,6 +315,8 @@ if (typeof document !== 'undefined') {
   $('colors').addEventListener('click', event => { const button = event.target.closest('button[data-color]'); if (button) {color = button.dataset.color; shown = 60; render();} });
   $('year').addEventListener('change', () => {year = Number($('year').value); month = 'alle'; shown = 60; render();});
   $('search').addEventListener('input', () => {shown = 60; render();});
+  $('phenomenon').addEventListener('change',()=>{selectedPhenomenon=$('phenomenon').value;shown=60;render();});
+  $('year-statistics').addEventListener('click',event=>{const button=event.target.closest('button[data-count-month]');if(button){month=button.dataset.countMonth;shown=60;render();}});
   $('more').addEventListener('click', () => {shown += 60; render();});
   $('refresh').addEventListener('click', load);
   document.addEventListener('visibilitychange', () => {if (!document.hidden) load();});

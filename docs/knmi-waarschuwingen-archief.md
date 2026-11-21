@@ -51,3 +51,20 @@ gebruik of een KNMI-storing hervat een latere taak vanaf het laatste checkpoint.
 
 Controle: `python3 -m unittest discover -s tests -p test_knmi_warning_archive.py`
 en `node tests/warning-archive.test.mjs`.
+
+## Maandtellingen
+
+De frontend telt nieuwe KNMI-waarschuwingen op `warning_set_id` (WarningSet UUID),
+per fenomeen en kleur. Extra gebieden, versies en herhaalde snapshots tellen
+binnen dezelfde kleur/geldigheidsmaand één keer. Op-/afschalen telt bij iedere
+kleur; een maandgrens telt in beide maanden en het jaartotaal dedupliceert opnieuw.
+Later ingetrokken meldingen blijven meegeteld als afgegeven waarschuwingen.
+Bron: https://dataplatform.knmi.nl/dataset/docs/knmi-public-weather-warnings-1-0
+
+Het jaararchief gebruikt de officiële vermeldingen per kleur. Oude gele data
+hebben geen landelijke WarningSet-ID: overlappende/aansluitende perioden worden
+per fenomeen landelijk samengevoegd. De UI markeert dit als benadering (≈),
+geen exact aantal uitgiftes. Onvolledige gele dekking krijgt *; ontbreken zonder
+waarnemingen krijgt —, nooit een schijnbaar volledig nulaantal. Toekomstige
+maanden krijgen eveneens —. Fenomeen-, kleur- en zoekfilters gelden voor de
+tellingen en de lijst. Het jaaroverzicht vergelijkt alle twaalf maanden.

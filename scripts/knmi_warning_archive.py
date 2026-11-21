@@ -81,7 +81,7 @@ def snapshot_records(snapshot):
             area = (part.get('area_description') or part.get('area description') or {}).get('nl') or 'KNMI-waarschuwingsgebied'
             result.append({
                 'id': 'public-' + part['part_uuid'] + '-' + code,
-                'part_id': part['part_uuid'], 'codes': [code],
+                'part_id': part['part_uuid'], 'warning_set_id': warning['warning_set_uuid'], 'codes': [code],
                 'phenomenon': PHENOMENA[warning['phenomenon']],
                 'headline': texts['headline'], 'description': texts['description'],
                 'detail': texts.get('detailed_description') or '',
