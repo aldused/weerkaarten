@@ -15,7 +15,6 @@
     const times = series.tijden_utc.map(Date.parse).filter(Number.isFinite);
     if (!times.length) { status.textContent = 'Geen uurverwachting beschikbaar.'; output.replaceChildren(); return; }
     const values = new Map(series.tijden_utc.map((t, i) => [Date.parse(t), series.RR1c?.[i]]));
-    const temperatures = new Map(series.tijden_utc.map((t, i) => [Date.parse(t), series.TTT?.[i]]));
     const days = new Map();
     const first = Math.min(...times), last = Math.max(...times);
     const firstDay = dayKey.format(first - 1), lastDay = dayKey.format(last);
@@ -23,13 +22,20 @@
     for (let end = first - 25 * hour; end <= last + 25 * hour; end += hour) {
       const key = dayKey.format(end - 1);
       if (key < firstDay || key > lastDay) continue;
-      if (!days.has(key)) days.set(key, { stamp: end - 1, total: 0, valid: 0, hours: 0, temperatures: [] });
+      if (!days.has(key)) days.set(key, { stamp: end - 1, total: 0, valid: 0, hours: 0 });
       const day = days.get(key), value = values.get(end);
       day.hours++;
-      // Temperatures are instantaneous, so midnight belongs to the new day.
-      const temperature = temperatures.get(end - hour);
-      if (Number.isFinite(temperature)) day.temperatures.push(temperature);
+      if (!day.temperatures) day.temperatures = [];
+      // Temperature is instantaneous: midnight belongs to the NEXT day.
+      // Rainfall refers to the hour ENDING at the timestamp.
+
       if (Number.isFinite(value) && value >= 0) { day.total += value; day.valid++; }
+    }
+    for (let i=0;i<series.tijden_utc.length;i++) {
+      const stamp=Date.parse(series.tijden_utc[i]), temp=series.TTT?.[i];
+      if (!Number.isFinite(stamp) || !Number.isFinite(temp) || temp < -70 || temp > 60) continue;
+      const day=days.get(dayKey.format(stamp));
+      if (day) day.temperatures.push(temp);
     }
     const run = new Date(data.runs?.[name] ?? data.run);
     status.textContent = Number.isFinite(+run)
@@ -37,10 +43,8 @@
       : 'DWD MOSMIX';
     output.replaceChildren(...Array.from(days.values(), day => {
       const row = document.createElement('tr');
-      for (const value of [dayLabel.format(day.stamp),
-        day.temperatures.length ? amount.format(Math.min(...day.temperatures)) + ' / ' + amount.format(Math.max(...day.temperatures)) + ' °C (' + day.temperatures.length + '/' + day.hours + ' uur)' : '—',
-        day.valid ? amount.format(day.total) + ' mm' : '—',
-        day.valid === day.hours ? day.hours + ' uur · compleet' : day.valid + '/' + day.hours + ' uur · ' + (day.valid ? 'deelsom' : 'geen data')]) {
+      for (const value of [dayLabel.format(day.stamp), day.temperatures.length ? amount.format(Math.min(...day.temperatures))+' °C' : '—', day.temperatures.length ? amount.format(Math.max(...day.temperatures))+' °C' : '—', day.valid ? amount.format(day.total) + ' mm' : '—',
+        day.temperatures.length + '/' + day.hours + ' temperatuururen · ' + day.valid + '/' + day.hours + ' regenuren' + (day.valid === day.hours && day.temperatures.length === day.hours ? ' · compleet' : ' · deels beschikbaar')]) {
         row.insertCell().textContent = value;
       }
       return row;

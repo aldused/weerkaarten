@@ -1,0 +1,660 @@
+--- a/run_forecast.py
++++ b/run_forecast.py
+@@ -254,6 +254,12 @@
+         out = np.full(A.shape[:-1] + (ND, 24), fill, np.float64)
+         out[..., widx, k] = A
+         return out
++    # Reject partial model nights consistently with training. An ongoing night
++    # uses its remaining hours and the separate observation assimilation stage.
++    expected = (vens(np.ones((C, T)), 0) * mn[None]).sum(-1)
++    count = (vens(aanw.astype(float), 0) * mn[None, None]).sum(-1)
++    eligible = (count == expected[None]) & (expected[None] > 0)
++    aanw = aanw & eligible[..., widx]
+     msk = lambda A: np.where(aanw, A, np.nan)
+     Cv = vens(msk(CE)); Uv = vens(msk(U))
+     with warnings.catch_warnings():
+@@ -290,11 +296,18 @@
+     n_nacht = (n_uur * mn[None, None]).sum(-1).reshape(M, C * ND)
+     with warnings.catch_warnings():
+         warnings.simplefilter("ignore")
+-        ext = np.where(n_nacht >= 6, np.nanmin(np.where(mnf[None], Bv, np.nan), 2), np.nan)    # model-nachtminimum
++        ext = np.where((n_nacht >= 1) & (n_nacht == (vens(np.ones((C, T)), 0) * mn[None]).sum(-1).reshape(C * ND)[None]), np.nanmin(np.where(mnf[None], Bv, np.nan), 2), np.nan)    # model-nachtminimum
+         mixn = np.nanmin(np.where(mnf, vens(mix).reshape(C * ND, 24), np.nan), 1)
+     K = tn_nacht.nacht_kenmerken(T2v, Cv, Uv, TDv, w_v, ext, mixn, list(modellen), avf, knf)
+     K["nlen"] = mnf.sum(1).astype(float)
+     terug = lambda v: np.asarray(v).reshape(C, ND)[:, widx]
++    # Sample predictors once at the uncorrected mix minimum, as in training.
++    mixv = vens(mix).reshape(C * ND, 24)
++    imin = np.argmin(np.where(mnf & np.isfinite(mixv), mixv, np.inf), 1)
++    sample = lambda a: vens(a).reshape(C * ND, 24)[np.arange(C * ND), imin]
++    spread_n = np.nanstd(ext, axis=0)
++    month_n = (pd.date_range(basis, periods=ND, freq="24h") + pd.Timedelta(days=1)).month.to_numpy()
++    month_n = np.broadcast_to(month_n, (C, ND)).ravel()
+     maand = tijden.month.to_numpy()
+     B = lambda a: np.broadcast_to(a, (C, T)).ravel()
+     F = pd.DataFrame({
+@@ -307,13 +320,19 @@
+         "sd_u": np.nanstd(np.where(aanw, U, np.nan), 0).ravel(),
+         "m_emmer": B(m_emmer[:, None]), "dbinnen": B(np.log1p(d_bin)[:, None]),
+         **{kk: terug(v).ravel() for kk, v in K.items()}}).astype(float)
++    F = pd.DataFrame({k: sample(F[k].to_numpy().reshape(C, T)) for k in F})
++    F["msin"] = np.sin(2 * np.pi * month_n / 12)
++    F["mcos"] = np.cos(2 * np.pi * month_n / 12)
++    F["spread"] = spread_n
+     F = F.reindex(columns=MOS["feats"])
+     kern_f = [kk for kk in MOS["feats"] if kk in tx_train.FEATS_TN_V2]
+-    ok = F[kern_f].notna().all(1).to_numpy() & (aanw.sum(0) >= 2).ravel() & np.isfinite(mix).ravel()
+-    corr = np.zeros(C * T)
+-    if ok.any():
+-        corr[ok] = MOS["model"].predict(F[ok])
+-    corr = np.clip(corr.reshape(C, T), -5, 5)
++    ok_n = F[kern_f].notna().all(1).to_numpy() & (np.isfinite(ext).sum(0) >= 2) & np.isfinite(mixn)
++    corr_n = np.zeros(C * ND)
++    if ok_n.any():
++        corr_n[ok_n] = MOS["model"].predict(F[ok_n])
++    corr = terug(np.clip(corr_n, -5, 5))
++    lead_mix = terug(sample(lead_mix))
++    ok = (terug(ok_n) & (aanw.sum(0) >= 2) & np.isfinite(mix)).ravel()
+     sc = Wt.get("stationscorrectie_d2") or {}
+     if sc:   # stationscorrectie op leadtime ≥ 39 u (uit walk-forward-residuen van de nacht-MOS)
+         pts = np.column_stack(static_grid._km(np.array([v["lat"] for v in sc.values()]), np.array([v["lon"] for v in sc.values()])))
+@@ -321,7 +340,7 @@
+         kern = np.exp(-(dist / 35.0) ** 2)
+         veld = (kern * np.array([v["b"] for v in sc.values()])).sum(1) / (kern.sum(1) + 0.3)
+         corr = corr + np.where(lead_mix >= 1.5, veld[:, None], 0.0)
+-    return mix, corr, lead_mix, ok.reshape(C, T)
++    return mix, corr, lead_mix, ok.reshape(C, T), terug(spread_n)
+ 
+ 
+ def t10_nacht_uur(T10, T2, CE, U, TD, aanw, aanw_lang, LEAD, tijden, frac_bodem, urban, m_idx, d_zee, p24, m_emmer, d_bin,
+@@ -331,14 +350,16 @@
+     Walk-forward tegen het oude product: 1,66 → 1,60 °C, bij vorst 2,02 → 1,86, bias +0,21 → −0,03.
+     Geeft uurmix, uurcorrectie, leadtime, geldigheid en modelspreiding (voor σ en de vorstkans)."""
+     rest = (LEAD, tijden, frac_bodem, urban, m_idx, d_zee, p24, m_emmer, d_bin, modellen, lats, lons)
+-    mix, corr, lead_mix, ok = _tnn_mix(T2, CE, U, TD, aanw, *rest, "t10n", BAS=T10)
+-    spr = np.nanstd(np.where(aanw, T10, np.nan), 0)
++    mix, corr, lead_mix, ok, spr = _tnn_mix(T2, CE, U, TD, aanw, *rest, "t10n", BAS=T10)
++    lang_used = np.zeros_like(ok, dtype=bool)
+     if (config.MODEL_DIR / "t10n_lang_mos.pkl").exists() and aanw_lang is not None:
+-        mix_l, corr_l, _, ok_l = _tnn_mix(T2, CE, U, TD, aanw_lang, *rest, "t10n_lang", BAS=T10)
++        mix_l, corr_l, lead_l, ok_l, spr_l = _tnn_mix(T2, CE, U, TD, aanw_lang, *rest, "t10n_lang", BAS=T10)
+         lang = (lead_mix >= 1.5) & ok_l
+         mix = np.where(lang, mix_l, mix); corr = np.where(lang, corr_l, corr); ok = ok | lang
+-        spr = np.where(lang, np.nanstd(np.where(aanw_lang, T10, np.nan), 0), spr)
+-    return mix, corr, lead_mix, ok, spr
++        lang_used = lang
++        spr = np.where(lang, spr_l, spr)
++        lead_mix = np.where(lang, lead_l, lead_mix)
++    return mix, corr, lead_mix, ok, spr, lang_used
+ 
+ 
+ def tn_mos_uur(T2, CE, U, TD, aanw, aanw_lang, LEAD, cm_, um_, tijden, frac_bodem, urban, m_idx, d_zee, p24,
+@@ -351,13 +372,13 @@
+         # v4 (08-11-2026): nacht-MOS op het échte nachtminimum 18-09 lokaal (tn_nacht.py). Walk-forward op het
+         # nachtminimum, komende nacht: v3 1,000 → 0,832 °C, bias −0,30 → −0,03.
+         rest = (LEAD, tijden, frac_bodem, urban, m_idx, d_zee, p24, m_emmer, d_bin, modellen, lats, lons)
+-        mix, corr, lead_mix, ok = _tnn_mix(*a, aanw, *rest, "tnn")
++        mix, corr, lead_mix, ok, spr = _tnn_mix(*a, aanw, *rest, "tnn")
+         versie = "TN-nacht-MOS v4 (08-11-2026)"
+         if (config.MODEL_DIR / "tnn_lang_mos.pkl").exists() and aanw_lang is not None:
+-            mix_l, corr_l, _, ok_l = _tnn_mix(*a, aanw_lang, *rest, "tnn_lang")
++            mix_l, corr_l, lead_l, ok_l, spr_l = _tnn_mix(*a, aanw_lang, *rest, "tnn_lang")
+             lang = (lead_mix >= 1.5) & ok_l
+             mix = np.where(lang, mix_l, mix); corr = np.where(lang, corr_l, corr); ok = ok | lang
+-            versie += " · ≥ 48 u met ICON-EU/GFS"
++            versie += " · lange-termijnmix met ICON-EU/GFS"
+         # volle correctie tot en met zon +3° (het minimum valt vaak net ná zonsopkomst), daarna uitlopend tot +10°
+         f = np.clip((10.0 - elev) / 7.0, 0, 1)
+     else:
+@@ -368,7 +389,7 @@
+             mix_l, corr_l, _, ok_l = _tn_mix(*a, aanw_lang, *rest, "tn_lang")
+             lang = (lead_mix >= 1.5) & ok_l
+             mix = np.where(lang, mix_l, mix); corr = np.where(lang, corr_l, corr); ok = ok | lang
+-            versie += " · ≥ 48 u met ICON-EU/GFS"
++            versie += " · lange-termijnmix met ICON-EU/GFS"
+         f = np.clip((3.0 - elev) / 6.0, 0, 1)                    # 1 bij zon < −3°, 0 bij zon > +3°
+     tn_uur = np.where(np.isfinite(mix) & ok, mix + corr, t2m)
+     uit = f * tn_uur + (1 - f) * t2m
+@@ -435,6 +456,12 @@
+ def q16(a, schaal=10.0):
+     a = np.where(np.isfinite(a), np.round(a * schaal), -32768)
+     return np.clip(a, -32768, 32767)
++
++
++def qprob(a):
++    """Percentages 0..100; 255 explicitly means missing, never a false 0%."""
++    a = np.asarray(a, dtype=float)
++    return np.where(np.isfinite(a), np.round(100 * np.clip(a, 0, 1)), 255).astype(np.uint8)
+ 
+ 
+ # ---------------------------------------------------------------------------------------
+@@ -635,7 +662,7 @@
+         info["bron"] = _MODEL_SOURCES[mod].get("native_source", {})
+         info.update(status="gebruikt", uren=n_ok, lead_start=round((t0 - pd.Timestamp(init)).total_seconds() / 3600, 1))
+         if mod not in config.MIX_KERN:
+-            info.update(label=cfg["label"] + " · vanaf 48 u", reden="alleen in de lange-termijnmix (walk-forward getoetst)")
++            info.update(label=cfg["label"] + " · lange-termijnmix", reden="alleen in de lange-termijnmix (walk-forward getoetst)")
+         runs.append(info); velden[mod] = v
+         log(f"{mod}: run {init:%d-%m %H}Z ({leeftijd:.1f} u oud), {n_ok} uur volledig")
+         try:   # eigen hindcast-archief (vervangt Open-Meteo previous-runs), eenmalig per run
+@@ -747,8 +774,8 @@
+             "msin": B(np.sin(2 * np.pi * maand / 12)), "mcos": B(np.cos(2 * np.pi * maand / 12)),
+             "t2": r["t2m"].ravel(), "td": r["tdm"].ravel(), "spr_td": (r["t2m"] - r["tdm"]).ravel(), "u": r["um"].ravel(),
+             "c": r["cm"].ravel(), "sw": r["swm"].ravel(), "dphys": (r["mix"] - r["t2m"]).ravel(), "spread": r["spread"].ravel(),
+-            **{k: B(frac_bodem[k][:, None]) for k in physics.BODEM},
+-            "m": B(m_idx[:, None]), "dzee": B(np.log1p(d_zee)[:, None]), "p24": B(p24[:, None]),
++            **{k: B(frac[k][:, None]) for k in physics.BODEM},
++            "m": B(m_top[:, None]), "dzee": B(np.log1p(d_zee)[:, None]), "p24": B(p24[:, None]),
+             "sd_c": r["sd_c"].ravel(), "sd_u": r["sd_u"].ravel()}).astype(float)[train.FEATS]
+         r["ok"] = r["F"].notna().all(1).to_numpy() & r["geldig"].ravel()
+         return r
+@@ -776,7 +803,7 @@
+     if (config.MODEL_DIR / "tn_mos.pkl").exists():
+         try:
+             aanw_tl = aanw_alle & np.array([m in config.MIX_LANG for m in modellen])[:, None, None]
+-            t2_basis, tn_info = tn_mos_uur(T2, CE, U, TD, aanw, aanw_tl, LEAD, cm_, um_, tijden, frac_bodem,
++            t2_basis, tn_info = tn_mos_uur(T2, CE, U, TD, aanw, aanw_tl, LEAD, cm_, um_, tijden, {k: frac[k] for k in physics.BODEM},
+                                            frac["bebouwd"], m_top, d_zee, p24, m_emmer, d_bin, modellen, elev, t2m,
+                                            lats, lons)
+         except Exception as e:
+@@ -903,7 +930,7 @@
+         start = pd.Timestamp(datetime.combine(d0 + timedelta(days=dag - 1), datetime.min.time().replace(hour=18)), tz=AMS)
+         eind = pd.Timestamp(datetime.combine(start.date() + timedelta(days=1), datetime.min.time().replace(hour=9)), tz=AMS)  # 18:00 → 09:00 lokaal, ook bij zomer-/wintertijd
+         sel = (lok >= max(start, lok[0])) & (lok <= eind)
+-        if sel.sum() >= 6 and eind > lok[0]:
++        if sel.any() and eind > pd.Timestamp(nu) and eind <= lok[-1]:
+             nachten.append({"label": f"{start:%Y-%m-%d}", "i0": int(np.nonzero(sel)[0][0]),
+                             "i1": int(np.nonzero(sel)[0][-1]), "start": start.isoformat(), "eind": eind.isoformat()})
+     nacht_uit = []
+@@ -914,12 +941,12 @@
+         rows = np.arange(C)
+         tmin = t10_fin[:, sl][rows, im] + P["delta"]
+         smin = sigma[:, sl][rows, im]
+-        n_mod = int(sum(aanw[mi][:, sl].mean() >= 0.5 for mi in range(M)))   # model dekt ≥ helft van de nacht
++        n_mod = int(sum(aanw_uit[mi][:, sl].mean() >= 0.5 for mi in range(M)))   # model dekt ≥ helft van de nacht
+         lead_max = float(np.nanmax(np.where(np.isfinite(LEAD[:, sl]), LEAD[:, sl], np.nan)))
+         nacht_uit.append({**n, "n_modellen": n_mod, "lead_max_u": round(lead_max),
+                           "buiten_training": bool(lead_max > 62), "t10min": b64(q16(tmin), "<i2"), "sigma": b64(q16(smin), "<i2"),
+-                          "p0": b64(np.round(100 * norm.cdf(-tmin / smin)), "u1"),
+-                          "pm2": b64(np.round(100 * norm.cdf((-2 - tmin) / smin)), "u1"),
++                          "p0": b64(qprob(norm.cdf(-tmin / smin)), "u1"),
++                          "pm2": b64(qprob(norm.cdf((-2 - tmin) / smin)), "u1"),
+                           # T2 op hetzelfde moment als het T10-minimum (niet het onafhankelijke 2m-nachtminimum
+                           # — dat gaf een "Verschil" dat niet klopte met de twee getoonde waarden).
+                           "uur": b64(im + n["i0"], "u1"), "t2min": b64(q16(t2_fin[:, sl][rows, im]), "<i2"),
+@@ -944,12 +971,14 @@
+             import tn_nacht
+             aanw_tl = aanw_alle & np.array([m in config.MIX_LANG for m in modellen])[:, None, None]
+             aanw_k = aanw_alle & np.array([m in config.MIX_KERN for m in modellen])[:, None, None]
+-            mix10, corr10, lead10, ok10, spr10 = t10_nacht_uur(T10, T2, CE, U, TD, aanw_k, aanw_tl, LEAD, tijden, frac_bodem,
++            mix10, corr10, lead10, ok10, spr10, lang10 = t10_nacht_uur(T10, T2, CE, U, TD, aanw_k, aanw_tl, LEAD, tijden, {k: frac[k] for k in physics.BODEM},
+                                                                frac["bebouwd"], m_top, d_zee, p24, m_emmer, d_bin, modellen,
+                                                                lats, lons)
+             veld10 = np.where(ok10 & np.isfinite(mix10), mix10 + corr10, np.nan)
+             t10_n, info10 = tn_per_nacht(nachten, veld10, veld10, tijden, nu, lats, lons, stat, doel="t10", mix=mix10)
+             spar = json.loads((config.MODEL_DIR / "t10n_weights.json").read_text()).get("sigma_par")
++            lang_weights = config.MODEL_DIR / "t10n_lang_weights.json"
++            spar_lang = json.loads(lang_weights.read_text()).get("sigma_par") if lang_weights.exists() else None
+             n_nieuw = 0
+             for n_, nu_, (veld, bron) in zip(nachten, nacht_uit, t10_n):
+                 if not spar or np.isfinite(veld).mean() < 0.9:
+@@ -957,6 +986,9 @@
+                 sl = slice(n_["i0"], n_["i1"] + 1)
+                 im = np.argmin(np.where(np.isfinite(mix10[:, sl]), mix10[:, sl], np.inf), 1); rr_ = np.arange(C)
+                 sg = tn_nacht.sigma_van(spar, lead10[:, sl][rr_, im], spr10[:, sl][rr_, im])
++                if spar_lang:
++                    sg_lang = tn_nacht.sigma_van(spar_lang, lead10[:, sl][rr_, im], spr10[:, sl][rr_, im])
++                    sg = np.where(lang10[:, sl][rr_, im], sg_lang, sg)
+                 if bron == "metingen + verwachting" and info10.get("sigma"):
+                     sg = np.minimum(sg, max(float(info10["sigma"]), 0.3))        # met metingen wordt het zekerder
+                 goed = np.isfinite(veld) & np.isfinite(sg)
+@@ -964,8 +996,13 @@
+                 smin_oud = np.nanmean(sigma[:, sl], 1)
+                 tmin = np.where(goed, veld, tmin_oud); smin = np.where(goed, sg, smin_oud)
+                 nu_.update({"t10min": b64(q16(tmin), "<i2"), "sigma": b64(q16(smin), "<i2"),
+-                            "p0": b64(np.round(100 * norm.cdf(-tmin / smin)), "u1"),
+-                            "pm2": b64(np.round(100 * norm.cdf((-2 - tmin) / smin)), "u1"), "t10_bron": bron})
++                            "p0": b64(qprob(norm.cdf(-tmin / smin)), "u1"),
++                            "pm2": b64(qprob(norm.cdf((-2 - tmin) / smin)), "u1"), "t10_bron": bron,
++                            "uur": b64(im + n_["i0"], "u1"),
++                            "t2min": b64(q16(t2_fin[:, sl][rr_, im]), "<i2"),
++                            "reg": b64(reg[:, sl][rr_, im], "u1"),
++                            "cmin": b64(np.round(100 * cm[:, sl][rr_, im]), "u1"),
++                            "umin": b64(q16(um[:, sl][rr_, im]), "<i2")})
+                 n_nieuw += 1
+             t10_info = {"status": "gebruikt", "versie": "T10-nacht-MOS (13-11-2026)", "nachten": n_nieuw,
+                         **({"lopende_nacht": info10} if info10 else {})}
+@@ -994,8 +1031,8 @@
+             "hoogte": b64(q16(S["hoogte"][iy, ix]), "<i2"), "zee": b64(q16(d_zee), "<i2"),
+             "plaats": [str(x) for x in S["plaats"][iy, ix]]},
+         "velden": {"t10": b64(q16(t10_fin.T), "<i2"), "t2": b64(q16(t2_fin.T), "<i2"),
+-                   "sigma": b64(q16(sigma.T), "<i2"), "p0": b64(np.round(100 * p0.T), "u1"),
+-                   "pm2": b64(np.round(100 * pm2.T), "u1"), "u": b64(q16(um.T), "<i2"),
++                   "sigma": b64(q16(sigma.T), "<i2"), "p0": b64(qprob(p0.T), "u1"),
++                   "pm2": b64(qprob(pm2.T), "u1"), "u": b64(q16(um.T), "<i2"),
+                    "c": b64(np.round(100 * np.nan_to_num(cm.T)), "u1"), "reg": b64(reg.T, "u1"),
+                    "mix": b64(q16(mix.T), "<i2"), "mix_gelijk": b64(q16(mix_e.T), "<i2"), "mos": b64(q16(corr.T), "<i2"),
+                    "stncorr": b64(q16(stncorr.T), "<i2"), "mosmix": b64(q16(mosmix_delta.T), "<i2")},
+--- a/run_forecast_tx.py
++++ b/run_forecast_tx.py
+@@ -37,6 +37,24 @@
+ 
+ def log(msg):
+     rf.log(msg)
++
++
++
++def dag_mos_predictoren(F, mix, geldig):
++    """Freeze each UTC day's MOS predictors at the uncorrected mix maximum.
++
++    Training predicts the observed daily maximum minus the maximum of the mix.
++    Applying a different residual at every hour changes the target definition.
++    """
++    C, T = mix.shape
++    result = F.copy()
++    for begin in range(0, T, 24):
++        idx = np.arange(begin, min(begin + 24, T))
++        peak = np.argmax(np.where(geldig[:, idx] & np.isfinite(mix[:, idx]), mix[:, idx], -np.inf), 1)
++        source = np.arange(C) * T + idx[peak]
++        target = (np.arange(C)[:, None] * T + idx[None]).ravel()
++        result.iloc[target] = np.repeat(F.iloc[source].to_numpy(), len(idx), axis=0)
++    return result
+ 
+ 
+ def main():
+@@ -93,7 +111,7 @@
+         info["bron"] = rf._MODEL_SOURCES[mod].get("native_source", {})
+         info.update(status="gebruikt", uren=n_ok, lead_start=round((t0 - pd.Timestamp(init)).total_seconds() / 3600, 1))
+         if mod not in config.MIX_KERN:
+-            info.update(label=cfg["label"] + " · vanaf 48 u", reden="alleen in de lange-termijnmix (walk-forward getoetst)")
++            info.update(label=cfg["label"] + " · lange-termijnmix", reden="alleen in de lange-termijnmix (walk-forward getoetst)")
+         runs.append(info); velden[mod] = v
+         log(f"{mod}: run {init:%d-%m %H}Z ({leeftijd:.1f} u oud), {n_ok} uur volledig")
+     tijden = pd.date_range(t0, periods=NU + 1, freq="1h")
+@@ -125,6 +143,9 @@
+     cm_ = np.nanmean(np.where(aanw, CE, np.nan), 0); um_ = np.nanmean(np.where(aanw, U, np.nan), 0)
+     groep = tx_regime(cm_, um_)          # (C, T): 0 zonnig/droog · 1 wisselend · 2 bewolkt
+     Lcode = np.where(LEAD < 15, 0, np.where(LEAD < 39, 1, 2))
++    for day in range(TX_DAGEN):
++        sl = slice(day * 24, (day + 1) * 24)
++        groep[:, sl] = tx_regime(np.nanmean(cm_[:, sl], 1), np.nanmean(um_[:, sl], 1))[:, None]
+     maand = tijden.month.to_numpy()
+     B = lambda a: np.broadcast_to(a, (C, T)).ravel()
+ 
+@@ -149,15 +170,21 @@
+         wm = lambda A: (w * np.nan_to_num(A)).sum(0) / np.maximum((w * np.isfinite(A)).sum(0), 1e-9)
+         r["tdm"], r["um"], r["cm"] = wm(TD), wm(U), wm(CE)
+         r["spread"] = np.nanstd(np.where(aanw, T2, np.nan), 0)
++        for day in range(TX_DAGEN):
++            sl = slice(day * 24, (day + 1) * 24)
++            complete = aanw[:, :, sl].all(2)
++            maxima = np.where(complete, np.nanmax(T2[:, :, sl], 2), np.nan)
++            r["spread"][:, sl] = np.nanstd(maxima, 0)[:, None]
+         sd_c = np.nanstd(np.where(aanw, CE, np.nan), 0); sd_u = np.nanstd(np.where(aanw, U, np.nan), 0)
+         r["lead_mix"] = (w * np.where(aanw, Lcode[:, None, :], 0)).sum(0) / np.maximum(som, 1e-9)
+         F = pd.DataFrame({
+             "lead": r["lead_mix"].ravel(), "msin": B(np.sin(2 * np.pi * maand / 12)), "mcos": B(np.cos(2 * np.pi * maand / 12)),
+             "u": r["um"].ravel(), "c": r["cm"].ravel(), "spr_td": (wm(T2) - r["tdm"]).ravel(),  # = training: ruwe gewogen T2 − Td
+             "spread": r["spread"].ravel(),
+-            **{k: B(frac_bodem[k][:, None]) for k in physics.BODEM}, "bebouwd": B(urban[:, None]),
+-            "m": B(m_idx[:, None]), "dzee": B(np.log1p(d_zee)[:, None]), "p24": B(p24[:, None]),
++            **{k: B(frac[k][:, None]) for k in physics.BODEM}, "bebouwd": B(urban[:, None]),
++            "m": B(physics.natte_toplaag(m_idx, p24)[:, None]), "dzee": B(np.log1p(d_zee)[:, None]), "p24": B(p24[:, None]),
+             "sd_c": sd_c.ravel(), "sd_u": sd_u.ravel()}).astype(float)[Mos["feats"]]
++        F = dag_mos_predictoren(F, r["mix"], r["geldig"])
+         ok = F.notna().all(1).to_numpy() & r["geldig"].ravel()
+         corr = np.zeros(C * T)
+         corr[ok] = Mos["model"].predict(F[ok])
+@@ -181,6 +208,10 @@
+         lang &= Lg["geldig"]
+         mix = np.where(lang, Lg["mix"], mix); corr = np.where(lang, Lg["corr"], corr)
+         spread = np.where(lang, Lg["spread"], spread)
++        lead_mix = np.where(lang, Lg["lead_mix"], lead_mix)
++        tdm = np.where(lang, Lg["tdm"], tdm)
++        um = np.where(lang, Lg["um"], um)
++        cm = np.where(lang, Lg["cm"], cm)
+         w = np.where(lang[None], Lg["w"], w); bias = np.where(lang[None], Lg["bias"], bias)
+         aanw_uit = np.where(lang[None], aanw_l, aanw)
+         log(f"lange termijn: mix van {int(sum(aanw_l[mi].any() for mi in range(M)))} modellen in {100 * lang.mean():.0f} % cel-uren")
+@@ -203,6 +234,10 @@
+     # --- onzekerheid ------------------------------------------------------------------------
+     a = W["sigma"]
+     sigma = np.sqrt(a[0] ** 2 * (1 + abs(a[1]) * lead_mix) + (a[2] * spread) ** 2 + 0.05)
++    if Wl is not W:
++        al = Wl["sigma"]
++        sigma_lang = np.sqrt(al[0]**2 * (1 + abs(al[1]) * lead_mix) + (al[2] * spread)**2 + 0.05)
++        sigma = np.where(lang, sigma_lang, sigma)
+     sigma = np.sqrt(sigma ** 2 + mosmix_delta ** 2)  # guidance disagreement, unverified blend
+ 
+     # --- bijsturing met actuele KNMI-metingen (huidige 2m-temperatuur) --------------------
+@@ -214,7 +249,8 @@
+         log(f"waarnemingen niet beschikbaar: {e}"); obs = {}
+     bias_pts = []
+     uur_frac = (nu - t0.to_pydatetime()).total_seconds() / 3600
+-    idx_nu = int(np.clip(round(uur_frac), 0, T - 1))
++    idx_nu = int(np.clip(np.floor(uur_frac), 0, T - 2))
++    frac_nu = float(np.clip(uur_frac - idx_nu, 0, 1))
+     from scipy.spatial import cKDTree
+     kd = cKDTree(np.column_stack(static_grid._km(lats, lons)))
+     for stn, o in obs.items():
+@@ -226,7 +262,7 @@
+         s = stat[stn]
+         d, j = kd.query(static_grid._km(s["lat"], s["lon"]), k=4)
+         wj = 1 / np.maximum(d, 0.5)
+-        f_t2 = np.sum(wj * tx_uur[j, idx_nu]) / wj.sum()
++        f_t2 = np.sum(wj * (tx_uur[j, idx_nu] * (1 - frac_nu) + tx_uur[j, idx_nu + 1] * frac_nu)) / wj.sum()
+         bias_pts.append({"stn": stn, "naam": s["naam"], "lat": s["lat"], "lon": s["lon"], "ta": o["ta"],
+                          "t": o["ta_t"], "b2": float(np.clip(o["ta"] - f_t2, -4, 4))})
+     b2 = np.zeros(C)
+@@ -237,9 +273,10 @@
+         noem = k.sum(1) + 0.3
+         b2 = (k * np.array([b["b2"] for b in bias_pts])).sum(1) / noem
+     dt_h = np.maximum((tijden - pd.Timestamp(nu)).total_seconds().to_numpy() / 3600, 0)
+-    tx_fin = tx_uur + b2[:, None] * np.exp(-dt_h / 4.0)[None, :]
++    nudging = np.where(tijden >= pd.Timestamp(nu), np.exp(-dt_h / 4.0), 0.0)
++    tx_fin = tx_uur + b2[:, None] * nudging[None, :]
+     if bias_pts:
+-        sigma = sigma * (1 - 0.30 * np.exp(-dt_h / 4.0))[None, :]
++        sigma = sigma * (1 - 0.30 * nudging)[None, :]
+     log(f"waarnemingen: {len(bias_pts)} stations bruikbaar; gem. bijsturing {np.mean([b['b2'] for b in bias_pts]) if bias_pts else 0:+.2f} °C")
+     tx_fin = np.where(geldig, tx_fin, np.nan)
+ 
+@@ -257,7 +294,7 @@
+         rows = np.arange(C)
+         tmax = tx_fin[:, i0:i1 + 1][rows, im]
+         smax = sigma[:, i0:i1 + 1][rows, im]
+-        n_mod = int(sum(aanw[mi][:, i0:i1 + 1].mean() >= 0.5 for mi in range(M)))
++        n_mod = int(sum(aanw_uit[mi][:, i0:i1 + 1].mean() >= 0.5 for mi in range(M)))
+         lead_max = float(np.nanmax(np.where(np.isfinite(LEAD[:, i0:i1 + 1]), LEAD[:, i0:i1 + 1], np.nan)))
+         # tijdvak grotendeels in het verleden (rest van vandaag) → onvolledig, apart gemarkeerd
+         onvolledig = bool(np.any(np.isfinite(tx_fin[:, i0:i1 + 1]).sum(axis=1) < sel.sum()))
+@@ -266,7 +303,7 @@
+                           "onvolledig": onvolledig,
+                           "txmax": rf.b64(rf.q16(tmax), "<i2"), "sigma": rf.b64(rf.q16(smax), "<i2"),
+                           # kans op een warme dag (TX ≥ 25 °C, "zomers")
+-                          "p25": rf.b64(np.round(100 * (1 - norm.cdf((25 - tmax) / smax))), "u1"),
++                          "p25": rf.b64(rf.qprob(norm.sf((25 - tmax) / smax)), "u1"),
+                           "uur": rf.b64(im + i0, "u1"), "cmax": rf.b64(np.round(100 * cm[:, i0:i1 + 1][rows, im]), "u1"),
+                           "umax": rf.b64(rf.q16(um[:, i0:i1 + 1][rows, im]), "<i2")})
+ 
+--- a/tn_nacht.py
++++ b/tn_nacht.py
+@@ -284,6 +284,46 @@
+     return np.sqrt(a ** 2 + (par["b"] * np.nan_to_num(np.asarray(spread, float))) ** 2 + 0.01)
+ 
+ 
++
++def toets_vorstkans(R):
++    """Probabilities calibrated only on earlier walk-forward residuals (2-day gap)."""
++    from scipy.stats import norm
++    R = R.reset_index(drop=True)
++    dates = pd.to_datetime(R["t"], utc=True)
++    lead = R["L"].map({"d0": 0, "d1": 1, "d2": 2}).to_numpy()
++    residual = (R["obs"] - R["nacht_mos"]).to_numpy()
++    spread = R["spread"].to_numpy()
++    obs = (R["obs"].to_numpy() < 0).astype(float)
++    prob, clim = np.full(len(R), np.nan), np.full(len(R), np.nan)
++    month_num = dates.dt.month.to_numpy()
++    month_code = dates.dt.year.to_numpy() * 12 + month_num - 1
++    for month in np.unique(month_code):
++        start = pd.Timestamp(year=int(month // 12), month=int(month % 12 + 1), day=1, tz="UTC")
++        past = (dates < start - pd.Timedelta(days=2)).to_numpy() & np.isfinite(residual)
++        target = month_code == month
++        if past.sum() < 500 or any((past & (lead == k)).sum() < 50 for k in range(3)):
++            continue
++        par = sigma_fit(residual[past], lead[past], spread[past])
++        prob[target] = norm.cdf(-R.loc[target, "nacht_mos"].to_numpy() / sigma_van(par, lead[target], spread[target]))
++        # Seasonal climatology also uses only preceding observations.
++        dist = np.minimum(abs(month_num - start.month), 12 - abs(month_num - start.month))
++        season = past & (dist <= 1)
++        clim[target] = obs[season if season.sum() >= 100 else past].mean()
++    ok = np.isfinite(prob) & np.isfinite(clim)
++    if not ok.any():
++        return {"methode": "chronologisch, 2 dagen tussen kalibratie en toets", "n": 0}
++    bs, bk = np.mean((prob[ok] - obs[ok])**2), np.mean((clim[ok] - obs[ok])**2)
++    bins = np.digitize(prob, [.1, .3, .5, .7, .9])
++    reliability=[]
++    for k,label in enumerate(['0–10%', '10–30%', '30–50%', '50–70%', '70–90%', '90–100%']):
++        sel=ok & (bins==k)
++        if sel.any():
++            reliability.append({"kans":label,"n":int(sel.sum()),"verwacht":round(float(prob[sel].mean()),3),"gemeten":round(float(obs[sel].mean()),3)})
++    return {"methode":"chronologisch, sigma en seizoensklimatologie alleen uit eerdere nachten; 2 dagen tussenruimte",
++            "n":int(ok.sum()),"overgeslagen":int((~ok).sum()),"brier":round(float(bs),4),"brier_klimatologie":round(float(bk),4),
++            "skill":round(float(1-bs/bk),3) if bk>0 else None,"betrouwbaarheid":reliability}
++
++
+ def train_model(subset, pre, doel="tn"):
+     t0 = time.time()
+     D, FX, stat, res, wtabs, modellen = dataset(subset, doel)
+@@ -374,7 +414,7 @@
+     a, b = uit["kern"], uit["lang"]
+     gem = a.index.intersection(b.index); a, b = a.loc[gem], b.loc[gem]
+     R = pd.DataFrame({"obs": a["obs"], "L": a["L"], "t": a["t"], "N": a["N"], "FH": a["FH"], "stn": a["stn"],
+-                      "mix": a["mixw"], "mix_ruw": a["mixe"], "kern": a["fc_stn"], "lang": b["fc_stn"], "spread": a["spread"],
++                      "mix": a["mixw"], "mix_ruw": a["mixe"], "kern": a["fc_stn"], "lang": b["fc_stn"], "spread": np.where(a["L"] == "d2", b["spread"], a["spread"]),
+                       "nacht_mos": np.where(a["L"] == "d2", b["fc_stn"], a["fc_stn"]),
+                       "nacht_mos_cel": np.where(a["L"] == "d2", b["fc_loso"], a["fc"]),
+                       **{m: a[m] for m in config.MIX_KERN}})
+@@ -416,20 +456,9 @@
+            "per_maand": {m: sc(R["t"].dt.strftime("%Y-%m") == m, ["nacht_mos", "mix"]) for m in sorted(R["t"].dt.strftime("%Y-%m").unique())},
+            "laatste_30d": sc(R["t"] > eind - pd.Timedelta(days=30)), "laatste_7d": sc(R["t"] > eind - pd.Timedelta(days=7)),
+            "per_station": {str(s): sc(R["stn"] == s, ["nacht_mos", "mix"]) for s in sorted(R["stn"].unique())}}
+-    if doel == "t10":       # vorstkans (minimum < 0 °C op 10 cm) uit het σ-model: Brier-score en betrouwbaarheid
+-        wt_ = json.loads((config.MODEL_DIR / f"{pre}_weights.json").read_text()).get("sigma_par")
+-        if wt_:
+-            from scipy.stats import norm as _norm
+-            sg = sigma_van(wt_, R["L"].map({"d0": 0, "d1": 1, "d2": 2}).to_numpy(), R["spread"].to_numpy())
+-            p = _norm.cdf(-R["nacht_mos"].to_numpy() / sg); o = (R["obs"].to_numpy() < 0).astype(float)
+-            klim = np.array([o[(R["t"].dt.month == m).to_numpy()].mean() for m in R["t"].dt.month])
+-            bs, bk = float(np.mean((p - o) ** 2)), float(np.mean((klim - o) ** 2))
+-            bak = pd.cut(p, [0, .1, .3, .5, .7, .9, 1.0001], right=False)
+-            rap["vorstkans"] = {"brier": round(bs, 4), "brier_klimatologie": round(bk, 4), "skill": round(1 - bs / bk, 3),
+-                                "betrouwbaarheid": [{"kans": str(k), "n": int(g.size), "verwacht": round(float(p[g.index].mean()), 3),
+-                                                     "gemeten": round(float(o[g.index].mean()), 3)}
+-                                                    for k, g in pd.Series(np.arange(len(p))).groupby(bak, observed=True)]}
+-            print("vorstkans:", {k: v for k, v in rap["vorstkans"].items() if k != "betrouwbaarheid"})
++    if doel == "t10":
++        rap["vorstkans"] = toets_vorstkans(R)
++        print("vorstkans:", {k:v for k,v in rap["vorstkans"].items() if k!="betrouwbaarheid"})
+     lop = config.MODEL_DIR / f"{pre}_lopend.pkl"
+     if lop.exists():
+         rap["lopende_nacht"] = {f"{(18 + int(u)) % 24:02d}:00": v for u, v in pickle.load(open(lop, "rb")).get("scores_wf", {}).items()}
+--- a/mosmix_temperature.py
++++ b/mosmix_temperature.py
+@@ -1,6 +1,6 @@
+ """Optional MOSMIX T2 guidance; UTC alignment, local interpolation, no extrapolation.
+ 
+-A conservative 25% contribution, capped at 2 C, pending independent verification.
++Comparison/archive by default. Blending requires an explicitly validated weight.
+ Missing/stale guidance leaves the existing forecast unchanged.
+ """
+ import json
+@@ -22,8 +22,10 @@
+     tmp.replace(doel)
+ 
+ 
+-def correction(path, lats, lons, times, baseline, now=None):
+-    info = {"bron": "DWD MOSMIX", "status": "ontbreekt", "gewicht": 0.25,
++def correction(path, lats, lons, times, baseline, now=None, blend_weight=0.0):
++    if not 0 <= blend_weight <= 0.25:
++        raise ValueError("MOSMIX-gewicht moet tussen 0 en 0.25 liggen")
++    info = {"bron": "DWD MOSMIX", "status": "ontbreekt", "gewicht": blend_weight,
+             "max_correctie_c": 2.0, "geverifieerde_verbetering": False}
+     zero = np.zeros_like(baseline)
+     try:
+@@ -40,6 +42,9 @@
+         rows, coords = [], []
+         for name, station in j["data"].items():
+             if name not in j["stations"] or "tijden_utc" not in station:
++                continue
++            station_run = pd.Timestamp(j.get("runs", {}).get(name, j["run"]))
++            if station_run.tzinfo is None or not 0 <= (now - station_run).total_seconds() / 3600 <= 24:
+                 continue
+             ts = pd.to_datetime(station["tijden_utc"], utc=True)
+             values = np.array([np.nan if v is None else v for v in station["TTT"]], float)
+@@ -62,8 +67,8 @@
+         den = weights.sum(axis=1)
+         guide = (np.nan_to_num(vals) * weights).sum(axis=1) / np.maximum(den, 1e-12)
+         valid = (den > 0) & np.isfinite(baseline)
+-        delta = np.where(valid, np.clip(0.25 * (guide - baseline), -2, 2), 0)
+-        info.update(status="gebruikt", run_utc=run.isoformat(), stations=len(rows),
++        delta = np.where(valid, np.clip(blend_weight * (guide - baseline), -2, 2), 0)
++        info.update(status="gebruikt" if blend_weight else "vergelijkingsbron", run_utc=run.isoformat(), stations=len(rows),
+                     dekking_pct=round(100 * valid.mean(), 1))
+         return delta, info
+     except (OSError, ValueError, KeyError, TypeError) as exc:
+--- /dev/null
++++ b/tests/test_temperature_mos.py
+@@ -0,0 +1,152 @@
++"""Regression checks for the live/training contract, without network or retraining."""
++import json
++import pickle
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++import numpy as np
++import pandas as pd
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++import config
++import run_forecast as rf
++import tn_nacht as tn
++import physics
++import run_forecast_tx as tx
++from mosmix_temperature import correction
++
++
++class CaptureModel:
++    frames = []
++
++    def predict(self, frame):
++        self.frames.append(frame.copy())
++        return frame['spread'].to_numpy() * .2 + frame['u'].to_numpy() * .1
++
++
++class NightContract(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmp.cleanup)
++        self.models = list(config.MODELS)
++        m = len(self.models)
++        tab = {'w': [[1/m]*m]*3, 'bias': [[0.0]*m]*3}
++        p = Path(self.tmp.name)
++        (p/'test_weights.json').write_text(json.dumps({'modellen': self.models, 'tabel': {k:tab for k in ['d0','d1','d2']}}))
++        with (p/'test_mos.pkl').open('wb') as f:
++            pickle.dump({'feats': tn.feats_voor('t10'), 'model': CaptureModel()}, f)
++        CaptureModel.frames = []
++
++    def infer(self, date='2026-10-31T12:00Z', hours=24):
++        times = pd.date_range(date, periods=hours, freq='h')
++        m, c = len(self.models), 2
++        x = np.arange(hours)
++        # Different minimum times: std(min(model)) is NOT std(model at mix minimum).
++        bas = np.stack([2 + .04*(x-((i%3)+12))**2 + i*.3 for i in range(m)])[:,None,:]
++        bas = np.broadcast_to(bas,(m,c,hours)).copy()
++        t2 = bas+2
++        wind = np.broadcast_to((1+x/10)[None,None,:],bas.shape).copy()
++        cloud = np.full_like(bas,.3)
++        frac = {k:np.full(c,1/5) for k in physics.BODEM}
++        with patch.object(config,'MODEL_DIR',Path(self.tmp.name)):
++            out=rf._tnn_mix(t2,cloud,wind,t2-3,np.isfinite(bas),np.full((m,hours),24.),times,
++                frac,np.zeros(c),np.full(c,.5),np.full(c,20.),np.zeros(c),np.full(c,.5),np.full(c,10.),
++                self.models,np.full(c,52.),np.full(c,5.),'test',BAS=bas)
++        return times,bas,wind,out
++
++    def test_features_use_model_minima_and_mix_minimum_hour(self):
++        times,bas,wind,(mix,corr,lead,ok,spread)=self.infer()
++        mask=tn.nacht_maskers(times)[0]
++        expected=np.std(np.min(bas[:,:,mask],axis=2),axis=0)
++        np.testing.assert_allclose(spread, np.broadcast_to(expected[:,None],spread.shape))
++        peak=np.argmin(np.where(mask[None],mix,np.inf),axis=1)
++        frame=CaptureModel.frames[-1]
++        np.testing.assert_allclose(frame['u'],wind[0,np.arange(2),peak])
++        np.testing.assert_allclose(frame['spread'],expected)
++        # A single nightly correction cannot move the minimum to a different hour.
++        np.testing.assert_allclose(corr,corr[:,0,None]+np.zeros_like(corr))
++        self.assertTrue(ok.all())
++
++    def test_month_is_night_ending_month(self):
++        self.infer()
++        np.testing.assert_allclose(CaptureModel.frames[-1]['msin'],np.sin(2*np.pi*11/12))
++
++    def test_night_predictors_equal_training_on_identical_inputs(self):
++        times,bas,wind,out=self.infer('2026-11-20T12:00Z')
++        actual=CaptureModel.frames[-1].reset_index(drop=True)
++        m,c,_=bas.shape
++        X={'d0':{'T2':bas+2,'T10':bas,'C':np.full_like(bas,.3),'U':wind,'TD':bas-1}}
++        meta={'obs':np.zeros(c),'stn':np.arange(c),'m':np.full(c,.5),'p24':np.zeros(c),'me':np.full(c,.5)}
++        stat={i:{'frac':{k:.2 for k in physics.BODEM},'d_zee':20.,'d_binnen':10.} for i in range(c)}
++        masks=tuple(np.broadcast_to(a,(c,24)) for a in tn.nacht_maskers(times))
++        def fixed(err,days,groups,n):
++            shape=(n,3,m)
++            return np.zeros(shape),np.ones(shape),np.ones(shape)*100
++        with patch.object(tn.train,'rolling_gewichten',fixed):
++            result,_=tn.lead_resultaat(X,meta,stat,self.models,'d0',np.zeros(c,int),1,
++                pd.DatetimeIndex(['2026-11-21T00:00Z']*c),masks,doel='t10')
++        # Our live example uses lead d1; force that one label to the d0 training label.
++        actual['lead']=0
++        np.testing.assert_allclose(actual.to_numpy(),result['F'][actual.columns].fillna(0).to_numpy(),atol=1e-8)
++
++    def test_tx_uses_maximum_hour_features_for_whole_day(self):
++        mix=np.array([[1.,5.,3.],[4.,2.,6.]])
++        frame=pd.DataFrame({'u':[10.,20.,30.,40.,50.,60.]})
++        result=tx.dag_mos_predictoren(frame,mix,np.isfinite(mix))
++        np.testing.assert_array_equal(result['u'],[20,20,20,60,60,60])
++
++    def test_probability_missing_is_not_zero(self):
++        np.testing.assert_array_equal(rf.qprob([0,.5,1,np.nan]),[0,50,100,255])
++
++    def test_probability_fit_never_uses_current_month(self):
++        dates=pd.date_range('2025-01-01',periods=90,freq='D').repeat(30)
++        R=pd.DataFrame({'t':dates,'L':np.tile(['d0','d1','d2'],900),
++            'obs':np.arange(2700,dtype=float),'nacht_mos':np.zeros(2700),'spread':np.ones(2700)})
++        used=[]
++        def record(residual,lead,spread):
++            used.append(residual.copy())
++            return {'a':[1,1,1],'b':0}
++        with patch.object(tn,'sigma_fit',record):
++            result=tn.toets_vorstkans(R)
++        # February and March see only errors before their respective 2-day gap.
++        self.assertEqual(len(used),2)
++        self.assertLess(used[0].max(),30*29)
++        self.assertLess(used[1].max(),30*57)
++        self.assertGreater(result['n'],0)
++
++    def test_mosmix_is_comparison_unless_validated_weight_is_explicit(self):
++        p=Path(self.tmp.name)/'mosmix.json'
++        j={'run':'2026-11-21T03:00Z','stations':{'a':[5,52],'stale':[5,52]},
++           'runs':{'a':'2026-11-21T03:00Z','stale':'2026-11-19T03:00Z'},
++           'data':{'a':{'tijden_utc':['2026-11-21T06:00Z'],'TTT':[4.]},
++                   'stale':{'tijden_utc':['2026-11-21T06:00Z'],'TTT':[40.]}}}
++        p.write_text(json.dumps(j))
++        args=(p,[52.],[5.],pd.DatetimeIndex(['2026-11-21T06:00Z']),np.array([[0.]]))
++        with patch('mosmix_temperature._archiveer'):
++            delta,info=correction(*args,now='2026-11-21T05:00Z')
++            self.assertEqual(info['status'],'vergelijkingsbron')
++            self.assertEqual(info['stations'],1)
++            np.testing.assert_array_equal(delta,0)
++            delta,_=correction(*args,now='2026-11-21T05:00Z',blend_weight=.25)
++            np.testing.assert_array_equal(delta,1)
++
++    def test_running_night_less_than_six_hours_is_retained(self):
++        _,_,_,(_,_,_,ok,_)=self.infer('2026-11-21T05:00Z',4)
++        self.assertTrue(ok.all())
++
++    def test_dst_night_masks(self):
++        for start,expected in [('2026-03-28T12:00Z',15),('2026-10-24T12:00Z',17),('2026-11-20T12:00Z',16)]:
++            times=pd.date_range(start,periods=24,freq='h')
++            self.assertEqual(int(tn.nacht_maskers(times)[0].sum()),expected)
++
++    def test_wet_soils_supply_more_heat(self):
++        for kind in physics.BODEM:
++            self.assertGreater(physics.mu_klasse(kind,.9),physics.mu_klasse(kind,.1))
++        self.assertLess(physics.mu_klasse('veen',.1),physics.mu_klasse('klei',.9))
++
++
++if __name__=='__main__':
++    unittest.main()

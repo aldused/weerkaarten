@@ -3,7 +3,7 @@
 <head><script src="/weerlab-native-only.js?v=20261027-audit2"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Grondvorst & MOS-verificatie · Weerlab</title>
+<title>Temperaturen · MOS-verificatie · Weerlab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -80,7 +80,7 @@ dt{color:var(--muted)}dd{margin:0;font-family:var(--mono);text-align:right;white
 </head>
 <body>
 <div class="wrap">
-  <h1>Grondvorst & MOS-verificatie</h1>
+  <h1>Temperaturen · MOS-verificatie</h1>
   <p class="sub">Weerlabs eigen MOS (WGT-MOS 10 cm, TN-MOS en TX-MOS) naast de losse modellen en de metingen. Alle verificatie is strikt chronologisch: elke maand voorspeld met een model dat alleen eerdere gegevens kende.</p>
   <div class="kaart status" id="status">Laden…</div>
   <div class="rij"><div class="seg" id="tabSeg" role="group" aria-label="Onderdeel">
@@ -94,7 +94,7 @@ dt{color:var(--muted)}dd{margin:0;font-family:var(--mono);text-align:right;white
       <div class="rij"><label for="plaats">Locatie</label> <select id="plaats"></select>
         <span class="noot" id="celinfo"></span></div>
       <div class="nachten" id="nachten"></div>
-      <p class="noot">Grasminimum = luchttemperatuur op 10 cm boven kort gras (KNMI-definitie T10N), niet de bodemtemperatuur. Vorstkans uit de WGT-MOS-spreiding; die is onafhankelijk getoetst (Brier-vaardigheid ≈ 60 % t.o.v. klimatologie, betrouwbaarheid vrijwel op de diagonaal) voor nacht 1-2. Voorbij 60 uur geldt de kans als indicatie.</p>
+      <p class="noot">Grasminimum = luchttemperatuur op 10 cm boven kort gras (KNMI-definitie T10N), niet de bodemtemperatuur. Vorstkans uit de foutverdeling van het nachtminimum. Een chronologische kalibratietoets gebruikt uitsluitend fouten uit eerdere nachten. Verder dan circa 60 uur zijn de kansen indicatief.</p>
     </div>
     <div class="kaart">
       <h2>Verloop per uur</h2>
@@ -158,7 +158,7 @@ async function tnnBlok(prod) {
       ${Object.entries(TNN.per_lead || {}).map(([l, d]) => rij(l, d, kol)).join("")}${rij("alle termijnen", TNN.totaal, kol)}
       ${rij("laatste 30 dagen", TNN.laatste_30d, kol)}</tbody></table></div>
       ${tn ? "Komende nacht, zelfde gevallen: oud product (v3, getraind op etmaal-TN)" : "Alle termijnen, zelfde gevallen: oud product (minimum van de 6-uursvensters)"} <b>${f(oud.v3?.rmse)}</b> (bias ${f(oud.v3?.bias)}) → nieuw <b>${f(oud.nacht_mos?.rmse)}</b> (bias ${f(oud.nacht_mos?.bias)}).
-      ${TNN.vorstkans ? `<br>Kans op grondvorst: Brier-skill ${Math.round(100 * TNN.vorstkans.skill)} % t.o.v. klimatologie; ${TNN.vorstkans.betrouwbaarheid.map(b => `verwacht ${Math.round(100 * b.verwacht)} % → gemeten ${Math.round(100 * b.gemeten)} %`).join(" · ")}.` : ""}
+      ${TNN.vorstkans?.methode && TNN.vorstkans.n && TNN.vorstkans.skill != null ? `<br>Chronologisch getoetste kans op grondvorst: Brier-skill ${Math.round(100 * TNN.vorstkans.skill)} % t.o.v. klimatologie; ${TNN.vorstkans.betrouwbaarheid.map(b => `verwacht ${Math.round(100 * b.verwacht)} % → gemeten ${Math.round(100 * b.gemeten)} %`).join(" · ")}.` : ""}
       ${lop.length ? `<br>Lopende nacht met metingen (trap 2), RMSE per uur: ${lop.filter((_, i) => i % 2 === 1).map(([u, v]) => `${u} ${f(v.trap2)}`).join(" · ")} (zonder metingen ${f(lop[0][1].basis)}).` : ""}
       <br>De tabel hieronder is de oude toets ${tn ? "op het officiële etmaal-TN (00–24 UT)" : "op de 6-uurs T10N-vensters"} en blijft ter vergelijking staan.</div>`;
   } catch (e) { /* geen blok: de bestaande tabel blijft bruikbaar */ }
@@ -199,9 +199,14 @@ async function laadW() {
   const st = j.stations.map(s => ({naam: s.naam + " (KNMI-station)", lat: s.lat, lon: s.lon}));
   const extra = [["Rotterdam", 51.92, 4.48], ["Dordrecht", 51.81, 4.67], ["Amsterdam", 52.37, 4.90], ["Utrecht", 52.09, 5.12], ["Groningen", 53.22, 6.57], ["Zwolle", 52.51, 6.09], ["Eindhoven", 51.44, 5.48], ["Maastricht", 50.85, 5.69], ["Arnhem", 51.98, 5.91], ["Middelburg", 51.50, 3.61], ["Leeuwarden", 53.20, 5.80], ["Enschede", 52.22, 6.89]].map(([n, la, lo]) => ({naam: n, lat: la, lon: lo}));
   [...extra, ...st].sort((a, b) => a.naam.localeCompare(b.naam)).forEach(p => { const o = document.createElement("option"); o.textContent = p.naam; o.value = p.lat + "," + p.lon; sel.append(o); });
-  let start = "52.1,5.18"; try { start = localStorage.getItem("wgt-mos-plaats") || start; } catch (e) {}
-  const opt = [...sel.options].find(o => o.value === start) || [...sel.options].find(o => o.textContent.startsWith("De Bilt"));
-  if (opt) sel.value = opt.value;
+  const night = j.nachten.find(n=>Date.parse(n.eind)>Date.now()) || j.nachten[0];
+  if (night) {
+    const minima=i2(night.t10min); let cold=-1, low=Infinity;
+    for (let c=0;c<C;c++) if (minima[c]!==-32768 && minima[c]<low) {low=minima[c];cold=c;}
+    if (cold>=0) {
+      const option=document.createElement('option');option.textContent='Koudste plaats · '+j.statisch.plaats[cold];option.value=W.ll[cold].join(',');sel.prepend(option);sel.value=option.value;
+    }
+  }
   sel.onchange = () => { try { localStorage.setItem("wgt-mos-plaats", sel.value); } catch (e) {} kiesCel(); };
   kiesCel();
 }
