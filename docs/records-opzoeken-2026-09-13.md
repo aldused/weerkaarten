@@ -116,3 +116,21 @@ Controle: `node tests/climate-day-periods.cjs` en de uitgebreide
 De Bilt 59/56, maandselectie, dekking, mobiel en het herstellen van links.
 Directe selectie:
 `records_debilt.html?station=alle&tab=records&param=dagen_matige_vorst&periode=winterjaar`.
+
+
+## Eerste & laatste: één winterjaar van augustus t/m juli (21 november 2026)
+
+De keuze `winterjaar` op Eerste & laatste loopt nu consequent van 1 augustus
+van het beginjaar t/m 31 juli van het volgende jaar. Dit geldt ook voor oude
+links met `window=winterjaar`, de algemene eerste-/laatste-vorstkeuzes en de
+vrije analyse. `window=frostseason` blijft als alias werken. De eerder als
+winterjaar benoemde oktober–aprilselectie heet nu expliciet een beperkte
+periode (`octapr`); de meteorologische winter blijft december–februari.
+
+De bestaande historische waarneming Castricum, 9 mei 1944, TN −5,4 °C, valt
+hierdoor ook bij de winterjaarkeuze binnen 1943/1944. De meting was aanwezig
+in het recordarchief, maar viel buiten de oude oktober–aprilselectie. De bron
+is niet gewijzigd. Browsercontroles verifiëren Castricum in de jaarkaarten en
+de landelijke laatste-datumkaart, opgeslagen winterjaarlinks, andere weerdagen,
+de meteorologische winter en mobiel. De berekeningscontroles verifiëren ook
+september en beide grensdagen, inclusief de vrije analyse.

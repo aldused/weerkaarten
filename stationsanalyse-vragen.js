@@ -15,8 +15,8 @@ const frostClasses=[
 ];
 const presets=[
  ['custom','Zelf een vraag samenstellen','TX','ge',20,'01-01','12-31','first'],
- ['autumn','Eerste vorst na de zomer','TN','lt',0,'09-01','02-29','first'],
- ['spring','Laatste vorst vóór de zomer','TN','lt',0,'01-01','06-30','last'],
+ ['autumn','Eerste vorst in het winterjaar','TN','lt',0,'08-01','07-31','first'],
+ ['spring','Laatste vorst in het winterjaar','TN','lt',0,'08-01','07-31','last'],
  ...frostClasses.flatMap(({key,label,lower,upper})=>[
   ['frost-'+key+'-first','Eerste dag met '+label.toLowerCase(),'TN',lower===null?'le':'between',lower===null?upper:lower,'08-01','07-31','first',upper],
   ['frost-'+key+'-last','Laatste dag met '+label.toLowerCase(),'TN',lower===null?'le':'between',lower===null?upper:lower,'08-01','07-31','last',upper]
@@ -58,14 +58,14 @@ el.innerHTML=`<header><p class="q-eyebrow">Eerste & laatste</p><h2>Wanneer viel 
 <div class="q-scope" role="group" aria-label="Jaren vergelijken"><button type="button" id="q-view-all" aria-pressed="true">Alle jaren vergelijken</button><button type="button" id="q-view-year" aria-pressed="false">Eén winterjaar</button></div>
 <label id="q-year-label" hidden>Seizoen<select id="q-year"></select></label>
 <label>Analyseperiode<select id="q-simple-window"></select></label>
-<p class="q-frost-note">Volledig vorstseizoen: 1 augustus t/m 31 juli, inclusief late vorst in mei en juni. Winterjaar: 1 oktober t/m 30 april. Meteorologische winter: 1 december t/m de laatste dag van februari.</p>
+<p class="q-frost-note">Winterjaar / volledig vorstseizoen: 1 augustus t/m 31 juli. Ook vorst in september, mei en juni telt mee. Meteorologische winter: 1 december t/m de laatste dag van februari.</p>
 </section>
 <details class="q-advanced" id="q-advanced"><summary>Grens en analyseperiode zelf instellen</summary>
 
 <details class="q-settings" open><summary>Grens en analyseperiode aanpassen</summary>
 <div class="q-grid"><label>Weervariabele<select id="q-field">${Object.entries(C.variables).slice(0,5).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}</select></label><label>Vergelijking<select id="q-op"><option value="ge">≥ Minstens</option><option value="gt">&gt; Meer dan</option><option value="le">≤ Hoogstens</option><option value="lt">&lt; Minder dan</option><option value="eq">= Precies</option><option value="between">Van … t/m …</option></select></label><label><span>Grens (<span id="q-unit">°C</span>)</span><input id="q-threshold" type="number" step="any" required value="20"></label>
 <label id="q-upper-label" hidden>Bovengrens (<span id="q-upper-unit">°C</span>)<input id="q-upper" type="number" step="any" value="-0.1"></label>
-<label>Periode<select id="q-window"><option value="year">Heel kalenderjaar</option><option value="frostseason">Volledig vorstseizoen: augustus t/m juli</option><option value="winterjaar">Winterjaar: oktober t/m april</option><option value="autumn">Na de zomer: september t/m februari</option><option value="spring">Vóór de zomer: januari t/m juni</option><option value="winter">Meteorologische winter: december t/m februari</option><option value="summer">Zomer: juni t/m augustus</option><option value="custom">Eigen begin en einde</option></select></label>
+<label>Periode<select id="q-window"><option value="year">Heel kalenderjaar</option><option value="winterjaar">Winterjaar: 1 augustus t/m 31 juli</option><option value="octapr">Beperkte periode: oktober t/m april</option><option value="autumn">Na de zomer: september t/m februari</option><option value="spring">Vóór de zomer: januari t/m juni</option><option value="winter">Meteorologische winter: december t/m februari</option><option value="summer">Zomer: juni t/m augustus</option><option value="custom">Eigen begin en einde</option></select></label>
 <label>Begin (dag-maand)<input id="q-start" value="01-01" placeholder="01-09" pattern="[0-9]{2}-[0-9]{2}" required></label><label>Einde, inclusief (dag-maand)<input id="q-end" value="31-12" placeholder="28-02" pattern="[0-9]{2}-[0-9]{2}" required></label>
 <label>Eerste beginjaar<input id="q-from" type="number" min="1700" max="2200" placeholder="Begin meetreeks"></label><label>Laatste beginjaar<input id="q-to" type="number" min="1700" max="2200" placeholder="Tot nu"></label><button type="submit" class="q-submit">Beantwoord mijn vraag</button></div>
 <p id="q-period-help"></p><p id="q-definition"></p><p id="q-frost-classes" hidden>Vorstklassen op basis van TN: licht −5,0 t/m −0,1 °C; matig −10,0 t/m −5,1 °C; streng −15,0 t/m −10,1 °C; zeer streng ≤ −15,1 °C.</p>
@@ -90,7 +90,7 @@ function syncFrost(){
 function frostFor(a){return a.field==='TN'?frostClasses.find(f=>f.lower===null?a.op==='le'&&a.threshold===f.upper:a.op==='between'&&a.threshold===f.lower&&a.upper===f.upper):null;}
 function definition(){syncFrost();$('q-simple-window').value=$('q-window').value; $('q-upper-label').hidden=$('q-op').value!=='between';$('q-upper').required=$('q-op').value==='between';const v=C.variables[$('q-field').value];if(!v)return;$('q-unit').textContent=v.unit;$('q-upper-unit').textContent=v.unit;$('q-frost-classes').hidden=$('q-field').value!=='TN';$('q-definition').textContent=v.definition||v.label+' · KNMI-dagwaarde.';
  try{const s=mdInput('q-start'),e=mdInput('q-end');C.boundary(2000,s);C.boundary(2000,e);$('q-period-help').textContent=`Iedere periode loopt van ${short(s)} t/m ${short(e)}${e<s?' in het volgende kalenderjaar. Het beginjaar 2021 heet dan seizoen 2021/2022.':'. Het beginjaar is het kalenderjaar.'} Daggegevens van vandaag blijven voorlopig en tellen nog niet mee.`;}catch{$('q-period-help').textContent='Vul een geldige begin- en einddatum in.';}}
-function setWindow(s,e){$('q-start').value=inputDate(s);$('q-end').value=inputDate(e);const windows={year:['01-01','12-31'],winterjaar:['10-01','04-30'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31'],frostseason:['08-01','07-31']};$('q-window').value=Object.keys(windows).find(k=>windows[k][0]===s&&windows[k][1]===e)||'custom';definition();}
+function setWindow(s,e){$('q-start').value=inputDate(s);$('q-end').value=inputDate(e);const windows={year:['01-01','12-31'],winterjaar:['08-01','07-31'],octapr:['10-01','04-30'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31'],frostseason:['08-01','07-31']};$('q-window').value=Object.keys(windows).find(k=>windows[k][0]===s&&windows[k][1]===e)||'custom';definition();}
 function options(){return {field:$('q-field').value,op:$('q-op').value,threshold:Number($('q-threshold').value),upper:$('q-op').value==='between'?Number($('q-upper').value):undefined,start:mdInput('q-start'),end:mdInput('q-end'),from:$('q-from').value?Number($('q-from').value):undefined,to:$('q-to').value?Number($('q-to').value):undefined,today:today()};}
 function value(hit,a){if(hit?.observations)return hit.observations.map(h=>esc(h.station)+(h.historical?' (historisch)':'')+': '+value(h,a)).join('<br>');return hit?hit.trace?'&lt; 0,05 '+esc(a.variable.unit):number(hit.value)+' '+esc(a.variable.unit):'—';}
 function limitTies(sorted,key){return sorted.filter((p,i)=>i<10||key(p)===key(sorted[9]));}
@@ -99,8 +99,8 @@ function syncView(a){
  $('q-view-year').setAttribute('aria-pressed',String(viewMode==='year'));
  $('q-year-label').hidden=viewMode!=='year';
  if(a){
-  const winter=a.start==='12-01'&&a.end==='02-29',fullFrost=a.start==='08-01'&&a.end==='07-31';el.querySelector('#q-simple-period .q-frost-note').textContent=a.start==='01-01'&&a.end==='12-31'?'Kalenderjaar: 1 januari t/m 31 december.':'Volledig vorstseizoen: 1 augustus t/m 31 juli, inclusief late vorst in mei en juni. Winterjaar: 1 oktober t/m 30 april. Meteorologische winter: 1 december t/m de laatste dag van februari.';$('q-view-year').textContent=winter?'Eén winter':fullFrost?'Eén vorstseizoen':a.cross?'Eén winterjaar':'Eén jaar';$('q-year-label').firstChild.textContent=winter?'Meteorologische winter':fullFrost?'Vorstseizoen':a.cross?'Winterjaar':'Jaar';
-  if(a.start==='10-01'&&a.end==='04-30')el.querySelector('#q-simple-period .q-frost-note').textContent='Winterjaar: 1 oktober t/m 30 april. Vorst in mei en juni valt buiten deze selectie. Kies het volledige vorstseizoen (augustus t/m juli) om die metingen ook te zien.';
+  const winter=a.start==='12-01'&&a.end==='02-29',fullFrost=a.start==='08-01'&&a.end==='07-31';el.querySelector('#q-simple-period .q-frost-note').textContent=a.start==='01-01'&&a.end==='12-31'?'Kalenderjaar: 1 januari t/m 31 december.':'Winterjaar / volledig vorstseizoen: 1 augustus t/m 31 juli. Ook vorst in september, mei en juni telt mee. Meteorologische winter: 1 december t/m de laatste dag van februari.';$('q-view-year').textContent=winter?'Eén winter':fullFrost?'Eén winterjaar':a.cross?'Eén winterjaar':'Eén jaar';$('q-year-label').firstChild.textContent=winter?'Meteorologische winter':fullFrost?'Winterjaar':a.cross?'Winterjaar':'Jaar';
+  if(a.start==='10-01'&&a.end==='04-30')el.querySelector('#q-simple-period .q-frost-note').textContent='Beperkte periode: 1 oktober t/m 30 april. Vorst in september, mei en juni valt buiten deze selectie. Kies Winterjaar (1 augustus t/m 31 juli) om die metingen ook te zien.';
   focusYear=a.periods.some(p=>p.label===focusYear)?focusYear:a.periods.at(-1)?.label||null;
   $('q-year').innerHTML=a.periods.slice().reverse().map(p=>`<option value="${p.label}" ${p.label===focusYear?'selected':''}>${p.label}${p.running?' (lopend)':''}</option>`).join('');
  }
@@ -120,12 +120,12 @@ function simpleDate(hit){return hit?new Intl.DateTimeFormat('nl-NL',{timeZone:'U
 function renderFrost(a,frost){
  syncView(a);shareSelection();
  const place=$('q-station').value==='all'?'Alle stations in Nederland, inclusief historische stations':$('q-station').selectedOptions[0].textContent;
- const periodName=a.start==='08-01'&&a.end==='07-31'?'vorstseizoen':a.start==='10-01'&&a.end==='04-30'?'winterjaar':a.start==='12-01'&&a.end==='02-29'?'meteorologische winter':a.cross?'seizoen':'jaar';
+ const periodName=a.start==='08-01'&&a.end==='07-31'?'winterjaar':a.start==='10-01'&&a.end==='04-30'?'oktober–aprilperiode':a.start==='12-01'&&a.end==='02-29'?'meteorologische winter':a.cross?'seizoen':'jaar';
  const windowLabel=`${short(a.start)} t/m ${short(a.end)}`;
  const defs=[['earlyFirst','Eerste dag: het vroegst','first',false],['lateFirst','Eerste dag: het laatst','first',true],['earlyLast','Laatste dag: het vroegst','last',false],['lateLast','Laatste dag: het laatst','last',true]];
  const recordCards=defs.map(([key,label,side,descending])=>{
   const entries=a.rank(side,descending,1).filter(p=>p.rank===1),best=entries[0],hit=best?.[side];
-  return `<article class="q-date-card" data-record="${key}"><h4>${esc(a.national?label.replace('dag:','gevonden dag:'):label)}</h4><p class="q-big-date">${simpleDate(hit)}</p>${best?`<p class="q-record-year">${best.label} · ${date(hit.time)}</p>${stationValues(hit,a)}${a.national&&!best.dailyComplete?'<p class="q-coverage-note">Meetgaten in de stationsreeksen; dit is de gevonden grensdatum.</p>':''}${entries.length>1?`<details class="q-other-years"><summary>Ook in ${entries.length-1} andere ${entries.length===2?periodName:periodName+'en'}</summary>${entries.slice(1).map(p=>`<p><strong>${p.label} · ${date(p[side].time)}</strong></p>${stationValues(p[side],a)}${a.national&&!p.dailyComplete?'<p class="q-coverage-note">Meetgaten in de stationsreeksen.</p>':''}`).join('')}</details>`:''}`:'<p>Geen afgesloten periode met voldoende dagdekking en een passende meting beschikbaar.</p>'}</article>`;
+  return `<article class="q-date-card" data-record="${key}"><h4>${esc(a.national?label.replace('dag:','gevonden dag:'):label)}</h4><p class="q-big-date">${simpleDate(hit)}</p>${best?`<p class="q-record-year">${best.label} · ${date(hit.time)}</p>${stationValues(hit,a)}${a.national&&!best.dailyComplete?'<p class="q-coverage-note">Meetgaten in de stationsreeksen; dit is de gevonden grensdatum.</p>':''}${entries.length>1?`<details class="q-other-years"><summary>Ook in ${entries.length-1} andere ${entries.length===2?periodName:periodName==='winterjaar'?'winterjaren':periodName+'en'}</summary>${entries.slice(1).map(p=>`<p><strong>${p.label} · ${date(p[side].time)}</strong></p>${stationValues(p[side],a)}${a.national&&!p.dailyComplete?'<p class="q-coverage-note">Meetgaten in de stationsreeksen.</p>':''}`).join('')}</details>`:''}`:'<p>Geen afgesloten periode met voldoende dagdekking en een passende meting beschikbaar.</p>'}</article>`;
  }).join('');
  const selected=a.periods.find(p=>p.label===focusYear);
  const yearCards=selected?['first','last'].map(side=>`<article class="q-date-card"><h4>${side==='first'?'Eerste':'Laatste'} dag</h4><p class="q-big-date">${simpleDate(selected[side])}</p>${selected[side]?`<p class="q-record-year">${date(selected[side].time)}</p>${stationValues(selected[side],a)}`:`<p>${selected.complete?'Geen dag in deze vorstklasse.':'Er is geen passende meting gevonden.'}</p>`}</article>`).join(''):'';
@@ -213,8 +213,8 @@ for(const button of el.querySelectorAll('[data-weather-preset]'))button.addEvent
 for(const button of el.querySelectorAll('[data-frost-class]'))button.addEventListener('click',()=>applyPreset('frost-'+button.dataset.frostClass+'-first'));
 for(const mode of ['all','year'])$('q-view-'+mode).addEventListener('click',()=>{viewMode=mode;syncView(current);if(current)render(current);});
 $('q-year').addEventListener('change',()=>{focusYear=$('q-year').value;if(current)render(current);});
-$('q-window').addEventListener('change',()=>{const windows={year:['01-01','12-31'],winterjaar:['10-01','04-30'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31'],frostseason:['08-01','07-31']},w=windows[$('q-window').value];if(w)setWindow(...w);});
-$('q-simple-window').addEventListener('change',()=>{const windows={year:['01-01','12-31'],winterjaar:['10-01','04-30'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31'],frostseason:['08-01','07-31']},w=windows[$('q-simple-window').value];if(w){setWindow(...w);run();}else{$('q-window').value='custom';$('q-advanced').open=true;el.querySelector('.q-settings').open=true;definition();}});
+$('q-window').addEventListener('change',()=>{const windows={year:['01-01','12-31'],winterjaar:['08-01','07-31'],octapr:['10-01','04-30'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31'],frostseason:['08-01','07-31']},w=windows[$('q-window').value];if(w)setWindow(...w);});
+$('q-simple-window').addEventListener('change',()=>{const windows={year:['01-01','12-31'],winterjaar:['08-01','07-31'],octapr:['10-01','04-30'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31'],frostseason:['08-01','07-31']},w=windows[$('q-simple-window').value];if(w){setWindow(...w);run();}else{$('q-window').value='custom';$('q-advanced').open=true;el.querySelector('.q-settings').open=true;definition();}});
 for(const id of ['q-field','q-op','q-threshold','q-upper'])$(id).addEventListener('change',()=>{$('q-preset').value='custom';definition();});
 for(const id of ['q-start','q-end'])$(id).addEventListener('change',()=>{$('q-window').value='custom';definition();});
 // Keep old results visibly tied to their settings: editing a condition requires a fresh calculation.
@@ -222,7 +222,7 @@ for(const id of ['q-field','q-op','q-threshold','q-upper','q-window','q-start','
 $('q-legacy').addEventListener('toggle',()=>{if($('q-legacy').open){chart1Instance?.resize();chart2Instance?.resize();}});
 const linkedPreset=new URLSearchParams(location.search).get('preset');
 applyPreset(presets.some(p=>p[0]===linkedPreset)?linkedPreset:'frost-moderate-first',false);
-const linkedWindow=params.get('window'),linkedRanges={year:['01-01','12-31'],frostseason:['08-01','07-31'],winterjaar:['10-01','04-30'],winter:['12-01','02-29'],spring:['01-01','06-30'],autumn:['09-01','02-29'],summer:['06-01','08-31']};
+const linkedWindow=params.get('window'),linkedRanges={year:['01-01','12-31'],frostseason:['08-01','07-31'],winterjaar:['08-01','07-31'],octapr:['10-01','04-30'],winter:['12-01','02-29'],spring:['01-01','06-30'],autumn:['09-01','02-29'],summer:['06-01','08-31']};
 if(linkedRanges[linkedWindow])setWindow(...linkedRanges[linkedWindow]);
 syncView();
 syncScope();definition();run();

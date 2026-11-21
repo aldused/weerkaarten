@@ -52,7 +52,7 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   assert.match(await page.locator('.q-simple-year-table tbody').textContent(),/historisch/);
   assert.equal(await page.locator('#q-year option').evaluateAll(es=>es.some(e=>e.textContent.includes('onvolledig'))),false);
   assert.equal(await page.locator('#q-answer-title').count(),0,'No long station list in a large headline');
-  assert.equal(await page.inputValue('#q-simple-window'),'frostseason');
+  assert.equal(await page.inputValue('#q-simple-window'),'winterjaar');
   const late=page.locator('[data-record="lateLast"]');
   assert.match(await late.innerText(),/9 mei/);assert.match(await late.textContent(),/Castricum/);assert.match(await late.textContent(),/5,4/);
   await page.screenshot({path:path.join(screenshots,'all-years-desktop.png'),fullPage:true});
@@ -65,12 +65,17 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   assert.match(await page.locator('.q-year-cards').textContent(),/9 mei 1944/);
   assert.match(await page.locator('.q-year-cards').textContent(),/Castricum/);
   assert.match(await page.locator('.q-year-cards').textContent(),/5,4/);
-  await page.selectOption('#q-simple-window','winterjaar');await ready(page);
+  // Existing window=winterjaar links now include September and the historical May record.
+  await page.goto(url+'?station=all&preset=frost-moderate-first&view=year&year=1943%2F1944&window=winterjaar');await ready(page);
+  assert.equal(await page.inputValue('#q-start'),'01-08');assert.equal(await page.inputValue('#q-end'),'31-07');
+  assert.match(await page.locator('.q-year-cards').textContent(),/9 mei 1944[\s\S]*Castricum/);
+  assert.match(await page.locator('.q-range').innerText(),/winterjaar: 1 augustus t\/m 31 juli/);
+  await page.selectOption('#q-simple-window','octapr');await ready(page);
   assert.equal(await page.inputValue('#q-start'),'01-10');assert.equal(await page.inputValue('#q-end'),'30-04');
-  assert.match(await page.locator('#q-simple-period .q-frost-note').innerText(),/mei en juni valt buiten/);
+  assert.match(await page.locator('#q-simple-period .q-frost-note').innerText(),/september, mei en juni valt buiten/);
   assert.doesNotMatch(await page.locator('.q-year-cards').textContent(),/9 mei 1944/);
-  await page.reload();await ready(page);assert.equal(await page.inputValue('#q-simple-window'),'winterjaar');
-  await page.selectOption('#q-simple-window','frostseason');await ready(page);
+  await page.reload();await ready(page);assert.equal(await page.inputValue('#q-simple-window'),'octapr');
+  await page.selectOption('#q-simple-window','winterjaar');await ready(page);
   assert.match(await page.locator('.q-year-cards').textContent(),/9 mei 1944/);
   await page.selectOption('#q-year','2022/2023');
   assert.match(await page.locator('.q-year-cards').innerText(),/19 november/);
@@ -117,12 +122,12 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   await fixture.route('**/dagdata_*.json*',r=>r.fulfill({json:{kolommen:['YYYYMMDD','TN'],data:r.request().url().includes('_260.')?days:r.request().url().includes('_215.')?[['20221001',-80]]:[]}}));
   await fixture.route('**/historische-dagwaarden.json*',r=>r.fulfill({json:{units:'physical',stations:{20:{naam:'Historisch basisstation',dailySeries:true}},days:Object.fromEntries(days.map(([day])=>[day,{20:{TN:1}}]))}}));
   await fixture.route('**/records_nl_extreme.json*',r=>r.fulfill({json:{waarnemingen:[{station:'Historisch dorp',datum:'20221001',parameter:'TN',waarde:-7}]}}));
-  await fixture.goto(url+'?station=all&preset=frost-moderate-first&view=all&window=winterjaar#vorst');await ready(fixture);
+  await fixture.goto(url+'?station=all&preset=frost-moderate-first&view=all&window=octapr#vorst');await ready(fixture);
   for(const [key,day,year]of [['earlyFirst','1 oktober','2022/2023'],['lateFirst','5 december','2020/2021'],['earlyLast','15 januari','2021/2022'],['lateLast','30 april','2022/2023']]){
    const card=fixture.locator(`[data-record="${key}"]`);assert.equal(await card.locator('.q-big-date').innerText(),day);assert.match(await card.locator('.q-record-year').innerText(),new RegExp(year));
   }
   const tied=fixture.locator('[data-record="earlyFirst"] .q-tied-stations');assert.match(await tied.innerText(),/Alle 3 stations/);await tied.locator('summary').click();assert.match(await fixture.locator('[data-record="earlyFirst"]').innerText(),/Historisch dorp/);
   await fixture.close();assert.deepEqual(errors,[]);
-  console.log('PASS: default national all-year records, one-year view and shareable links, Winterswijk December 1903 and Castricum May 1944 historical observations, full historical source retry, full August–July frost season, four exact frost classes, October–April winter year, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
+  console.log('PASS: default national all-year records, one-year view and shareable links, Winterswijk December 1903 and Castricum May 1944 historical observations, full historical source retry, August–July winter year and legacy links, four exact frost classes, explicit October–April subset, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());

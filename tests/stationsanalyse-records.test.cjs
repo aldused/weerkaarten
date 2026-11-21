@@ -7,7 +7,7 @@ const dataRoot = process.env.RECORDS_DATA_ROOT || root;
 const Records = require('../stationsanalyse-records.js');
 const html = fs.readFileSync(path.join(root,'stationsanalyse.html'),'utf8');
 const code = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)].filter(m=>!m[1].includes('src='))[0][2].replace(/init\(\);\s*$/, '');
-const historical = JSON.parse(fs.readFileSync(path.join(root,'records_nl_extreme.json')));
+const historical = JSON.parse(fs.readFileSync(path.join(dataRoot,'records_nl_extreme.json')));
 function harness() {
   class Element {
     constructor(){this.children=[];this.style={};this.value='';this.textContent='';this._html='';this.parentElement=this;}
@@ -20,7 +20,7 @@ function harness() {
     document:{getElementById:el,createElement:()=>new Element()},
     window:{weerlabClimateStatus(){}},location:{hostname:'localhost',protocol:'http:'},
     setTimeout:f=>f(),Chart:class{destroy(){}},
-    fetch:async url=>{const name=url.split('?')[0]; const file=path.join(name.startsWith('dagdata_')?dataRoot:root,name);
+    fetch:async url=>{const name=url.split('?')[0]; const file=path.join(name.startsWith('dagdata_')||name==='records_nl_extreme.json'?dataRoot:root,name);
       return {ok:fs.existsSync(file),json:async()=>JSON.parse(fs.readFileSync(file))};}
   });
   vm.runInContext(code,ctx);
@@ -152,4 +152,14 @@ test('real daily source files: all station TX/TN period values and endpoints mat
     }
   }
   assert(checked>=264);console.log(`${checked} real station/parameter/period comparisons passed`);
+});
+
+test('legacy winter year also includes August, September, May and July in the same season',()=>{
+  const h=harness();
+  const dates=['19420731','19420801','19420927','19430509','19430731','19430801'];
+  const result=h.analyse(dates.map(d=>[d,null,-60]),'temp_min','winterjaar',1943,1943,-50,'onder');
+  assert.equal(result.alleWaarden.length,4);
+  assert.equal(result.resultaten[0].eersteDag.raw,'19420801');
+  assert.equal(result.resultaten[0].laatsteDag.raw,'19430731');
+  assert.equal(h.ctx.seizoenInfo('winterjaar').startM,8);
 });
