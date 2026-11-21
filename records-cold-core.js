@@ -26,11 +26,13 @@ function compute(sources,{mode='winteryear',today=new Date().toISOString().slice
   for(const field of ['tn','tx'])if(temperature(day[field])&&(row[field]===null||day[field]<row[field]))row[field]=day[field];
  }
  if(!grid.size)return null;
- const through=Math.max(...grid.keys()),perYear={},coverage={},monthTotal={},monthBest={},seasonTotal={},seasonBest={},monthly={},seasonal={};
+ const through=Math.max(...grid.keys()),perYear={},coverage={},minima={},monthTotal={},monthBest={},seasonTotal={},seasonBest={},monthly={},seasonal={};
  categories.forEach((_,i)=>{monthTotal[i]=Array(13).fill(0);monthBest[i]=Array(13).fill(null);seasonTotal[i]=[0,0,0,0];monthly[i]={};seasonal[i]=[{},{},{},{}];});
  for(const [time,row]of grid){
   const d=new Date(time),year=d.getUTCFullYear(),month=d.getUTCMonth()+1,py=periodYear(time,mode),[start,end]=bounds(py,mode);
   if(!perYear[py]){perYear[py]=categories.map(()=>0);coverage[py]={start,end,running:end>=now,valid:categories.map(()=>0),expected:(end-start)/DAY+1,elapsed:Math.max(0,(Math.min(end,now-DAY,through)-start)/DAY+1)};}
+  minima[py]||={tn:null,tx:null};
+  for(const field of ['tn','tx'])if(row[field]!==null&&(minima[py][field]===null||row[field]<minima[py][field]))minima[py][field]=row[field];
   const season=month===12||month<=2?0:month<=5?1:month<=8?2:3,sy=year+(month===12?1:0),my=year+'-'+month;
   categories.forEach((category,i)=>{
    const v=row[category.field];if(v===null)return;coverage[py].valid[i]++;
@@ -43,7 +45,7 @@ function compute(sources,{mode='winteryear',today=new Date().toISOString().slice
   for(const [key,count]of Object.entries(monthly[i])){const [year,month]=key.split('-').map(Number);if(!monthBest[i][month]||count>monthBest[i][month][0])monthBest[i][month]=[count,year];}
   seasonBest[i]=seasonal[i].map(years=>{let best=null;for(const [year,count]of Object.entries(years))if(!best||count>best[0])best=[count,+year];return best;});
  });
- return {mode,through,perYear,coverage,monthTotal,monthBest,seasonTotal,seasonBest};
+ return {mode,through,perYear,coverage,minima,monthTotal,monthBest,seasonTotal,seasonBest};
 }
 function rankYears(result,category){
  return Object.keys(result?.perYear||{}).map(Number).filter(y=>!result.coverage[y].running&&result.coverage[y].valid[category]>0)

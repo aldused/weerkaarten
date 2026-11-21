@@ -55,7 +55,42 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.selectOption('#sel-station','260');
   await page.waitForFunction(()=>document.querySelector('#kd-podium .wd-pcard')?.textContent.includes('59')&&getComputedStyle(document.querySelector('#kd-viewJaar')).display!=='none',null,{timeout:60000});
   assert.equal(await page.locator('#kd-viewStations').isVisible(),false);
+  await page.locator('.record-menu-options').evaluate(e=>{e.open=true;});
+  await page.click('[data-section="records"]');
+  await page.selectOption('#sel-station','alle');
+  await page.waitForFunction(()=>Array.isArray(multiData)&&multiData.length>40,null,{timeout:120000});
+  await page.locator('.archive-secondary').getByRole('button',{name:'Vorstdagen',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#records-body tr')?.textContent.includes('Twenthe')&&document.querySelector('#records-body tr')?.textContent.includes('72'),null,{timeout:120000});
+  assert.equal(await page.inputValue('#sel-periode-mobile'),'winterjaar');
+  assert.match(await page.locator('#records-body tr').first().innerText(),/1962\/1963[\s\S]*Twenthe[\s\S]*72/);
+  assert.match(await page.locator('#records-periode').innerText(),/TN < −5[\s\S]*strenge en zeer strenge/);
+  assert.match(await page.locator('.record-period-help').innerText(),/winterjaar/);
+  await page.setViewportSize({width:1440,height:1000});
+  await page.screenshot({path:'/private/tmp/weerrecords-vorst-desktop.png',fullPage:true});
+  for(const key of ['lichte_vorst','strenge_vorst','zeer_strenge_vorst','extreem_koud']) {
+   await page.selectOption('#sel-param-mobile','dagen_'+key);
+   assert.equal(await page.locator('#records-tabel').isVisible(),true);
+   assert.equal(await page.inputValue('#sel-periode-mobile'),'winterjaar');
+   const valid=await page.evaluate(()=>{const cfg=KLIMAATDAG_RECORDS[huidigeParam],r=klimaatdagRecordRijen(cfg).rijen;const totals=new Map(multiData.filter(d=>d.maanddetail).map(ds=>[ds.station,ColdDays.compute([ds],{today:kdToday()})]));return r.every((row,i)=>i===0||r[i-1].aantal>=row.aantal)&&r.every(row=>{return totals.get(row.station).perYear[row.jaar][cfg.coldCategory]===row.aantal;});});
+   assert.equal(valid,true,key+' station counts and order agree with the shared core');
+  }
+  await page.selectOption('#sel-param-mobile','dagen_matige_vorst');
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.locator('#sel-periode-mobile').isVisible(),true);
+  assert.equal(await page.locator('#sel-param-mobile').isVisible(),true);
+  await page.screenshot({path:'/private/tmp/weerrecords-vorst-mobile.png',fullPage:true});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Frost records fit on mobile');
+  await page.goto(url+'?station=260&tab=records&param=dagen_matige_vorst&periode=alltime');
+  await page.waitForFunction(()=>document.querySelector('#records-body tr')?.textContent.includes('56')&&huidigePeriode==='alltime',null,{timeout:90000});
+  assert.match(await page.locator('#records-body tr').first().innerText(),/1963[\s\S]*56/);
+  await page.selectOption('#sel-param-mobile','dagen_strenge_vorst');
+  assert.equal(await page.inputValue('#sel-periode-mobile'),'alltime');
+  await page.goto(url+'?station=alle&tab=records&param=dagen_matige_vorst&periode=winterjaar');
+  await page.waitForFunction(()=>document.querySelector('#records-body tr')?.textContent.includes('Twenthe')&&huidigePeriode==='winterjaar',null,{timeout:120000});
+  await page.selectOption('#sel-param-mobile','tx');
+  assert.equal(await page.inputValue('#sel-periode-mobile'),'alltime');
+  assert.equal(await page.locator('#sel-periode-mobile option[value="winterjaar"]').isDisabled(),true);
   assert.deepEqual(errors,[]);
-  console.log('PASS: De Bilt 56 calendar / 59 winter-year cold days, current winter label, global Twenthe 72-day station record, historical stations, month/season views, unchanged warm-day flow, mobile and no browser errors');
+  console.log('PASS: De Bilt 56 calendar / 59 winter-year cold days, current winter label, global Twenthe 72-day station record, historical stations, month/season views, unchanged warm-day flow, mobile, all five Weerrecords frost categories and saved links, and no browser errors');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());

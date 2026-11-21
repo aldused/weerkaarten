@@ -109,8 +109,8 @@
       $('record-calculation-group').hidden=!regular||!supports;
       const aggregate=supports&&calculation.value==='period';
       if(regular&&period==='jaar')$('filter-jaar').style.display=aggregate?'none':'flex';
-      const climatePeriod={dag:'de gekozen kalenderdag',decade:'de gekozen decade',maand:'de gekozen maand',seizoen:'het gekozen seizoen',jaar:'het gekozen jaar',alltime:'elk kalenderjaar',periode:'de gekozen periode'};
-      help.textContent=climate?`Aantal dagen boven de gekozen temperatuurgrens binnen ${climatePeriod[period]||'de gekozen periode'}.`:aggregate
+      const climatePeriod={dag:'de gekozen kalenderdag',decade:'de gekozen decade',maand:'de gekozen maand',seizoen:'het gekozen seizoen',jaar:'het gekozen jaar',alltime:'elk kalenderjaar',winterjaar:'elk winterjaar (1 augustus t/m 31 juli)',periode:'de gekozen periode'};
+      help.textContent=climate?`Aantal dagen dat aan de gekozen temperatuurgrens voldoet binnen ${climatePeriod[period]||'de gekozen periode'}.`:aggregate
         ? (['rh','sq'].includes(param)?'Som over de gekozen periode, vergeleken tussen jaren.':'Gemiddelde over de gekozen periode, vergeleken tussen jaren.')
         : 'Afzonderlijke dagmetingen binnen de gekozen periode. Zoek een station of filter de ranglijst.';
       actions.hidden=!regular;

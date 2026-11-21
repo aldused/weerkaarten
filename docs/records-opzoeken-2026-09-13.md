@@ -87,3 +87,32 @@ historische stations, mobiel, directe links en de bestaande warme-dagenflow.
 Een directe link gebruikt bijvoorbeeld
 `records_debilt.html?tab=koudedagen&coldcategory=3&coldperiod=winteryear&coldyear=1962`.
 Voor stationsrecords: `station=alle&tab=koudedagen&coldcategory=3&coldview=stations`.
+
+
+## Vorsttellingen in Weerrecords (21 november 2026)
+
+Ook Weerrecords bevat nu lichte, matige, strenge en zeer strenge vorst en
+extreem koude dagen. De grensdefinities komen uit dezelfde `ColdDays.categories`
+als Koude dagen; TN < −5 telt dus ook alle lagere minima. De lichte-vorstband
+blijft expliciet −5,0 °C ≤ TN < 0 °C. De knop **Vorstdagen** kiest matige vorst.
+
+Bij de eerste vorstkeuze vanuit een jaar- of dagranglijst wordt **Winterjaar ·
+1 augustus t/m 31 juli** actief. Elke rij toont de telling van één station in
+één winterjaar; bij Alle stations staat de hoogste telling bovenaan. De
+kalenderjaar-, maand-, decade-, seizoen- en eigen-periodekeuzes blijven bestaan.
+De winterjaarkeuze is alleen beschikbaar voor vorsttellingen; een gewone
+weermeting gaat terug naar Alltime. Gedeelde selecties behouden hun periode.
+
+Winter- en kalenderjaartellingen hergebruiken de berekening van Koude dagen,
+inclusief ontbrekende meetdagen, unieke datums en uitsluiting van de nog
+lopende meetdag. De temperatuurkolom toont de koudste dag. Meetgaten zijn bij
+jaartellingen gemarkeerd met ≥ en de meetdekking; lopende jaren heten lopend.
+Historische dagelijkse stationsreeksen tellen mee, losse recordnoteringen niet.
+Maand- en seizoenkeuzes gebruiken dezelfde drempels en tonen geen geschatte
+jaartellingen. Warme-dagenrecords blijven beschikbaar.
+
+Controle: `node tests/climate-day-periods.cjs` en de uitgebreide
+`tests/records-cold-browser.cjs` controleren de vijf klassen, Twenthe 72,
+De Bilt 59/56, maandselectie, dekking, mobiel en het herstellen van links.
+Directe selectie:
+`records_debilt.html?station=alle&tab=records&param=dagen_matige_vorst&periode=winterjaar`.
