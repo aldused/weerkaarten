@@ -64,6 +64,8 @@ function recordCard(record) {
   if (record.status === 'cancelled') day.append(el('small', '', 'Later ingetrokken'));
   const codes = el('div', 'record-code'); record.codes.forEach(c => codes.append(badge(c)));
   const reason = el('div', 'record-reason', record.phenomenon);
+  const shortReason = record.headline && fold(record.headline) !== fold(record.phenomenon) ? record.headline : record.description;
+  if (shortReason) reason.append(el('small', 'reason-text', shortReason));
   const area = el('div', 'record-area', record.areas.join(' · '));
   area.append(el('small', '', 'Toelichting en bron bekijken'));
   grid.append(day, codes, reason, area); summary.append(grid);
