@@ -438,7 +438,7 @@ async function fetchEnsemble(lat, lon, runMeta, force = false) {
     throw new Error(e?.message || String(e));
   }
 }
-async function fetchHres(lat, lon, runMeta, force = false) {
+async function fetchHres(lat, lon, runMeta, force = false, optional = false) {
   const runInitialization = runInitializationFromMeta(runMeta);
   const url = `https://single-runs-api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
     + `&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,snowfall`
@@ -446,7 +446,7 @@ async function fetchHres(lat, lon, runMeta, force = false) {
     + `&forecast_days=${SOURCE_FORECAST_DAYS}&temporal_resolution=native&timezone=GMT&wind_speed_unit=kmh`;
   try {
     const sentinel = runMetaSentinel(runMeta);
-    const data = await fetchJson(url, 45000, 3, force, true, `hres:${sentinel}`);
+    const data = await fetchJson(url, optional ? 8000 : 45000, optional ? 1 : 3, force, true, `hres:${sentinel}`);
     // IFS HRES eindigt operationeel na 10 dagen, terwijl ENS 15 dagen haalt.
     // De startcyclus moet exact gelijk zijn; een kortere HRES-staart is geldig
     // en wordt later als ontbrekend op de langere ENS-as uitgelijnd.
@@ -479,7 +479,7 @@ function embeddedHresFromEnsemble(ens, runMeta) {
 
 async function fetchCoherentPlumeBatch(lat, lon, force = false) {
   const runControl = window.WeerlabPlumeRuns;
-  await runControl?.ensureLocation?.(lat, lon);
+  const locationMode = await runControl?.ensureLocation?.(lat, lon);
   const selectedRunMs = Date.parse(runControl?.selectedRunIso?.() || '');
   const liveRunMs = Number(runControl?.state?.liveMeta?.last_run_initialisation_time) * 1000;
   if (Number.isFinite(selectedRunMs) && selectedRunMs === liveRunMs) {
@@ -491,8 +491,15 @@ async function fetchCoherentPlumeBatch(lat, lon, force = false) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const metaBefore = await fetchRunMeta();
     const ens = await fetchEnsemble(lat, lon, metaBefore, force || attempt > 0);
-    const hres = embeddedHresFromEnsemble(ens, metaBefore)
-      || await fetchHres(lat, lon, metaBefore, force || attempt > 0);
+    let hres = embeddedHresFromEnsemble(ens, metaBefore);
+    if (!hres) {
+      try {
+        hres = await fetchHres(lat, lon, metaBefore, force || attempt > 0, locationMode?.fallback);
+      } catch (error) {
+        if (!locationMode?.fallback) throw error;
+        console.warn('Geen HRES voor vrije pluimlocatie:', error.message);
+      }
+    }
     const metaAfter = await fetchRunMeta();
     if (sameRunMeta(metaBefore, metaAfter)) return { ens, hres, runMeta: metaBefore };
   }
@@ -558,7 +565,12 @@ function ensembleVariable(hourly, key) {
   if (perturbedKeys.length !== 50 || statisticKeys.length !== 51) {
     throw new Error(`${key}: ${perturbedKeys.length} verstoorde leden ontvangen; 50 verwacht`);
   }
-  const read = memberKey => fillNaN(hourly[memberKey].slice());
+  const read = memberKey => {
+    const series = fillNaN(hourly[memberKey]);
+    // Voor de start van de run is er geen bijbehorend neerslaginterval.
+    if ((key === 'precipitation' || key === 'snowfall') && series[0] === null) series[0] = 0;
+    return series;
+  };
   const control = read(key);
   const perturbed = perturbedKeys.map(read);
   return { control, perturbed, statistics: [control, ...perturbed] };
@@ -569,7 +581,8 @@ function optionalEnsembleVariable(hourly, key, unavailable) {
     const variable = ensembleVariable(hourly, key);
     const n = Array.isArray(hourly?.time) ? hourly.time.length : 0;
     return n > 0 && variable.statistics.every(series =>
-      series.length === n && series.every(Number.isFinite)) ? variable : null;
+      series.length === n && series.every((value, index) =>
+        Number.isFinite(value) || (key === 'wind_gusts_10m' && index === 0 && value === null))) ? variable : null;
   } catch (error) {
     console.warn(`Optioneel 6-luikpaneel ${key} overgeslagen:`, error.message);
     return null;
@@ -729,7 +742,8 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p50, mean, yMin, yM
   if (mean) s += `<path d="${pathOf(mean)}" fill="none" stroke="${C_BLACK}" stroke-width="2" stroke-dasharray="3 5" ${expertStroke}/>`;
   if (p50)  s += `<path d="${pathOf(p50)}" fill="none" stroke="${C_MAGENTA}" stroke-width="2" stroke-dasharray="12 7" ${expertStroke}/>`;
   if (ctrl) s += `<path d="${pathOf(ctrl)}" fill="none" stroke="${C_BLUE}" stroke-width="2.1" ${expertStroke}/>`;
-  if (hres) s += `<path d="${pathOf(hres)}" fill="none" stroke="${C_RED}" stroke-width="2.3" ${expertStroke}/>`;
+  const hasHres = hres?.some(Number.isFinite);
+  if (hasHres) s += `<path d="${pathOf(hres)}" fill="none" stroke="${C_RED}" stroke-width="2.3" ${expertStroke}/>`;
 
   if (refLines) {
     for (const rl of refLines) {
@@ -763,7 +777,7 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p50, mean, yMin, yM
 
   const legY = oy + PANEL_H - 51;
   const legItems = [
-    {color:C_RED,    w:2.3,  dash:null,   txt:"Oper. (HRES)"},
+    ...(hasHres ? [{color:C_RED, w:2.3, dash:null, txt:"Oper. (HRES)"}] : []),
     {color:C_BLUE,   w:2.1,  dash:null,   txt:"Controle"},
     {color:C_GREEN,  w:0.75, dash:null,   txt:"Verstoorde leden"},
     {color:C_BLACK,  w:2,    dash:"3 5",  txt:"gemiddelde"},
@@ -814,7 +828,7 @@ function buildPageSvg(model) {
   let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PAGE_W} ${PAGE_H}" font-family="Arial, sans-serif">`;
   s += `<rect x="0" y="0" width="${PAGE_W}" height="${PAGE_H}" fill="#ffffff"/>`;
   s += `<text x="${PAGE_W/2}" y="60" font-size="42" font-weight="700" text-anchor="middle" fill="#1a1a1a">Ensemble pluim ${model.station}</text>`;
-  s += `<text x="${PAGE_W/2}" y="92" font-size="22" text-anchor="middle" fill="#555">ECMWF IFS-ENS · ${model.nMembers} verstoorde leden + Controle (${model.nStatsMembers} berekeningen) + exacte HRES · ENS-run ${model.runLabel}${model.coverageLabel ? ` · ${model.coverageLabel}` : ''}</text>`;
+  s += `<text x="${PAGE_W/2}" y="92" font-size="22" text-anchor="middle" fill="#555">ECMWF IFS-ENS · ${model.nMembers} verstoorde leden + Controle (${model.nStatsMembers} berekeningen) · ${model.hresStatus} · ENS-run ${model.runLabel}${model.coverageLabel ? ` · ${model.coverageLabel}` : ''}</text>`;
 
   for (let i=0; i<model.panels.length; i++) {
     const r = Math.floor(i/COLS), c = i%COLS;
@@ -822,7 +836,7 @@ function buildPageSvg(model) {
     const oy = PAGE_HEADER_H + PAGE_MARGIN_X + r*(PANEL_H+PANEL_GAP);
     s += buildPanelSvg({ ox, oy, station: model.station, datumTxt: model.datumTxt, runLabel: model.runLabel, footLeft: model.footLeft, footRight: model.footRight, nDays: model.nDays, times: model.times, ...model.panels[i] });
   }
-  s += `<text x="${PAGE_W/2}" y="${PAGE_H-15}" font-size="16" text-anchor="middle" fill="#777" font-style="italic">© Weerlab.nl · ECMWF IFS-ENS + aparte IFS HRES · UTC-modeltijden · A4 landscape</text>`;
+  s += `<text x="${PAGE_W/2}" y="${PAGE_H-15}" font-size="16" text-anchor="middle" fill="#777" font-style="italic">© Weerlab.nl · ECMWF IFS-ENS · UTC-modeltijden · A4 landscape</text>`;
   s += `</svg>`;
   return s;
 }
@@ -887,7 +901,7 @@ async function renderCurrentPlume(force = false, edgeFresh = false) {
     document.getElementById('pngTot').value = model.nDays;
 
     document.getElementById('hdrDatum').textContent = model.datumTxt.charAt(0).toUpperCase() + model.datumTxt.slice(1);
-    document.getElementById('hdrRun').textContent = `ENS-run ${model.runLabel} · ${model.nMembers} verstoorde leden · ${model.nStatsMembers} berekeningen incl. controle · ${rm.detail}`;
+    document.getElementById('hdrRun').textContent = `ENS-run ${model.runLabel} · ${model.nMembers} verstoorde leden · ${model.nStatsMembers} berekeningen incl. controle · ${model.hresStatus} · ${rm.detail}`;
     document.getElementById('runinfo').textContent = `ENS-run: ${model.runLabel} · ${rm.detail} · ${currentStation.name} (${currentStation.lat.toFixed(3)}, ${currentStation.lon.toFixed(3)})`;
     loader.classList.add('verborgen');
   } catch (e) {
@@ -918,7 +932,7 @@ function buildModel(ens, hres, mosmix = null) {
     rain: ensembleVariable(hourly, 'precipitation'),
     snowfall: optionalEnsembleVariable(hourly, 'snowfall', unavailable),
   };
-  const window = completeMemberWindow(times, Object.values(raw).filter(Boolean).map(variable => variable.statistics));
+  const window = completeMemberWindow(times, [raw.temp.statistics, raw.wind.statistics, raw.rain.statistics]);
   if (window.first !== 0 || window.lastExclusive !== times.length) {
     throw new Error('De gekozen ECMWF-run is nog niet volledig geladen voor alle beschikbare panelen; er wordt geen gedeeltelijke pluim getoond');
   }
@@ -939,7 +953,7 @@ function buildModel(ens, hres, mosmix = null) {
 
   const hr = hres?.hourly || {};
   const hresTimes = (hr.time || []).map(t => new Date(t));
-  if (!hresTimes.length || hresTimes.some(time => !Number.isFinite(time.getTime()))) {
+  if (hres && (!hresTimes.length || hresTimes.some(time => !Number.isFinite(time.getTime())))) {
     throw new Error('HRES bevat geen geldige UTC-tijdas');
   }
   const alignedHres = key => alignSeries(useTimes, hresTimes, fillNaN(hr[key] || []));
@@ -1027,6 +1041,7 @@ function buildModel(ens, hres, mosmix = null) {
     station: currentStation.name,
     nMembers: temp.perturbed.length,
     nStatsMembers: temp.statistics.length,
+    hresStatus: hres ? "exacte HRES" : "HRES niet beschikbaar",
     datumTxt, runLabel,
     footLeft: `Weerlab.nl ${todayStr}, gegenereerd op basis van ECMWF`,
     footRight: `Bron: ECMWF IFS-ENS`,
