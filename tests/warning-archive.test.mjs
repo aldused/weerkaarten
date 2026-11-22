@@ -39,3 +39,19 @@ assert.equal(phenomenonGroup({phenomenon:'Gladheid & sneeuw'}),'Gladheid / sneeu
 assert.equal(phenomenonGroup({phenomenon:'Zware onweersbuien met windstoten'}),'Onweersbuien');
 assert.equal(phenomenonGroup({phenomenon:'Zeer zware windstoten door storm Poly'}),'Windstoten');
 console.log('Maandtellingen: landelijke waarschuwingen, kleurwissels, maandgrenzen en oude perioden gecontroleerd');
+
+const {namedRegions, geometryPath, mapSelection} = await import('../waarschuwingen-archief-kaart.mjs');
+assert.deepEqual(namedRegions(['Groningen, Friesland en Drenthe']), ['Groningen','Fryslân','Drenthe']);
+assert.deepEqual(namedRegions(['Hele land met uitzondering van Gelderland, Noord-Brabant en Limburg.']), ['Groningen','Fryslân','Drenthe','Overijssel','Flevoland','Utrecht','Noord-Holland','Zuid-Holland','Zeeland','Waddeneilanden']);
+assert.ok(!namedRegions(['Alle provincies (niet de Waddeneilanden)']).includes('Waddeneilanden'));
+assert.ok(!namedRegions(['Het hele land m.u.v. het Waddengebied']).includes('Waddeneilanden'));
+assert.deepEqual(namedRegions(['Niet vermeld door KNMI']), []);
+assert.deepEqual(namedRegions(['Overige provincies']), []);
+assert.deepEqual(namedRegions(['Waddenzee']), [], 'de zee impliceert geen eilanden');
+const polygon = {type:'Polygon',coordinates:[[[4,52],[5,52],[5,53],[4,52]],[[4.2,52.2],[4.3,52.2],[4.3,52.3],[4.2,52.2]]]};
+assert.equal((geometryPath(polygon).match(/M/g)||[]).length,2,'gaten in polygonen blijven afzonderlijke ringen');
+assert.equal((geometryPath({type:'MultiPolygon',coordinates:[polygon.coordinates,polygon.coordinates]}).match(/Z/g)||[]).length,4);
+assert.throws(()=>geometryPath({type:'Point',coordinates:[4,52]}));
+assert.deepEqual(mapSelection({geometry:polygon,codes:['geel'],areas:['Delen van Utrecht']}),{exact:true,regions:[],ambiguous:false});
+assert.equal(mapSelection({codes:['oranje','rood'],areas:['Groningen']} ).ambiguous,true,'geen hoogste kleur op alle provincies projecteren');
+console.log('Archiefkaarten: provincies, uitzonderingen, ontbrekende gebieden, kleurverdeling en polygoongaten gecontroleerd');

@@ -46,6 +46,24 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(record['status'], 'cancelled')
         self.assertEqual(len(record['revisions']), 2)
 
+    def test_map_boundaries_and_revisions_are_preserved(self):
+        doc = publication()
+        first = doc['warnings'][0]['parts'][0]
+        record = snapshot_records(doc)[0]
+        self.assertEqual(record['geometry']['coordinates'], first['area']['coordinates'])
+        later = copy.deepcopy(doc)
+        later['metadata']['generated_at'] = '2026-11-10T10:00:00Z'
+        part = later['warnings'][0]['parts'][0]
+        part['version_dt'] = '2026-11-10T10:00:00Z'
+        part['area'] = {'type':'Polygon', 'coordinates':[[[4,52],[5,52],[5,53],[4,52]]]}
+        record = next(r for r in public_history([doc, later]) if r['part_id'] == first['part_uuid'])
+        self.assertEqual(record['geometry'], part['area'])
+        self.assertEqual(record['revisions'][0]['geometry']['coordinates'], first['area']['coordinates'])
+        self.assertEqual(record['revisions'][1]['geometry'], part['area'])
+        broken = copy.deepcopy(doc)
+        broken['warnings'][0]['parts'][0]['area']['coordinates'] = [[[4,52],[5,52],[5,53],[4,51]]]
+        with self.assertRaises(ValueError): snapshot_records(broken)
+
     def test_conflicting_colors_and_counts_fail(self):
         doc = publication(); doc['num_warnings'] += 1
         with self.assertRaises(ValueError): snapshot_records(doc)

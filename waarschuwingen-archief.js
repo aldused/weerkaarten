@@ -125,9 +125,24 @@ function recordCard(record) {
   const shortReason = record.headline && fold(record.headline) !== fold(record.phenomenon) ? record.headline : record.description;
   if (shortReason) reason.append(el('small', 'reason-text', shortReason));
   const area = el('div', 'record-area', record.areas.join(' · '));
-  area.append(el('small', '', 'Toelichting en bron bekijken'));
+  area.append(el('small', '', 'Kaart, toelichting en bron bekijken'));
   grid.append(day, codes, reason, area); summary.append(grid);
   const detail = el('div', 'record-detail');
+  const mapHost = el('section', 'archive-map');
+  detail.append(mapHost);
+  let mapLoaded = false;
+  box.addEventListener('toggle', async () => {
+    if (!box.open || mapLoaded) return;
+    mapLoaded = true;
+    mapHost.textContent = 'Waarschuwingskaart laden…';
+    try {
+      const {renderWarningMap} = await import('./waarschuwingen-archief-kaart.mjs?v=20261122-1');
+      await renderWarningMap(mapHost, record);
+    } catch {
+      mapLoaded = false;
+      mapHost.textContent = 'De kaart kon niet worden geladen. Sluit en open deze melding om opnieuw te proberen. De gebiedsbeschrijving staat hieronder.';
+    }
+  });
   detail.append(el('h4', '', record.headline));
   for (const text of [record.description, record.detail]) if (text) detail.append(el('p', '', text));
   for (const [title, text] of [['Mogelijke gevolgen', record.impact], ['Advies van het KNMI', record.instruction]]) {

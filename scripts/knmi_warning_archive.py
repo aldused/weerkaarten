@@ -21,7 +21,7 @@ from urllib.parse import quote, urlencode
 from urllib.error import HTTPError
 
 from knmi_public_warnings import (API, COLORS, PHENOMENA,
-                                  SEVERITIES, api_json, read_json, timestamp, validate)
+                                  SEVERITIES, api_json, geometry, read_json, timestamp, validate)
 
 CUTOVER = '2026-11-02T00:00:00Z'
 LEGACY_API = 'https://api.dataplatform.knmi.nl/open-data/v1/datasets/waarschuwingen_nederland_48h/versions/1.0'
@@ -85,7 +85,8 @@ def snapshot_records(snapshot):
                 'phenomenon': PHENOMENA[warning['phenomenon']],
                 'headline': texts['headline'], 'description': texts['description'],
                 'detail': texts.get('detailed_description') or '',
-                'areas': [area], 'onset': part['onset'], 'expires': part['expires'],
+                'areas': [area], 'geometry': geometry(part['area']),
+                'onset': part['onset'], 'expires': part['expires'],
                 'issued': part['version_dt'], 'observed': meta['generated_at'],
                 'status': warning['status'] if warning.get('status', 'active') != 'active' else part.get('status', 'active'),
                 'impact': guidance.get('impact') or '', 'instruction': guidance.get('instruction') or '',
@@ -101,7 +102,7 @@ def public_history(snapshots):
             previous = records.get(record['id'])
             first = previous['issued'] if previous else record['issued']
             history = previous.get('revisions', []) if previous else []
-            revision = {k: record[k] for k in ('issued', 'onset', 'expires', 'headline', 'areas', 'status')}
+            revision = {k: record[k] for k in ('issued', 'onset', 'expires', 'headline', 'areas', 'status', 'geometry')}
             if not history or history[-1] != revision:
                 history = [*history, revision]
             records[record['id']] = {**record, 'issued': min(first, record['issued']),

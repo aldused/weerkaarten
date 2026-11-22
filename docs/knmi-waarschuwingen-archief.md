@@ -68,3 +68,24 @@ geen exact aantal uitgiftes. Onvolledige gele dekking krijgt *; ontbreken zonder
 waarnemingen krijgt —, nooit een schijnbaar volledig nulaantal. Toekomstige
 maanden krijgen eveneens —. Fenomeen-, kleur- en zoekfilters gelden voor de
 tellingen en de lijst. Het jaaroverzicht vergelijkt alle twaalf maanden.
+
+## Kaarten bij archiefmeldingen
+
+Een melding uitklappen laadt een lokale SVG-kaart met het geselecteerde gebied.
+`waarschuwingen-archief-kaart.mjs` en de compacte
+`waarschuwingen-archief-basiskaart.json` worden gedeeld en pas bij openen geladen.
+De ondergrond gebruikt de bestaande provinciegeometrie zonder Waddeneilanden in
+Noord-Holland/Fryslân; eilanden blijven een afzonderlijk gebied. Het IJsselmeer
+komt uit de bestaande merenondergrond. Geen externe kaartdienst of bibliotheek.
+
+Nieuwe KNMI-gebiedswaarschuwingen bewaren `geometry` in het record én elke revisie.
+De kaart begint bij de laatst vastgelegde versie; bij meerdere uitgiftes is de
+kaartversie selecteerbaar. Geometrie wordt met de bestaande KNMI-validator
+gecontroleerd. Bestaande snapshots kunnen offline opnieuw verwerkt worden.
+
+Oudere meldingen worden uitsluitend op de expliciete gebiedstekst getekend.
+Landelijke uitzonderingen worden afgetrokken. Dit is als reconstructie benoemd;
+voor Waddenzee of onbekende gebieden wordt geen grens verzonnen. Bij meerdere
+kleurcodes zonder gebiedsverdeling toont de kaart neutrale arcering. Grijs is
+alleen buiten de geselecteerde melding, nooit bewijs voor afwezigheid van andere
+waarschuwingen op dat tijdstip. Ingetrokken meldingen behouden hun historische kaart.
