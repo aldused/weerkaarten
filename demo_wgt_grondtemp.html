@@ -278,9 +278,11 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 @media (hover:none){ .kaart-hint{display:none} }
 /* Houd plaatsdetails bereikbaar onder de extremummarkering. */
 #gLaagst, #gFocus { pointer-events: none; }
-#svg:hover #gLaagst { visibility: hidden; }
+
 </style>
-<link rel="stylesheet" href="temperature-overview.css?v=20261122-kaart800">
+<link rel="stylesheet" href="temperature-overview.css?v=20261122-verfijning1">
+<script src="temperature-map-core.js?v=20261122-1"></script>
+<script src="temperature-map-ui.js?v=20261122-1"></script>
 </head>
 <body>
 <div class="wrap">
@@ -312,13 +314,14 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
     </div>
     <details class="extra-controls"><summary>Extra kaartlagen en weergave</summary><div class="extra-inner"><div class="seg" id="extraLagen" role="group" aria-label="Extra kaartlagen">      <button type="button" data-l="t2" aria-pressed="false">T 2 m</button>
       <button type="button" data-l="diff" aria-pressed="false">T10 − T2</button>
-      <button type="button" data-l="sigma" aria-pressed="false">Onzekerheid</button>
+      <button type="button" data-l="nsigma" aria-pressed="false">Onzekerheid minimum 10 cm</button>
+      <button type="button" data-l="sigma" aria-pressed="false">Onzekerheid uur 10 cm</button>
       <button type="button" data-l="bodem" aria-pressed="false">Bodemsoort</button>
       <button type="button" data-l="vocht" aria-pressed="false">Bodemvocht</button>
 </div>    <label class="chk"><input type="checkbox" id="isoChk"> Lijnen 0 / −2 / −5 °C</label>
     <label class="chk"><input type="checkbox" id="laagChk" checked> Laagste waarde</label>
     <label class="chk"><input type="checkbox" id="waardenChk" checked> Waarden op kaart</label>
-    <label class="chk"><input type="checkbox" id="stChk"> Metingen 10 cm (nu)</label>
+    <label class="chk"><input type="checkbox" id="stChk"> Actuele metingen 10 cm</label>
 </div></details>
   </div>
 
@@ -490,7 +493,7 @@ $("regio").onchange = () => {
 };
 
 // ---------- kleurschalen ----------
-const TEMP = [[-12,"#084594"],[-9,"#1565c0"],[-6,"#1e88e5"],[-3,"#42a5f5"],[-1,"#90caf9"],[0,"#b2dfdb"],[3,"#2e8b57"],[6,"#66bb6a"],[9,"#cddc39"],[12,"#ffeb3b"],[15,"#fbc02d"],[18,"#f57f17"],[21,"#ef6c00"],[25,"#d84315"],[30,"#8e1b0e"]];
+const TEMP = TemperatureMap.temperatureStops;
 const DIFF = [[-6,"#08306b"],[-4,"#2171b5"],[-2,"#6baed6"],[-0.5,"#deebf7"],[0,"#f7f7f7"],[0.5,"#fde0d2"],[2,"#f4a582"],[4,"#d6604d"],[6,"#8e1b0e"]];
 const KANS = [[0,"#f8fafc"],[5,"#ede9fe"],[15,"#ddd6fe"],[30,"#c4b5fd"],[50,"#8b5cf6"],[70,"#6d28d9"],[90,"#4c1d95"],[100,"#2e1065"]];
 const SIGMA = [[0.3,"#ecfdf5"],[0.8,"#a7f3d0"],[1.2,"#fde68a"],[1.8,"#fb923c"],[2.5,"#dc2626"],[3.5,"#7f1d1d"]];
@@ -509,14 +512,14 @@ function maakLut(stops, lo, hi, n = 512) {
   }
   return {lut, lo, hi, n, stops};
 }
-const LUT = {temp: maakLut(TEMP, -12, 30), diff: maakLut(DIFF, -6, 6), kans: maakLut(KANS, 0, 100), sigma: maakLut(SIGMA, 0.3, 3.5), vocht: maakLut(VOCHT, 0, 100)};
+const LUT = {temp: maakLut(TEMP, -20, 45), diff: maakLut(DIFF, -6, 6), kans: maakLut(KANS, 0, 100), sigma: maakLut(SIGMA, 0.3, 3.5), vocht: maakLut(VOCHT, 0, 100)};
 
 // ---------- data ----------
 let D = null, C = 0, NY = 0, NX = 0, NT = 0, cellVan = null, naast = null, ll = null;
 const staat = {auto: true, modellen: false, laag: "nmin", ti: 0, ni: 0, drempel: 0, vast: null, hov: null};
 function dec(b64, T) { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new T(u.buffer); }
 const i2 = b => dec(b, Int16Array), u1 = b => dec(b, Uint8Array);
-const v16 = x => x === -32768 ? NaN : x / 10;
+const v16 = TemperatureMap.decode16;
 
 async function laad() {
   try {
@@ -582,7 +585,7 @@ function bouwTijd() {
   const perDag = new Map();
   D.tijden.forEach((t, i) => { const k = dagKey.format(t); if (!perDag.has(k)) perDag.set(k, []); perDag.get(k).push(i); });
   staat.perDag = perDag;
-  const nachtLaag = (staat.laag === "nmin" || staat.laag === "tn") || staat.laag === "kans";
+  const nachtLaag = ["nmin","tn","kans","nsigma"].includes(staat.laag);
   const statisch = staat.laag === "bodem" || staat.laag === "vocht";
   $("tijdPaneel").hidden = statisch;
   if (nachtLaag) {
@@ -618,14 +621,14 @@ function bouwTijd() {
 function el2(tag, attrs, parent) { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; }
 function tijdInfo() {
   const a = new Date(D.j.analyse_utc);
-  if ((staat.laag === "nmin" || staat.laag === "tn") || staat.laag === "kans") {
+  if (["nmin","tn","kans","nsigma"].includes(staat.laag)) {
     const n = D.nachten[staat.ni];
     $("tijdInfo").innerHTML = staat.laag === "tn" && n ? `Nacht ${dagFmt.format(new Date(n.start))} 18.00 → ${dagFmt.format(new Date(n.eind))} 09.00 · afzonderlijk berekend luchtminimum (TN-nacht-MOS)` : n ? `Minimum over <b>${dagFmt.format(new Date(n.start))} 18.00 → ${dagFmt.format(new Date(n.eind))} 09.00</b> (lokale tijd) · afzonderlijk berekend grasminimum (T10-nacht-MOS)` : "";
   } else {
     const t = D.tijden[staat.ti]; const lead = Math.round((t - a) / 36e5);
     $("tijdInfo").innerHTML = `<b>${dagFmt.format(t)} ${uurFmt.format(t)}</b> uur (lokale tijd) · +${lead} u na analyse ${uurFmt.format(a)}`;
   }
-  if (D.nachten[staat.ni]?.buiten_training && ['nmin','tn','kans'].includes(staat.laag)) $('tijdInfo').innerHTML += ' · <b>Indicatief: buiten het geverifieerde bereik van circa 60 uur</b>';
+  if (D.nachten[staat.ni]?.buiten_training && ['nmin','tn','kans','nsigma'].includes(staat.laag)) $('tijdInfo').innerHTML += ' · <b>Indicatief: buiten het geverifieerde bereik van circa 60 uur</b>';
   const c = laagsteCel();
   if (c >= 0 && staat.laag !== "diff") $("tijdInfo").innerHTML += ` · ${staat.laag === "kans" ? "hoogste kans" : "laagste"}: <b>${labelTekst(staat.laag, waarde(c)).replace("°", " °C")}</b> bij ${D.plaats[c]}`;
 }
@@ -638,14 +641,15 @@ function waarde(c) {
     case "t2": return v16(D.t2[o]);
     case "diff": return v16(D.t10[o]) - v16(D.t2[o]);
     case "sigma": return v16(D.sigma[o]);
+    case "nsigma": return n ? v16(n.sigma[c]) : NaN;
     case "tn": return n ? v16(n.tn[c]) : NaN;
     case "nmin": return n ? v16(n.t10min[c]) : NaN;
     case "kans": { const p = n ? (staat.drempel === 0 ? n.p0[c] : n.pm2[c]) : 255; return p <= 100 ? p : NaN; }
-    case "vocht": return D.vocht[c];
-    case "bodem": return D.bodem[c];
+    case "vocht": return D.vocht[c] <= 100 ? D.vocht[c] : NaN;
+    case "bodem": return BODEM_KL[D.klassen[D.bodem[c]]] ? D.bodem[c] : NaN;
   }
 }
-const lutVan = L => ({t10: LUT.temp, t2: LUT.temp, tn: LUT.temp, nmin: LUT.temp, diff: LUT.diff, kans: LUT.kans, sigma: LUT.sigma, vocht: LUT.vocht})[L];
+const lutVan = L => ({t10: LUT.temp, t2: LUT.temp, tn: LUT.temp, nmin: LUT.temp, diff: LUT.diff, kans: LUT.kans, sigma: LUT.sigma, nsigma: LUT.sigma, vocht: LUT.vocht})[L];
 
 // ---------- veld tekenen: bilineair opgeschaald, pixel-uitgelijnd op het rooster ----------
 const UP = 6;
@@ -662,7 +666,8 @@ function teken() {
     for (let py = 0; py < Hc; py++) for (let px = 0; px < Wc; px++) {
       const iy = NY - 1 - Math.floor(py / UP), ix = Math.floor(px / UP); const c = naast[iy * NX + ix];
       const o = (py * Wc + px) * 4; if (c < 0) continue;
-      const [r, gg, b] = hex2rgb(BODEM_KL[kl[D.bodem[c]]][1]); img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = b; img.data[o + 3] = 235;
+      const category=BODEM_KL[kl[D.bodem[c]]]; if (!category) continue;
+      const [r, gg, b] = hex2rgb(category[1]); img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = b; img.data[o + 3] = 255;
     }
   } else {
     const lu = lutVan(L);
@@ -671,11 +676,10 @@ function teken() {
       for (let px = 0; px < Wc; px++) {
         const fx = (px + 0.5) / UP - 0.5; const x0 = Math.max(0, Math.min(NX - 2, Math.floor(fx))); const tx = Math.min(1, Math.max(0, fx - x0));
         const a = vals[y0 * NX + x0], b = vals[y0 * NX + x0 + 1], c2 = vals[(y0 + 1) * NX + x0], d = vals[(y0 + 1) * NX + x0 + 1];
-        let v;
-        if (isFinite(a) && isFinite(b) && isFinite(c2) && isFinite(d)) v = (a * (1 - tx) + b * tx) * (1 - ty) + (c2 * (1 - tx) + d * tx) * ty;
-        else { const arr = [a, b, c2, d].filter(isFinite); if (!arr.length) continue; v = arr.reduce((s, x) => s + x, 0) / arr.length; }
+        const v = TemperatureMap.interpolate(a,b,c2,d,tx,ty);
+        if (!Number.isFinite(v)) continue;
         const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1))));
-        const o = (py * Wc + px) * 4; img.data[o] = lu.lut[k * 3]; img.data[o + 1] = lu.lut[k * 3 + 1]; img.data[o + 2] = lu.lut[k * 3 + 2]; img.data[o + 3] = 235;
+        const o = (py * Wc + px) * 4; img.data[o] = lu.lut[k * 3]; img.data[o + 1] = lu.lut[k * 3 + 1]; img.data[o + 2] = lu.lut[k * 3 + 2]; img.data[o + 3] = 255;
       }
     }
   }
@@ -684,7 +688,7 @@ function teken() {
   const im = $("veld"); im.setAttribute("href", doek.toDataURL()); im.setAttribute("x", x0); im.setAttribute("y", y0);
   im.setAttribute("width", x1 - x0); im.setAttribute("height", y1 - y0);
   im.style.imageRendering = L === "bodem" ? "pixelated" : "auto";
-  isolijnen(vals); waardenOpKaart(); laagste(); stations(); legenda(); titels(); tijdInfo(); topHoofd(); kpis(); werkGrafiek(); document.querySelectorAll("#drieGrid .mini").forEach((e,i)=>e.setAttribute("aria-pressed",String(i===staat.ni)));
+  isolijnen(vals); laagste(); waardenOpKaart(); stations(); legenda(); titels(); tijdInfo(); topHoofd(); kpis(); werkGrafiek(); document.querySelectorAll("#drieGrid .mini").forEach((e,i)=>e.setAttribute("aria-pressed",String(i===staat.ni)));
 }
 
 // ---------- rasterbeeld voor willekeurige celwaarden (ook voor de minikaartjes) ----------
@@ -697,21 +701,14 @@ function rasterUrl(fn, lu) {
     for (let px = 0; px < Wc; px++) { const fx = (px + .5) / 4 - .5; const x0 = Math.max(0, Math.min(NX - 2, Math.floor(fx))), tx = Math.min(1, Math.max(0, fx - x0));
       const a = vals[y0 * NX + x0], b = vals[y0 * NX + x0 + 1], c = vals[(y0 + 1) * NX + x0], d = vals[(y0 + 1) * NX + x0 + 1];
       const arr = [a, b, c, d]; if (!arr.every(isFinite)) { const f = arr.filter(isFinite); if (!f.length) continue; }
-      const v = arr.every(isFinite) ? (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty : arr.filter(isFinite).reduce((s, x) => s + x, 0) / arr.filter(isFinite).length;
+      const v = TemperatureMap.interpolate(a,b,c,d,tx,ty); if (!Number.isFinite(v)) continue;
       const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)))); const o = (py * Wc + px) * 4;
-      im.data[o] = lu.lut[k * 3]; im.data[o + 1] = lu.lut[k * 3 + 1]; im.data[o + 2] = lu.lut[k * 3 + 2]; im.data[o + 3] = 235; } }
+      im.data[o] = lu.lut[k * 3]; im.data[o + 1] = lu.lut[k * 3 + 1]; im.data[o + 2] = lu.lut[k * 3 + 2]; im.data[o + 3] = 255; } }
   cx.putImageData(im, 0, 0); return {url: c2.toDataURL(), vals};
 }
-function isoPad(vals, lv) {
-  const g = D.j.rooster; const P = (iy, ix) => xy(g.lon0 + ix * g.dlon, g.lat0 + iy * g.dlat); let d = "";
-  for (let y = 0; y < NY - 1; y++) for (let x = 0; x < NX - 1; x++) {
-    const v = [vals[y * NX + x], vals[y * NX + x + 1], vals[(y + 1) * NX + x + 1], vals[(y + 1) * NX + x]]; if (!v.every(isFinite)) continue;
-    const hk = [[y, x], [y, x + 1], [y + 1, x + 1], [y + 1, x]]; const pts = [];
-    for (let e = 0; e < 4; e++) { const a = v[e], b = v[(e + 1) % 4]; if ((a < lv) === (b < lv)) continue; const f = (lv - a) / (b - a);
-      const [ya, xa] = hk[e], [yb, xb] = hk[(e + 1) % 4]; pts.push(P(ya + (yb - ya) * f, xa + (xb - xa) * f)); }
-    for (let k = 0; k + 1 < pts.length; k += 2) d += `M${pts[k][0].toFixed(1)},${pts[k][1].toFixed(1)}L${pts[k + 1][0].toFixed(1)},${pts[k + 1][1].toFixed(1)}`;
-  }
-  return d;
+function isoPad(vals,lv) {
+  const g=D.j.rooster;
+  return TemperatureMap.contourPath(vals,NX,NY,lv,(iy,ix)=>xy(g.lon0+ix*g.dlon,g.lat0+iy*g.dlat));
 }
 // Vaste terugval (alleen als het bestand ooit geen stationslijst meelevert): 13 grote plaatsen.
 const PLAATSEN_TERUGVAL = [["Groningen", 53.22, 6.57], ["Leeuwarden", 53.20, 5.79], ["Den Helder", 52.93, 4.78], ["Zwolle", 52.51, 6.09], ["Enschede", 52.22, 6.89],
@@ -816,24 +813,9 @@ function plaatsTabel() {
 // ---------- isolijnen 0 / −2 / −5 (marching squares op het rooster) ----------
 function isolijnen(vals) {
   const gI = $("gIso"); gI.innerHTML = "";
-  if (!$("isoChk").checked || !["t10", "nmin", "tn"].includes(staat.laag)) return;
-  const g = D.j.rooster;
-  const P = (iy, ix) => xy(g.lon0 + ix * g.dlon, g.lat0 + iy * g.dlat);
-  [[0, "iso0"], [-2, "iso2"], [-5, "iso5"]].forEach(([lv, cls]) => {
-    let d = "";
-    for (let y = 0; y < NY - 1; y++) for (let x = 0; x < NX - 1; x++) {
-      const v = [vals[y * NX + x], vals[y * NX + x + 1], vals[(y + 1) * NX + x + 1], vals[(y + 1) * NX + x]];
-      if (!v.every(isFinite)) continue;
-      const hoek = [[y, x], [y, x + 1], [y + 1, x + 1], [y + 1, x]];
-      const pts = [];
-      for (let e = 0; e < 4; e++) {
-        const a = v[e], b = v[(e + 1) % 4]; if ((a < lv) === (b < lv)) continue;
-        const f = (lv - a) / (b - a); const [ya, xa] = hoek[e], [yb, xb] = hoek[(e + 1) % 4];
-        pts.push(P(ya + (yb - ya) * f, xa + (xb - xa) * f));
-      }
-      for (let k = 0; k + 1 < pts.length; k += 2) d += `M${pts[k][0].toFixed(1)},${pts[k][1].toFixed(1)}L${pts[k + 1][0].toFixed(1)},${pts[k + 1][1].toFixed(1)}`;
-    }
-    if (d) el("path", {d, class: "iso " + cls}, gI);
+  if (!$("isoChk").checked || !["t10", "t2", "nmin", "tn"].includes(staat.laag)) return;
+  [[0,'iso0'],[-2,'iso2'],[-5,'iso5']].forEach(([lv,cls])=>{
+    const d=isoPad(vals,lv);if(d)el('path',{d,class:'iso '+cls},gI);
   });
 }
 
@@ -846,20 +828,16 @@ const KAARTPLAATSEN = [["Delfzijl",53.33,6.92],["Groningen",53.22,6.57],["Leeuwa
   ["Den Bosch",51.69,5.30],["Eindhoven",51.44,5.48],["Venlo",51.37,6.17],["Terneuzen",51.33,3.83],["Weert",51.25,5.71],["Roermond",51.19,5.99],["Maastricht",50.85,5.69]];
 let plaatsCel = null;
 const numLaag = () => !["bodem"].includes(staat.laag);
-const eenheid = L => ({kans: "%", vocht: "", sigma: "°"})[L] ?? "°";
-function labelTekst(L, v) { return L === "kans" || L === "vocht" ? Math.round(v) + (L === "kans" ? "%" : "") : fmt(v, 1) + "°"; }
+const eenheid = L => ({kans: "%", vocht: "%", sigma: "°", nsigma: "°"})[L] ?? "°";
+function labelTekst(L, v) { return L === "kans" || L === "vocht" ? TemperatureMap.percent(v) : fmt(v, 1) + "°"; }
 function waardenOpKaart() {
-  const g = $("gWaarden"); g.innerHTML = "";
-  if (!$("waardenChk").checked || !numLaag()) return;
-  if (!plaatsCel) plaatsCel = KAARTPLAATSEN.map(([n, la, lo]) => [n, la, lo, celBij(la, lo)]);
-  const placed=[], transform=svg.getScreenCTM(), pixelScale=Math.abs(transform?.a || 1);
-  plaatsCel.forEach(([n, la, lo, c]) => {
-    if (!inGebied(la,lo)) return; const v = waarde(c); if (!isFinite(v)) return; const [x, y] = xy(lo, la);
-    if (placed.some(([a,b])=>Math.hypot(x-a,y-b)*pixelScale<58)) return; placed.push([x,y]);
-    el("circle", {cx: x, cy: y, r: 2.4, class: "wp"}, g);
-    const t = el("text", {x: x + 5, y: y + 4.5, class: "wl"}, g); t.textContent = labelTekst(staat.laag, v);
-  });
+  const group=$('gWaarden');
+  if (!D || !numLaag()) { group.replaceChildren(); return; }
+  if (!plaatsCel) plaatsCel=KAARTPLAATSEN.map(([n,la,lo])=>[n,la,lo,celBij(la,lo)]);
+  TemperatureMapUI.labels({svg,group,places:plaatsCel,value:waarde,
+    format:v=>labelTekst(staat.laag,v),project:xy,inArea:inGebied,bounds:regioBox().split(' ').map(Number)});
 }
+
 function laagsteCel() {
   const L = staat.laag; if (!["t10", "t2", "nmin", "tn", "diff", "kans"].includes(L)) return -1;
   let best = -1, bv = L === "kans" ? -1 : 1e9;
@@ -867,24 +845,20 @@ function laagsteCel() {
   return best;
 }
 function laagste() {
-  const g = $("gLaagst"); g.innerHTML = ""; const c = laagsteCel(); if (c < 0 || !$("laagChk").checked) return;
-  const L = staat.laag, v = waarde(c); const [x, y] = xy(ll[2 * c + 1], ll[2 * c]);
-  el("circle", {cx: x, cy: y, r: 9, class: "ls-ring"}, g);
-  const kop = (L === "kans" ? "Hoogste kans " : L === "diff" ? "Grootste verschil " : "Laagste ") + labelTekst(L, v).replace("°", " °C");
-  const onder = D.plaats[c]; const bw = Math.max(kop.length * 7.4, onder.length * 6.2) + 16, bh = 38;
-  const [vx,vy,vw,vh]=regioBox().split(" ").map(Number);
-  let bx = x + 14, by = y - bh / 2; if (bx + bw > vx+vw - 6) bx = x - 14 - bw; bx=Math.max(vx+6,bx); by = Math.max(vy+6, Math.min(vy+vh - bh - 6, by));
-  el("rect", {x: bx, y: by, width: bw, height: bh, rx: 6, class: "ls-box"}, g);
-  el("text", {x: bx + 8, y: by + 16, class: "ls-txt"}, g).textContent = kop;
-  el("text", {x: bx + 8, y: by + 31, class: "ls-sub"}, g).textContent = onder;
+  const group=$('gLaagst');group.replaceChildren();const c=laagsteCel();if(c<0||!$('laagChk').checked)return;
+  const [x,y]=xy(ll[2*c+1],ll[2*c]);
+  const title=(staat.laag==='kans'?'Hoogste kans ':staat.laag==='diff'?'Grootste verschil ':'Laagste ')+labelTekst(staat.laag,waarde(c)).replace('°',' °C');
+  TemperatureMapUI.extreme({svg,group,x,y,title,name:D.plaats[c],bounds:regioBox().split(' ').map(Number)});
 }
 
 // ---------- stationsmetingen ----------
 function stations() {
   const gS = $("gSt"); gS.innerHTML = "";
-  if (!$("stChk").checked) return;
+  const match = staat.laag === "t10" && Math.abs(+D.tijden[staat.ti]-Date.now()) <= 45*60e3;
+  $("stChk").disabled = !match; $("stChk").title = match ? "Metingen rond het gekozen uur" : "Alleen beschikbaar op de actuele uurkaart op 10 cm";
+  if (!$("stChk").checked || !match) return;
   const lu = LUT.temp;
-  (D.j.waarnemingen || []).filter(s=>inGebied(s.lat,s.lon)).forEach(s => {
+  (D.j.waarnemingen || []).filter(s=>inGebied(s.lat,s.lon) && Number.isFinite(s.tgn) && Math.abs(Date.parse(s.t)-+D.tijden[staat.ti])<=45*60e3).forEach(s => {
     const [x, y] = xy(s.lon, s.lat);
     const k = Math.max(0, Math.min(lu.n - 1, Math.round((s.tgn - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1))));
     el("circle", {cx: x, cy: y, r: 6, class: "st", fill: `rgb(${lu.lut[k * 3]},${lu.lut[k * 3 + 1]},${lu.lut[k * 3 + 2]})`}, gS);
@@ -900,19 +874,11 @@ function legenda() {
     return;
   }
   const lu = lutVan(L);
-  const titel = {t10: "Temperatuur 10 cm (°C)", t2: "Temperatuur 2 m (°C)", tn: "Nachtminimum lucht (°C, TN-nacht-MOS)", nmin: "Nachtminimum 10 cm (°C)", diff: "T10 − T2 (°C)", kans: `Kans op T10 < ${staat.drempel === 0 ? "0" : "−2"} °C (%)`, sigma: "Onzekerheid σ (°C)", vocht: "Bodemvochtindex (0 = zeer droog, 100 = zeer nat)"}[L];
-  const wrap = document.createElement("div"); wrap.className = "leg-balk";
-  const lab = document.createElement("span"); lab.className = "leg-titel"; lab.textContent = titel; wrap.appendChild(lab);
-  const cv = document.createElement("canvas"); cv.width = 256; cv.height = 1; const cx = cv.getContext("2d"); const im = cx.createImageData(256, 1);
-  let lo = lu.lo, hi = lu.hi; if (L === "t10" || L === "t2" || L === "nmin") { lo = -10; hi = 25; }
-  for (let i = 0; i < 256; i++) { const v = lo + (hi - lo) * i / 255; const k = Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)); im.data.set([lu.lut[k * 3], lu.lut[k * 3 + 1], lu.lut[k * 3 + 2], 255], i * 4); }
-  cx.putImageData(im, 0, 0); wrap.appendChild(cv);
-  const ticks = document.createElement("div"); ticks.className = "leg-ticks";
-  const tv = {t10: [-10, -5, -2, 0, 5, 10, 15, 20, 25], t2: [-10, -5, 0, 5, 10, 15, 20, 25], tn: [-10, -5, -2, 0, 5, 10, 15, 20, 25], nmin: [-10, -5, -2, 0, 5, 10, 15, 20, 25], diff: [-6, -4, -2, 0, 2, 4, 6], kans: [0, 10, 30, 50, 70, 90], sigma: [0.5, 1, 1.5, 2, 2.5, 3], vocht: [0, 20, 40, 65, 85, 100]}[L];
-  tv.forEach(v => { const s = document.createElement("span"); s.style.left = (100 * (v - lo) / (hi - lo)) + "%"; s.textContent = fmt(v, L === "sigma" && v % 1 ? 1 : 0); ticks.appendChild(s); });
-  wrap.appendChild(ticks); Lg.appendChild(wrap);
+  const titel = {t10:'Luchttemperatuur op 10 cm boven gras (°C)',t2:'Luchttemperatuur op 2 m (°C)',tn:'Nachtminimum op 2 m (°C)',nmin:'Nachtminimum op 10 cm (°C)',diff:'T10 − T2 (°C)',kans:`Kans op T10 < ${staat.drempel===0?'0':'−2'} °C (%)`,sigma:'Onzekerheid uurverwachting 10 cm · σ (°C)',nsigma:'Onzekerheid nachtminimum 10 cm · σ (°C)',vocht:'Bodemvochtindex (0 = zeer droog, 100 = zeer nat)'}[L];
+  const ticks={diff:[-6,-4,-2,0,2,4,6],kans:[0,20,40,60,80,100],sigma:[.3,1,2,3,3.5],nsigma:[.3,1,2,3,3.5],vocht:[0,20,40,60,80,100]}[L] || TemperatureMap.temperatureTicks;
+  TemperatureMapUI.legend(Lg,lu,titel,ticks,v=>fmt(v,v%1?1:0));
   if (L === "vocht") { const s = document.createElement("span"); s.textContent = "zeer droog < 20 · droog < 40 · normaal < 65 · vochtig < 85 · zeer nat"; Lg.appendChild(s); }
-  if ($("isoChk").checked && (L === "t10" || L === "nmin")) {
+  if ($("isoChk").checked && ["t10","t2","nmin","tn"].includes(L)) {
     const s = document.createElement("span"); s.className = "leg-iso";
     s.innerHTML = `<svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" style="stroke:var(--iso0);stroke-width:2.2"/></svg>0 °C <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" style="stroke:var(--iso2);stroke-width:1.8;stroke-dasharray:7 4"/></svg>−2 °C <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" style="stroke:var(--iso5);stroke-width:1.8;stroke-dasharray:2 3"/></svg>−5 °C`;
     Lg.appendChild(s);
@@ -920,23 +886,28 @@ function legenda() {
 }
 function titels() {
   const L = staat.laag;
+  const airPage=L==='tn';
+  document.title=airPage?'Minimumtemperatuur 2 m · Weerlab':'Gras- en luchttemperatuur · Weerlab';
+  document.querySelector('h1').firstChild.textContent=airPage?'Minimumtemperatuur 2 m ':'Gras- en luchttemperatuur ';
+  document.querySelector('.sub').textContent=airPage?'Minimumtemperatuur op 2 m tussen 18.00 en 09.00 Nederlandse tijd. Afzonderlijke TN-nacht-MOS, getraind op echte KNMI-nachtminima. In de lopende nacht kunnen metingen meetellen.':'Temperatuur boven kort gras en op 2 m, nachtminima en grondvorstkans. Kies een uur of nacht; kaart, ranglijst en verloop volgen dezelfde selectie.';
   const nn = D.nachten[staat.ni];
   const nachtNaam = !nn ? "" : (Date.parse(nn.start) <= Date.now() && Date.parse(nn.eind) > Date.now() ? "lopende nacht" : staat.ni === 0 ? "komende nacht" : "nacht") +
     ` (${dagKort.format(new Date(nn.start))} → ${dagKort.format(new Date(nn.eind))})`;
-  $("kaartTitel").textContent = {t10: "Temperatuur op 10 cm boven gras", tn: "Minimumtemperatuur op 2 m, " + nachtNaam, nmin: "Minimumtemperatuur op 10 cm, " + nachtNaam, kans: "Kans op grondvorst, " + nachtNaam, t2: "Temperatuur op 2 m (modelmix, bijgestuurd)", diff: "Verschil T10 cm − T2 m", sigma: "Onzekerheid van de 10 cm-verwachting", bodem: "Bodemsoort (bovengrond)", vocht: "Bodemvochtindex"}[L];
-  $("kaartSub").textContent = {sigma: "1 σ; 80 %-interval ≈ ± 1,28 σ", kans: staat.drempel === 0 ? "T10 < 0 °C ergens in de nacht" : "T10 < −2 °C ergens in de nacht", bodem: "BRO Bodemkaart V2025-1", vocht: D.j.bodemvocht_bron}[L] || "WGT-MOS";
+  $("kaartTitel").textContent = {t10: "Temperatuur op 10 cm boven gras", tn: "Minimumtemperatuur op 2 m, " + nachtNaam, nmin: "Minimumtemperatuur op 10 cm, " + nachtNaam, kans: "Kans op grondvorst, " + nachtNaam, t2: "Temperatuur op 2 m (modelmix, bijgestuurd)", diff: "Verschil T10 cm − T2 m", sigma: "Onzekerheid van de uurverwachting op 10 cm", nsigma: "Onzekerheid van het nachtminimum op 10 cm", bodem: "Bodemsoort (bovengrond)", vocht: "Bodemvochtindex"}[L];
+  $("kaartSub").textContent = {sigma: "1 σ; modelmatig 80%-interval ≈ ± 1,28 σ", nsigma: "Nachtminimum: 1 σ; 80%-interval ≈ ± 1,28 σ", kans: staat.drempel === 0 ? "T10 < 0 °C ergens in de nacht" : "T10 < −2 °C ergens in de nacht", bodem: "BRO Bodemkaart V2025-1", vocht: D.j.bodemvocht_bron}[L] || "WGT-MOS";
   $("drempelSeg").hidden = L !== "kans";
+  kaartMetadata();
 }
 
 // ---------- tooltip ----------
 const bhKlasse = s => s < 1.0 ? ["hoog", "hoog"] : s < 1.7 ? ["middel", "middel"] : ["laag", "laag"];
 const vochtKl = m => m < 20 ? "zeer droog" : m < 40 ? "droog" : m < 65 ? "normaal" : m < 85 ? "vochtig" : "zeer nat";
 function bodemTekst(c) {
-  const parts = Object.entries(D.frac).map(([k, a]) => [k, a[c]]).filter(([, v]) => v >= 10).sort((a, b) => b[1] - a[1]);
+  const parts = Object.entries(D.frac).map(([k, a]) => [k, a[c]]).filter(([, v]) => v >= 10 && v <= 100).sort((a, b) => b[1] - a[1]);
   return parts.map(([k, v]) => `${BODEM_KORT[k] || k} ${v}%`).join(", ") || "onbekend";
 }
 function tipHtml(c) {
-  const L = staat.laag, nacht = (L === "nmin" || L === "tn") || L === "kans";
+  const L = staat.laag, nacht = ["nmin","tn","kans","nsigma"].includes(L);
   const plaats = D.plaats[c]; const vocht = D.vocht[c];
   let h = `<button class="sluit" aria-label="Sluiten" hidden>×</button><div class="tk2"><b>${plaats}</b></div>`;
   if (L === "tn") return h + `<div class="val"><span class="gr">${fmt(waarde(c))} °C</span><span class="eh">minimum op 2 m</span></div><p>Afzonderlijk nachtminimum (18.00–09.00 Nederlandse tijd), met TN-nacht-MOS getraind op echte KNMI-nachtminima op 1,5 m. De modelinvoer is op 2 m; in de lopende nacht kunnen metingen meetellen.</p>`;
@@ -947,11 +918,11 @@ function tipHtml(c) {
       <div class="val"><span class="gr">${fmt(tm)}°C</span><span class="eh">op 10 cm</span><span class="int">80 %: ${fmt(tm - 1.28 * s)} tot ${fmt(tm + 1.28 * s)}</span></div>
       <dl><dt>Minimum op 10 cm</dt><dd>${fmt(tm)} °C</dd><dt>2 m rond geschat minimumuur</dt><dd>${fmt(v16(n.t2min[c]))} °C</dd>
       <dt>Berekend verschil rond dat uur</dt><dd>${fmt(tm - v16(n.t2min[c]))} °C</dd>
-      <dt>Grondvorstkans (&lt; 0)</dt><dd>${n.p0[c]}%</dd><dt>Kans &lt; −2 °C</dt><dd>${n.pm2[c]}%</dd>
-      <dt>Wind / bewolking</dt><dd>${fmt(v16(n.umin[c]))} m/s · ${n.cmin[c]}%</dd>
+      <dt>Grondvorstkans (&lt; 0)</dt><dd>${TemperatureMap.percent(n.p0[c])}</dd><dt>Kans &lt; −2 °C</dt><dd>${TemperatureMap.percent(n.pm2[c])}</dd>
+      <dt>Wind / bewolking</dt><dd>${fmt(v16(n.umin[c]))} m/s · ${TemperatureMap.percent(n.cmin[c])}</dd>
       <dt>Situatie</dt><dd>${REGIME[D.j.regime_code[n.reg[c]]] || "–"}</dd>
       <dt>Bodem</dt><dd>${bodemTekst(c)}</dd><dt>Bodemvocht</dt><dd>${vochtKl(vocht)} (${vocht})</dd>
-      <dt>Betrouwbaarheid</dt><dd><span class="bh ${bk}">${bl}</span></dd></dl>`;
+      <dt>Foutmarge 10 cm (1 σ)</dt><dd>${fmt(s)} °C</dd></dl>`;
     h += modelBlok(c, n.uur[c], true);
     return h;
   }
@@ -962,15 +933,17 @@ function tipHtml(c) {
       <dt>Neerslag 24 u / 7 d / 30 d</dt><dd>${fmt(v16(D.p24[c]))} / ${fmt(v16(D.p7[c]), 0)} / ${fmt(v16(D.p30[c]), 0)} mm</dd>
       <dt>Hoogte</dt><dd>${fmt(v16(D.hoogte[c]))} m</dd><dt>Afstand tot zee</dt><dd>${fmt(v16(D.zee[c]), 0)} km</dd></dl>`;
   }
+  const hoofd = L === "t2" ? t2 : L === "diff" ? t10-t2 : L === "sigma" ? s : t10;
+  const hoofdNaam = L === "t2" ? "op 2 m" : L === "diff" ? "T10 − T2" : L === "sigma" ? "σ uurwaarde 10 cm" : "op 10 cm";
   h += `<div class="loc">${dagFmt.format(D.tijden[ti])} · ${uurFmt.format(D.tijden[ti])} uur</div>
-    <div class="val"><span class="gr">${fmt(t10)}°C</span><span class="eh">op 10 cm</span><span class="int">80 %: ${fmt(t10 - 1.28 * s)} tot ${fmt(t10 + 1.28 * s)}</span></div>
+    <div class="val"><span class="gr">${fmt(hoofd)}°C</span><span class="eh">${hoofdNaam}</span>${L === "t10" ? `<span class="int">Modelmatig 80 %: ${fmt(t10 - 1.28 * s)} tot ${fmt(t10 + 1.28 * s)}</span>` : ""}</div>
     <dl><dt>Temperatuur op 10 cm</dt><dd>${fmt(t10)} °C</dd><dt>Temperatuur op 2 m</dt><dd>${fmt(t2)} °C</dd>
-    <dt>Verschil op dat moment</dt><dd>${fmt(t10 - t2)} °C</dd><dt>Kans op grondvorst</dt><dd>${D.p0[o]}%</dd>
+    <dt>Verschil op dat moment</dt><dd>${fmt(t10 - t2)} °C</dd><dt>Kans op grondvorst</dt><dd>${TemperatureMap.percent(D.p0[o])}</dd>
     ${(() => { const n = D.nachten.find(n => ti >= n.i0 && ti <= n.i1); return n ? `<dt title="Afzonderlijk nachtminimum uit T10-nacht-MOS">Nachtminimum</dt><dd>${fmt(v16(n.t10min[c]))} °C · ${uurFmt.format(D.tijden[n.uur[c]])}</dd>` : ""; })()}
     <dt>Bodem</dt><dd>${bodemTekst(c)}</dd><dt>Bodemvocht</dt><dd>${vochtKl(vocht)} (${vocht})</dd>
-    <dt>Wind</dt><dd>${fmt(v16(D.u[o]))} m/s</dd><dt>Bewolking (effectief)</dt><dd>${D.c[o]}%</dd>
+    <dt>Wind</dt><dd>${fmt(v16(D.u[o]))} m/s</dd><dt>Bewolking (effectief)</dt><dd>${TemperatureMap.percent(D.c[o])}</dd>
     <dt>Situatie</dt><dd>${REGIME[D.j.regime_code[D.reg[o]]] || "–"}</dd>
-    <dt>Betrouwbaarheid</dt><dd><span class="bh ${bk}">${bl}</span></dd></dl>`;
+    <dt>Foutmarge 10 cm (1 σ)</dt><dd>${fmt(s)} °C</dd></dl>`;
   return h + modelBlok(c, ti, false);
 }
 function modelBlok(c, ti, nacht) {
@@ -1025,7 +998,7 @@ function koudsteGrafiekCel() {
   let best = -1, low = Infinity;
   for (const c of gebiedCellen()) {
     const n = D.nachten[staat.ni];
-    const v = staat.laag === 'tn' ? v16(n?.tn[c]) : ['nmin','kans'].includes(staat.laag) ? v16(n?.t10min[c]) : v16((staat.laag === 't2' ? D.t2 : D.t10)[staat.ti*C+c]);
+    const v = staat.laag === 'tn' ? v16(n?.tn[c]) : ['nmin','kans','nsigma'].includes(staat.laag) ? v16(n?.t10min[c]) : v16((staat.laag === 't2' ? D.t2 : D.t10)[staat.ti*C+c]);
     if (Number.isFinite(v) && v < low) { low = v; best = c; }
   }
   return best;
@@ -1035,9 +1008,9 @@ function werkGrafiek() {
   const c = staat.auto || staat.vast == null ? koudsteGrafiekCel() : staat.vast;
   $('autoKoud').setAttribute('aria-pressed', String(staat.auto));
   if (c < 0) { $('graf').replaceChildren(); $('grafTitel').textContent = 'Geen geldig temperatuurverloop'; return; }
-  grafiek(c);
+  grafiek(c); lokaleKaart(c);
   $('graf').setAttribute('aria-label', 'Temperatuurverloop bij '+D.plaats[c]);
-  $('grafSub').textContent = (staat.auto ? 'Koudste plaats binnen '+gebiedNaam()+' bij de gekozen '+(['nmin','tn','kans'].includes(staat.laag)?'nacht':'uurkaart')+'. ' : 'Zelf gekozen plaats. ')+'10 cm en 2 m per uur; stippen in het midden van elke nacht tonen het afzonderlijke nachtminimum. De foutmarge hoort bij 10 cm.';
+  $('grafSub').textContent = (staat.auto ? 'Koudste plaats binnen '+gebiedNaam()+' bij de gekozen '+(['nmin','tn','kans','nsigma'].includes(staat.laag)?'nacht':'uurkaart')+'. ' : 'Zelf gekozen plaats. ')+'10 cm en 2 m per uur; stippen in het midden van elke nacht tonen het afzonderlijke nachtminimum. De foutmarge hoort bij 10 cm.';
 }
 
 // ---------- grafiek voor gekozen cel ----------
@@ -1070,7 +1043,7 @@ function grafiek(c) {
     el('circle', {cx:X(t), cy:Y(v), r:i===staat.ni?4:2.5, class:'minimum-dot'}, G);
     if (i===staat.ni) { const label=el('text',{x:Math.min(Wg-55,Math.max(ml,X(t)+6)),y:Math.max(mt+10,Y(v)-7),class:'minimum-label'},G); label.textContent=fmt(v)+' °C'; }
   });
-  if (!((staat.laag === "nmin" || staat.laag === "tn") || staat.laag === "kans")) el("line", {x1: X(staat.ti), x2: X(staat.ti), y1: mt, y2: Hg - mb, class: "nu"}, G);
+  if (!(["nmin","tn","kans","nsigma"].includes(staat.laag))) el("line", {x1: X(staat.ti), x2: X(staat.ti), y1: mt, y2: Hg - mb, class: "nu"}, G);
 }
 
 // ---------- samenvatting ----------
@@ -1089,7 +1062,7 @@ function statusEnMeldingen() {
   $("infoRij").innerHTML = `<span>Analyse <b>${dagFmt.format(a)} ${uurFmt.format(a)}</b></span><span>Bijgestuurd met <b>${obs.length}</b> KNMI-stations (gem. ${gb >= 0 ? "+" : ""}${fmt(gb)} °C)</span><span>Bodemvocht: ${j.bodemvocht_bron}</span>`;
 }
 function kpis() {
-  const night = ['nmin','tn','kans'].includes(staat.laag);
+  const night = ['nmin','tn','kans','nsigma'].includes(staat.laag);
   const n = night ? D.nachten[staat.ni] : D.nachten.find(n=>Date.parse(n.eind)>=+D.tijden[staat.ti]) || D.nachten.at(-1);
   const cells = gebiedCellen().filter(c=>Number.isFinite(night ? v16((staat.laag==='tn'?n.tn:n.t10min)[c]) : v16((staat.laag==='t2'?D.t2:D.t10)[staat.ti*C+c])));
   if (!cells.length) { $('kpis').replaceChildren(); return; }
@@ -1103,7 +1076,7 @@ function kpis() {
   const risk=probs.length?Math.round(100*probs.filter(c=>n.p0[c]>=50).reduce((s,c)=>s+area(c),0)/probs.reduce((s,c)=>s+area(c),0)):null;
   $('kpis').innerHTML=card('Koudste · '+(staat.laag==='tn'||staat.laag==='t2'?'lucht':'10 cm'),fmt(val(cold))+'<small> °C</small>',D.plaats[cold]+' · '+when)
     +card('Gemiddelde · '+gebiedNaam(),fmt(mean)+'<small> °C</small>',when)
-    +card('Gebied met vorstkans ≥50%',risk==null?'–':risk+'<small> % van gebied</small>','nacht '+dagKort.format(new Date(n.start))+(n.buiten_training?' · indicatief':''))
+    +card('Gebied met grondvorstkans ≥50%',risk==null?'–':risk+'<small> % van gebied</small>','nacht '+dagKort.format(new Date(n.start))+(n.buiten_training?' · indicatief':''))
     +card('Rekenrooster','5<small> km</small>',night?(n.n_modellen+' modellen · '+(n.buiten_training?'buiten toetsbereik':'nachtselectie')):'uurverwachting · lokale tijd');
 }
 
@@ -1125,9 +1098,12 @@ $("drempelSeg").addEventListener("click", e => { const b = e.target.closest("but
 $("isoChk").onchange = teken; $("stChk").onchange = teken; $("waardenChk").onchange = teken; $("laagChk").onchange = teken;
 $("uitlegBtn").onclick = () => $("uitleg").showModal(); $("uitlegSluit").onclick = () => $("uitleg").close();
 document.addEventListener("keydown", e => {
-  if (!D || e.target.closest("input,dialog")) return;
-  if (e.key === "ArrowRight") { staat.ti = Math.min(NT - 1, staat.ti + 1); bouwTijd(); teken(); }
-  if (e.key === "ArrowLeft") { staat.ti = Math.max(0, staat.ti - 1); bouwTijd(); teken(); }
+  if (!D || e.target.closest("input,select,textarea,button,summary,dialog,[role=button]")) return;
+  if (!['ArrowRight','ArrowLeft'].includes(e.key)) return;
+  e.preventDefault();const delta=e.key==='ArrowRight'?1:-1;
+  if (['nmin','tn','kans','nsigma'].includes(staat.laag)) staat.ni=Math.max(0,Math.min(D.nachten.length-1,staat.ni+delta));
+  else staat.ti=Math.max(0,Math.min(NT-1,staat.ti+delta));
+  bouwTijd();teken();drieNachten();
 });
 if (window.self !== window.top) $("terugLink").hidden = true;
 
@@ -1135,6 +1111,34 @@ $('autoKoud').onclick = () => { staat.auto = true; staat.vast = null; staat.hov 
 $('toonModellen').onchange = e => { staat.modellen = e.target.checked; werkGrafiek(); };
 $('topLijst').addEventListener('keydown', e => { const li = e.target.closest('li[data-c]'); if (li && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); li.click(); } });
 
+const kaartDatum=new Intl.DateTimeFormat('nl-NL',{timeZone:TZ,weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+const isNachtKaart=()=>['nmin','tn','kans','nsigma'].includes(staat.laag);
+function kaartPeriode() {
+  const n=D.nachten[staat.ni];
+  return isNachtKaart() && n ? kaartDatum.format(new Date(n.start))+' – '+kaartDatum.format(new Date(n.eind))
+    : ['bodem','vocht'].includes(staat.laag) ? 'Ondergrond bij analyse '+kaartDatum.format(new Date(D.j.analyse_utc))
+    : kaartDatum.format(D.tijden[staat.ti])+' uur';
+}
+function kaartMetadata() {
+  const range=TemperatureMap.summary(gebiedCellen(),waarde,c=>ll[2*c]), L=staat.laag;
+  TemperatureMapUI.meta({period:kaartPeriode(),created:D.j.gemaakt_utc,indicative:isNachtKaart()&&D.nachten[staat.ni]?.buiten_training,
+    partial:false,coverage:range.coverage,range:L==='bodem'?{}:range,unit:L==='kans'?'%':L==='vocht'?'indexpunten':L==='bodem'?'':'°C',soil:L==='bodem',scale:lutVan(L)});
+}
+function lokaleKaart(c) {
+  const n=D.nachten[staat.ni], night=isNachtKaart(), air=staat.laag==='tn'||staat.laag==='t2';
+  const v=night?v16((air?n.tn:n.t10min)[c]):v16((air?D.t2:D.t10)[staat.ti*C+c]);
+  const sigma=air?NaN:night?v16(n.sigma[c]):v16(D.sigma[staat.ti*C+c]);
+  const details=[['Bodem',bodemTekst(c)],['Bodemvocht',D.vocht[c]<=100?vochtKl(D.vocht[c])+' · index '+D.vocht[c]+'/100':'onbekend']];
+  if(night&&!air)details.push(['Kans op grondvorst',TemperatureMap.percent(n.p0[c])],['Kans op T10 < −2 °C',TemperatureMap.percent(n.pm2[c])]);
+  TemperatureMapUI.location({name:D.plaats[c],value:fmt(v)+' °C',kind:(night?'Nachtminimum':'Uurtemperatuur')+(air?' op 2 m':' op 10 cm boven gras'),
+    interval:Number.isFinite(sigma)?'Modelmatig 80%-interval: '+fmt(v-1.28155*sigma)+' tot '+fmt(v+1.28155*sigma)+' °C':null,details,
+    note:(staat.auto?'Volgt automatisch de koudste roostercel. ':'Zelf gekozen roostercel. ')+
+      (night&&n.buiten_training?'Deze nacht ligt buiten het toetsbereik; de verwachting en marge zijn indicatief. ':'' )+
+      (air?'Er is geen afzonderlijke foutmarge voor dit luchtminimum of deze luchtuurwaarde meegeleverd.':'Bodemfracties en vocht zijn invoer voor de berekening. Lokale verschillen binnen een cel van 5 km blijven mogelijk.')});
+}
+
+TemperatureMapUI.setup(teken);
+new ResizeObserver(()=>{if(D){laagste();waardenOpKaart();}}).observe(svg);
 laad();
 </script>
 </body>
