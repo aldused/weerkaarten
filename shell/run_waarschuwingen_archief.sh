@@ -12,3 +12,9 @@ set -e
 if [ "$status" -eq 3 ]; then exit 0; fi
 if [ "$status" -ne 0 ]; then exit "$status"; fi
 "$REPO_DIR/shell/r2_publish.sh" waarschuwingen-archief.json
+
+# Bijbehorende historische meetkaarten: eigen cache, geen nieuwe downloads van
+# eerder ingelezen maanden. Een contextfout verandert de waarschuwingen niet.
+if ! "$PYTHON" scripts/knmi_warning_context.py --publish; then
+  echo "Aanvullende meetkaarten worden bij de volgende archiefupdate hervat."
+fi

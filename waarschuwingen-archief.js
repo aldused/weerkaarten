@@ -123,6 +123,21 @@ function safeLink(title, href) {
     return link;
   } catch { return el('span', '', title); }
 }
+function contextPanel(disclosure, record, selectedDay = null) {
+  const host = el('section', 'weather-context');
+  let loaded = false;
+  disclosure.addEventListener('toggle', async () => {
+    if (!disclosure.open || loaded) return;
+    loaded = true; host.textContent = 'Bijbehorende weerkaarten ophalen…';
+    try {
+      const {renderWeatherContext} = await import('./waarschuwingen-context.mjs?v=20261122-context-1');
+      await renderWeatherContext(host, record, {day:selectedDay});
+    } catch {
+      loaded = false; host.textContent = 'De aanvullende weerkaarten konden niet worden geladen. Sluit en open de melding om opnieuw te proberen.';
+    }
+  });
+  return host;
+}
 function recordCard(record, selectedDay = null) {
   const box = el('details', 'record'), summary = el('summary'), grid = el('div', 'record-summary');
   const day = el('div', 'record-date', record.date_label || SHORT.format(new Date(record.onset)));
@@ -138,7 +153,7 @@ function recordCard(record, selectedDay = null) {
   const detail = el('div', 'record-detail');
   detail.append(el('h4', '', 'Wat was er aan de hand?'), el('p', '', record.description || (record.source_kind === 'annual' ? annualSummary(record) : record.headline)));
   const mapHost = el('section', 'archive-map');
-  detail.append(mapHost);
+  detail.append(mapHost, contextPanel(box, record, selectedDay));
   let mapLoaded = false;
   box.addEventListener('toggle', async () => {
     if (!box.open || mapLoaded) return;
@@ -355,8 +370,9 @@ if (typeof document !== 'undefined') {
     for (const warning of warnings) {
       const card = el('article', `live-card ${warning.code}`);
       card.append(badge(warning.code), el('span', 'live-status', Date.parse(warning.onset) > Date.now() ? 'Begint later' : 'Nu geldig'), el('h3', '', warning.fenomeen), el('p', '', warning.headline), el('p', 'live-time', period(warning)), el('p', '', warning.gebieden.join(' · ')));
-      const details = el('details'); details.append(el('summary', '', 'Reden en advies van het KNMI'));
+      const details = el('details'); details.append(el('summary', '', 'Weerkaarten, tekst en advies van het KNMI'));
       for (const text of [warning.detail, warning.detailed_description, warning.instruction]) if (text) details.append(el('p', '', Array.isArray(text) ? text.join('\n') : text));
+      details.append(contextPanel(details, {phenomenon:warning.fenomeen,onset:warning.onset,expires:warning.expires,areas:warning.gebieden,codes:[warning.code]}));
       card.append(details); root.append(card);
     }
   }

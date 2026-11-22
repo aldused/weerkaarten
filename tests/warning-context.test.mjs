@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {contextDays,defaultField,visibility,assertContext,chooseFrame,describeFrame,analysisFor,validityEnd} from '../waarschuwingen-context.mjs';
+assert.deepEqual(contextDays({onset:'2026-10-24T22:00Z',expires:'2026-10-25T23:00Z'}),['2026-10-25']);
+assert.equal(defaultField({phenomenon:'Plaatselijk dichte mist'}),'VV');
+assert.equal(defaultField({phenomenon:'Zicht'}),'VV');
+assert.equal(defaultField({phenomenon:'Windstoten'}),'FX');
+assert.deepEqual(visibility(1),{lower:100,upper:200,label:'100–200 m'});
+assert.equal(visibility(56).lower,6000);assert.equal(visibility(50).lower,5000);assert.equal(visibility(89).label,'>70 km');assert.equal(visibility(53),null);
+const fields=['T','TD','VV','U','FF','FX','RH','P'];
+const data={schema:1,day:'2026-11-20',stations:[{id:'260',name:'De Bilt',lon:5.18,lat:52.1}],times:['2026-11-20T02:00Z','2026-11-20T03:00Z','2026-11-20T04:00Z'],values:Object.fromEntries(fields.map(field=>[field,[[null],[null],[null]]]))};
+data.values.T=[[1],[2],[3]];data.values.VV=[[0],[2],[1]];
+assert.equal(assertContext(data,'2026-11-20'),data);
+assert.throws(()=>assertContext(data,'2026-11-21'));
+assert.equal(chooseFrame(data,{phenomenon:'Mist',onset:'2026-11-20T03:00Z',expires:'2026-11-20T05:00Z'},'VV',Date.parse('2026-11-21')),2,'minimum visibility must stay inside the warning period');
+assert.match(describeFrame(data,2,'VV'),/100–200 m/);
+assert.match(describeFrame(data,2,'RH'),/geen neerslag/);
+assert.equal(analysisFor('2026-11-20T05:00Z',Date.parse('2026-11-22')).time,'2026-11-20T00:00:00.000Z');
+assert.equal(analysisFor('2026-11-25T12:00Z',Date.parse('2026-11-22T07:00Z')).time,'2026-11-22T06:00:00.000Z');
+console.log('Weercontext: zichtklassen, geldigheidsperiode, Nederlandse dag, ontbrekende waarden en historische analysetijd gecontroleerd');
+
+assert.equal(validityEnd({expires:'2026-11-20T06:00Z',status:'cancelled',updated:'2026-11-20T03:30Z'}),Date.parse('2026-11-20T03:30Z'));
+assert.equal(chooseFrame(data,{phenomenon:'Mist',onset:'2026-11-20T03:00Z',expires:'2026-11-20T06:00Z',status:'cancelled',updated:'2026-11-20T03:30Z'},'VV',Date.parse('2026-11-21')),1,'a cancelled warning must not select a later observation by default');

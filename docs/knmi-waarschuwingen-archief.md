@@ -123,3 +123,58 @@ Uitvoeren (pad naar bestaande HTML-cache zelf kiezen):
 
 Controle: `python3 -m unittest discover -s tests -p test_enrich_knmi_warning_annual.py`
 en `node tests/warning-archive.test.mjs`.
+
+## Weerkaarten bij iedere waarschuwing
+
+`waarschuwingen-context.mjs` voegt een apart kaartenblok toe aan historische én
+actuele meldingen, met een dag-, uur- en parameterkeuze. Bij mist/zicht opent de
+zichtkaart, bij wind de windstootkaart en bij regen/onweer de regenmeterkaart.
+Temperatuur/dauwpunt, luchtvochtigheid, wind en luchtdruk zijn ook selecteerbaar.
+Het gekozen standaarduur zoekt de meest uitgesproken beschikbare meting binnen
+de geldigheidsperiode; een andere uurkeuze blijft mogelijk. Kaartbijschriften en
+het automatisch samengestelde, op metingen gebaseerde tekstblok noemen het uur
+expliciet. De oorspronkelijke KNMI-waarschuwingstekst blijft apart zichtbaar.
+
+De meetkaarten tekenen alleen echte KNMI-stations met een beschikbare waarde,
+zonder ruimtelijke interpolatie of invullen van ontbrekende metingen. Zicht uit
+de uurbron blijft een KNMI-zichtklasse; het cijfer is geen afstand in meters.
+Op de kaart staat de ondergrens, in het meetpunt en de tekst de volledige klasse.
+De recente tienminutenbron levert zicht in meters: deze wordt herkenbaar naar
+dezelfde klasse ingedeeld, met de oorspronkelijke afstand tevens in de data.
+
+`scripts/knmi_warning_context.py` bewaart per Nederlandse kalenderdag JSON in
+`~/Library/Application Support/Weerlab/waarschuwingenarchief/context/pub/` en
+publiceert naar `data.weerlab.nl/waarschuwingen-context/YYYY-MM-DD.json`.
+Gevalideerde KDP-uurdata gaan vóór voorlopige uurdata. Alleen de nieuwste gaten
+worden aangevuld uit de actuele KDP-tienminutenbron. Voor een uurwindstoot zijn
+alle zes tienminutenvakken vereist; ontbrekende vakken leveren geen uurmaximum.
+Regen wordt niet afgeleid uit relatieve vochtigheid. Ontbrekend blijft null.
+De bron en de voorlopige status zijn zichtbaar. UTC-tijdstempels blijven intact,
+waardoor beide uren bij de wintertijdsovergang behouden blijven.
+
+De bestaande archief-wrapper roept de contextverwerking na publicatie aan. Een
+contextfout laat de waarschuwingen intact. Historische maanden worden gecachet;
+maximaal twee nog ontbrekende maanden per reguliere update. De recente bron
+wordt telkens aangevuld; gevalideerde recente data worden elke zes uur ververst.
+De eerste inlezing gebruikt `--all --publish`. De bron is de actuele KDP-EDR-API,
+niet het oude Daggegevens-script dat eind 2026 vervalt. Sleutels blijven in de
+bestaande backendhelper en komen niet in de frontend of de gepubliceerde data.
+
+De weerkaart is de officiële KNMI-analyse van het voorafgaande zesuurmoment,
+met eigen gedateerd bijschrift. Deze is beschikbaar vanaf 2003 en dekt daarmee
+de hele waarschuwingenreeks vanaf 2010. Een ontbrekend bronbeeld wordt gemeld;
+er wordt nooit een actuele afbeelding voor een historische datum ingevuld.
+
+Radar gebruikt de bestaande eigen KNMI-accumulatiebron per UTC-uur (WLA1,
+`accumulatie/uur/YYYYMMDD/HH.bin.gz`). `accumulatie_core.js` verzorgt de bewezen
+bronprojectie en decoder. Het beeld is nadrukkelijk een neerslagsom in het uur
+voor het gekozen meetmoment, geen momentane intensiteit. Headerbegin/eind moeten
+exact overeenkomen. Onvolledige cellen worden grijs, geen regenloos vlak. Als
+zo'n uurveld ontbreekt, kan een echt, afzonderlijk gedateerd radarbeeld uit de
+KNMI-terugblik worden getoond. Anders meldt de kaart dat radar ontbreekt en kan
+de bezoeker de regenmeterkaart bekijken. Radar is geen kaart van mist.
+
+Bronnen: KNMI KDP uur- en tienminutenwaarnemingen (CC BY 4.0), KNMI-analysearchief
+en de bestaande eigen radararchivering. Controles:
+`python3 -m unittest discover -s tests -p test_knmi_warning_context.py` en
+`node tests/warning-context.test.mjs`, plus de bestaande archieftests.
