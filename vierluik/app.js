@@ -1,5 +1,6 @@
+import {elevationLabels,freezingLevels,freezingColors} from './height-levels.js';
 import {readCatalog} from './data-source.js?v=20261122-bereik';
-import {cloudBaseLevels,cloudBaseColors,heightLabels} from './cloud-base.js?v=20261122-bereik';
+import {cloudBaseLevels,cloudBaseColors,heightLabels} from './cloud-base.js?v=20261122-nulgradenniveau-voet';
 import {cloudColor} from './clouds.js?v=20261122-bereik';
 import {HOUR,dayKey,validateFeed,comparisonTimes,hasForecastTime,closestIndex} from './forecast-core.js?v=20261122-bereik';
 'use strict';
@@ -34,7 +35,7 @@ const cloudRamp=which=>Array.from({length:11},(_,i)=>'rgb('+cloudColor(...[0,1,2
 const isCloudLayer=layer=>['clouds','cloudHigh','cloudMiddle','cloudLow'].includes(layer);
 const catalogModeFor=layer=>layer==='cloudBase'?'cloudbase':isCloudLayer(layer)?'clouds':'standard';
 const layers={cloudBase:'Wolkenbasis',clouds:'Bewolking H/M/L',cloudHigh:'Hoge bewolking',cloudMiddle:'Middelbare bewolking',cloudLow:'Lage bewolking',vis:'Zicht',td2m:'Dauwpunt',windchill:'Gevoelstemperatuur',rate:'Neerslag',weather:'Significant weer',t2m:'Temperatuur',ws:'Wind',gust:'Windstoten',ptot:'Neerslagsom',ptypeMap:'Neerslagtype',t850:'Temperatuur 850 hPa',t500:'Temperatuur 500 hPa',frz:'0 °C-niveau',sdep:'Sneeuwhoogte',sun:'Zonduur'};
-const units={cloudBase:'m / ft',clouds:'%',cloudHigh:'%',cloudMiddle:'%',cloudLow:'%',vis:'m / km',td2m:'°C',windchill:'°C',rate:'mm/u',weather:'°C / mm/u',t2m:'°C',t850:'°C',t500:'°C',ws:'Bft',gust:'km/u',ptot:'mm',frz:'m',sdep:'cm',sun:'min/uur',ptypeMap:''};
+const units={cloudBase:'m / ft',clouds:'%',cloudHigh:'%',cloudMiddle:'%',cloudLow:'%',vis:'m / km',td2m:'°C',windchill:'°C',rate:'mm/u',weather:'°C / mm/u',t2m:'°C',t850:'°C',t500:'°C',ws:'Bft',gust:'km/u',ptot:'mm',frz:'m / ft',sdep:'cm',sun:'min/uur',ptypeMap:''};
 const MODEL_KEYS=Object.keys(definitions);
 const state={index:0,layer:'weather',sync:true,playing:false,models:null,catalogs:null,times:[],timeMode:'common',followNow:true,catalogMode:'standard'};
 const timeFormatter=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
@@ -60,7 +61,7 @@ function updateCardHeader(index){
 function updateMobileTabs(){document.querySelectorAll('.mobile-models button').forEach((b,i)=>{const d=definitions[cards[i].model];b.textContent=d.short;b.style.setProperty('--model',d.color);b.setAttribute('aria-label',`Spring naar kaart ${i+1}: ${d.name}`);b.setAttribute('aria-controls',`card-${i}`);});}
 function setActive(i){const maps=$('maps'),card=$(`card-${i}`);maps.scrollTo({left:card.offsetLeft-maps.offsetLeft,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}
 function buildCards(){
- $('maps').innerHTML=cards.map((c,i)=>`<article class="map-card" id="card-${i}" style="--model:${c.color}" aria-label="Modelkaart ${i+1}"><header class="card-header"><span class="model-mark" aria-hidden="true">${c.short}</span><div class="model-picker"><label class="sr" for="model-${i}">Model voor kaart ${i+1}</label><select class="model-select" id="model-${i}">${Object.entries(definitions).map(([key,d])=>`<option value="${key}" ${key===c.model?'selected':''} ${state.catalogs[key]?'':'disabled'}>${d.name}</option>`).join('')}</select><div class="model-meta"><span class="resolution">${c.resolution}</span><span class="run-label"></span></div></div><button class="icon-button card-expand" aria-label="${c.name} vergroten" title="Deze kaart vergroten">${icon('maximize')}</button></header><div class="map-window"><iframe id="frame-${i}" title="${c.name}: ${layers[state.layer]}" src="map.html?v=20261122-bereik&id=${i}&model=${c.model}#model=${c.model}&kaart=weather" loading="eager"></iframe><div class="map-label"><span class="map-label-text">Significant weer</span><span class="layer-unit"></span></div></div><div class="card-bottom"><span class="card-time loading">Kaart laden…</span><span class="lead-time"></span></div></article>`).join('');
+ $('maps').innerHTML=cards.map((c,i)=>`<article class="map-card" id="card-${i}" style="--model:${c.color}" aria-label="Modelkaart ${i+1}"><header class="card-header"><span class="model-mark" aria-hidden="true">${c.short}</span><div class="model-picker"><label class="sr" for="model-${i}">Model voor kaart ${i+1}</label><select class="model-select" id="model-${i}">${Object.entries(definitions).map(([key,d])=>`<option value="${key}" ${key===c.model?'selected':''} ${state.catalogs[key]?'':'disabled'}>${d.name}</option>`).join('')}</select><div class="model-meta"><span class="resolution">${c.resolution}</span><span class="run-label"></span></div></div><button class="icon-button card-expand" aria-label="${c.name} vergroten" title="Deze kaart vergroten">${icon('maximize')}</button></header><div class="map-window"><iframe id="frame-${i}" title="${c.name}: ${layers[state.layer]}" src="map.html?v=20261122-nulgradenniveau-voet&id=${i}&model=${c.model}#model=${c.model}&kaart=weather" loading="eager"></iframe><div class="map-label"><span class="map-label-text">Significant weer</span><span class="layer-unit"></span></div></div><div class="card-bottom"><span class="card-time loading">Kaart laden…</span><span class="lead-time"></span></div></article>`).join('');
  document.querySelector('.mobile-models').innerHTML=cards.map((c,i)=>`<button data-card="${i}">${c.short}</button>`).join('');
  cards.forEach((c,i)=>{
    updateCardHeader(i);
@@ -110,6 +111,16 @@ function updateComparison(stamp=Date.now(),followNow=state.followNow){
 
 function setLayer(layer){if(!layers[layer])return;state.layer=layer;$('layer-select').value=layer;$('values-explanation').textContent=['weather','ptypeMap'].includes(layer)?'Temperatuur °C · neerslag mm/u':layers[layer]+' · '+units[layer];if(state.models)cards.forEach((c,i)=>{updateCardHeader(i);$(`frame-${i}`).title=`${definitions[c.model].name}: ${layers[layer]}`;});const switching=catalogModeFor(layer)!==state.catalogMode;broadcast({layer,...(switching?{pending:true}:{time:currentTime().toISOString()})});renderLegend();if(switching){stop();refreshCatalogs();}}
 function scale(name,colors,ticks){return `<div class="scale-group"><div class="scale-name">${name}</div><div class="scale">${colors.map(c=>`<i style="background:${c}"></i>`).join('')}</div><div class="ticks">${ticks.map(t=>`<span>${t}</span>`).join('')}</div></div>`;}
+function heightScale(name,colors,levels,format){
+  const ticks=levels.map((level,i)=>{
+    const [meters,feet]=format(level);
+    const prefix=i===levels.length-1?'≥':'';
+    return `<span>${prefix}${meters}<small>${prefix}${feet}</small></span>`;
+  });
+  return `<div class="scale-group height-legend"><div class="scale-name">${name}</div>
+    <div class="scale">${colors.map(color=>`<i style="background:${color}"></i>`).join('')}</div>
+    <div class="height-ticks" style="--height-tick-count:${ticks.length}">${ticks.join('')}</div></div>`;
+}
 function renderLegend(){
  $('legend-title').textContent=layers[state.layer];let html='';
  const types='<div class="type-key"><span><i class="swatch" style="--swatch:rgb(26,155,102)"></i>Regen</span><span><i class="swatch" style="--swatch:rgb(86,100,225)"></i>Sneeuw</span><span><i class="swatch" style="--swatch:rgb(79,168,235)"></i>Natte sneeuw</span><span><i class="swatch" style="--swatch:rgb(128,63,196)"></i>Mix</span><span><i class="swatch" style="--swatch:rgb(224,35,113)"></i>IJzel</span><span><i class="swatch" style="--swatch:rgb(245,129,24)"></i>IJsregen</span><span><i class="swatch" style="--swatch:rgb(25,123,181)"></i>Type onbekend</span></div>';
@@ -126,11 +137,11 @@ function renderLegend(){
  case 'gust':html=scale('Windsnelheid · km/u',['#edf4fc','#c5e5fa','#8bd4ed','#49b8be','#55b384','#98c15b','#d4cc54','#f3bb54','#f3914f','#e55d4a','#ac267a'],['0','10','20','30','40','50','60','70','80','100','130']);break;
  case 'ptot':html=scale('Neerslagsom sinds de eigen modelstart · mm',['#eef2f5','#d4eefe','#a5e1f7','#6bcbf4','#32afe9','#258acb','#3269b7','#7851b2','#ca46a1','#e76465','#faba62'],['0','0,5','1','2','5','10','20','50','100','200']);break;
  case 'sdep':html=scale('Sneeuwhoogte · cm',['#f3f5f6','#e1f4ff','#c4ebff','#9fddfc','#76c5f2','#4d9bdf','#3672ca','#7851b2'],['0','0,5','1','2','5','10','20','50']);break;
- case 'frz':html=scale('Hoogte boven zeeniveau · m',['#b9e3fc','#73bcd8','#72bea5','#a5ce8d','#e1d375','#f5b16c','#dc7957'],['0','500','1000','1500','2000','3000','4000']);break;
+ case 'frz':html=heightScale('Boven zeeniveau · m / ft',freezingColors,freezingLevels,elevationLabels);break;
  case 'sun':html=scale('Zonduur · minuten per uur',['#697889','#a2a7a7','#c1b995','#ddc58a','#f3d17e','#ffdd70','#ffeb61'],['0','10','20','30','40','50','60']);break;
  }
  $('legend-content').classList.remove('native-summary');
- if(!['weather','ptypeMap','sun','clouds','cloudHigh','cloudMiddle','cloudLow','cloudBase'].includes(state.layer)&&actualLegends.has(state.layer)){
+ if(!['weather','ptypeMap','sun','clouds','cloudHigh','cloudMiddle','cloudLow','cloudBase','frz'].includes(state.layer)&&actualLegends.has(state.layer)){
    const holder=document.createElement('div');holder.innerHTML=actualLegends.get(state.layer);
    const bar=holder.querySelector('.scale'),ticks=holder.querySelector('.scale-ticks');
    if(bar&&ticks)html=`<div class="scale-group"><div class="scale-name">${layers[state.layer]} · ${units[state.layer]}</div>${bar.outerHTML}${ticks.outerHTML}</div>`;

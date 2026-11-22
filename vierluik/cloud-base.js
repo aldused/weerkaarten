@@ -1,4 +1,5 @@
-export const METERS_PER_FOOT=.3048;
+import {elevationLabels} from './height-levels.js';
+export {METERS_PER_FOOT} from './height-levels.js';
 export const cloudBaseLevels=[0,100,200,400,600,1000,1500,2500,5000,8000];
 export const cloudBaseColors=['#a93b72','#d26470','#e99968','#e6bf68','#dadb91','#b4d1a0','#8dbfbb','#85b8d7','#adcbe4','#d9e8f3'];
 export function cloudBaseData(raw,info={}){
@@ -15,5 +16,5 @@ export function cloudBaseData(raw,info={}){
 export function heightLabels(meters,ceiling=false){
  if(!Number.isFinite(meters)||meters<0)return null;
  const limited=ceiling&&meters>=5000,value=limited?5000:meters,prefix=limited?'≥':'';
- return [prefix+Math.round(value).toLocaleString('nl-NL')+' m',prefix+(Math.round(value/METERS_PER_FOOT/10)*10).toLocaleString('nl-NL')+' ft'];
+ return elevationLabels(value).map(label => prefix + label);
 }
