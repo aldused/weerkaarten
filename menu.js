@@ -333,7 +333,8 @@
     if(isPlumeSearch(q))return [byId.get('pluim-ens6')].filter(Boolean);
     const synonyms={regen:'neerslag',wolken:'bewolking',temperaturen:'temperatuur'};
     const terms=normalize(q).split(' ').filter(Boolean);
-    return products.filter(p=>terms.every(term=>{const txt=searchIndex.get(p.id);return txt.includes(term) || !!synonyms[term]&&txt.includes(synonyms[term]);})).sort((a,b)=>Number(normalize(b.name).includes(normalize(q)))-Number(normalize(a.name).includes(normalize(q))));
+    const preferred=terms.includes('ecmwf')?'weerkaart-europa':null;
+    return products.filter(p=>terms.every(term=>{const txt=searchIndex.get(p.id);return txt.includes(term) || !!synonyms[term]&&txt.includes(synonyms[term]);})).sort((a,b)=>Number(b.id===preferred)-Number(a.id===preferred)||Number(normalize(b.name).includes(normalize(q)))-Number(normalize(a.name).includes(normalize(q))));
   }
   function searchPage(){
     const q=state.q.trim();
