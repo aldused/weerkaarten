@@ -50,7 +50,7 @@
     refreshSelection:async()=>{await ready;return run;},
     ensureLocation:async(lat,lon)=>{
       await ready;
-      if (Math.abs(lat-Number(query.get('lat')))>1e-5 || Math.abs(lon-Number(query.get('lon')))>1e-5) throw new Error('Open een andere plaats via de landelijke top 3.');
+      if (Math.abs(lat-Number(query.get('lat')))>1e-5 || Math.abs(lon-Number(query.get('lon')))>1e-5) throw new Error('Open een andere plaats via de landelijke top 1.');
       return {archived:true};
     },
     ensureVariables:async fields=>{await ready;if(fields.some(f=>!required.includes(f)))throw new Error('Dit veld ontbreekt in deze landelijke pluim.');},
@@ -71,7 +71,7 @@
     const link=document.createElement('a'),url=new URL(location.href);
     ['top3_punt','top3_versie','top3_run','top3_lid'].forEach(key=>url.searchParams.delete(key));
     url.searchParams.set('station','De Bilt');url.searchParams.set('lat','52.101');url.searchParams.set('lon','5.178');
-    link.href=url.href;link.textContent='Terug naar de landelijke top 3';
+    link.href=url.href;link.textContent='Terug naar de landelijke top 1';
     const memberLabel=selectedMember===null ? '' : selectedMember===0 ? ' · uiterste waarde uit de controleberekening' : ` · uiterste waarde uit ensemblelid ${selectedMember}`;
     bar.append(document.createTextNode(`Exacte landelijke pluim · ${(token||'').slice(9)} UTC${memberLabel} · `),link);
     document.querySelector('.toolbar')?.before(bar);
