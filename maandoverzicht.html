@@ -151,14 +151,17 @@ tfoot td.sq { color: #e67e00; }
 <link rel="stylesheet" href="klimaat.css?v=20260908-3">
 <link rel="stylesheet" href="terugkijken.css?v=20260908-1">
 <script src="klimaat.js?v=20260914-1"></script>
+<script src="modeltijdseries/ts-core.js?v=20261122-maand"></script>
+<script src="maandoverzicht-forecast.js?v=20261122-1"></script>
+<link rel="stylesheet" href="maandoverzicht-forecast.css?v=20261122-1">
 <link rel="stylesheet" href="records-ui.css?v=20260914-1">
 <script defer src="records-ui.js?v=20261101-navigation"></script>
 </head>
 <body class="climate-page climate-maandoverzicht archive-page">
 <section class="climate-heading" aria-labelledby="climate-title">
 <a class="climate-back" href="index.html#menu/terugkijken?type=terug">← Maand &amp; archief</a>
-<div class="climate-heading-row"><div><h1 id="climate-title">Maandstanden per station</h1><p>Bekijk dagelijkse metingen, maandgemiddelden en totalen voor het gekozen station.</p></div><span class="climate-label">KNMI · Weerarchief</span></div>
-<details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens met recente aanvullingen. Normaalwaarden gelden voor de volledige kalendermaand (1991–2020). Ranglijsten vergelijken dezelfde kalenderdagen; ontbrekende waarden tellen niet als nul. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">KNMI-brongegevens ↗</a></p></details>
+<div class="climate-heading-row"><div><h1 id="climate-title">Maandstanden per station</h1><p>Bekijk dagelijkse metingen, maandgemiddelden en totalen, met een voorlopige ECMWF-doorkijk voor de komende tien dagen.</p></div><span class="climate-label">KNMI · Weerarchief</span></div>
+<details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens met recente aanvullingen. Normaalwaarden gelden voor de volledige kalendermaand (1991–2020). Ranglijsten vergelijken dezelfde gemeten kalenderdagen; ontbrekende waarden tellen niet als nul. De lichtere waarden zijn een voorlopige doorkijk met ECMWF IFS, maximaal tien dagen vanaf vandaag en tot de maandgrens. Verwachte dagwaarden vervangen de lopende dag eenmaal in de berekende stand. Dagvenster: 00–24 UTC. TX/TN worden uit de modeltijdstappen bepaald, TG is tijdgewogen; zonduur is een schatting uit modelstraling. Ontbrekende dagen blijven vermeld; de doorkijk is geen definitieve maandstand. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">KNMI-brongegevens ↗</a> · <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noopener">ECMWF Open Data (CC BY 4.0) ↗</a></p></details>
 </section>
 <div class="header">
   <div>
@@ -179,6 +182,11 @@ tfoot td.sq { color: #e67e00; }
   </select>
   <select aria-label="Jaar" id="sj" onchange="sel()"></select>
   <button class="pijl" aria-label="Volgende maand" onclick="nav(1)">&#9654;</button>
+</div>
+<div class="forecast-controls" id="forecast-controls">
+  <label><input type="checkbox" id="forecast-enabled" checked onchange="toon()"> ECMWF-doorkijk · komende 10 dagen</label>
+  <span class="forecast-legend"><span class="forecast-swatch"></span> Lichtere kleur = verwachting</span>
+  <p id="forecast-note" role="status" aria-live="polite"></p>
 </div>
 <div class="stats" id="st"></div>
 <details class="rgl-wrap archive-ranks" id="rgl-wrap" style="display:none">
@@ -362,8 +370,40 @@ function corrigeerMetToplijst(data, stationNaam) {
 }
 
 var stationRequest = 0;
+var verwachting = null, verwachtingStatus = '', verwachtingStation = null, verwachtingDag = '';
+var verwachtingLader = MaandForecast.create({core:TSCore});
+function laadVerwachting() {
+  var dag = MaandForecast.today();
+  if (verwachtingStation === hSt.nr && verwachtingDag === dag) return;
+  var station = hSt.nr, request = stationRequest;
+  verwachtingStation = station; verwachtingDag = dag;
+  verwachting = null; verwachtingStatus = 'laden';
+  verwachtingLader.load(station, dag).then(function (data) {
+    if (request !== stationRequest || hSt.nr !== station || verwachtingDag !== dag) return;
+    verwachting = data; verwachtingStatus = 'klaar'; toon();
+  }).catch(function (error) {
+    console.warn('ECMWF-maanddoorkijk:', error);
+    if (request !== stationRequest || hSt.nr !== station || verwachtingDag !== dag) return;
+    verwachting = null; verwachtingStatus = 'fout'; toon();
+  });
+}
+function maandDoorkijk() {
+  if (!document.getElementById('forecast-enabled').checked) return null;
+  return MaandForecast.projection(D, verwachting, MaandForecast.today(), J, M);
+}
+function korteDatum(key) {
+  return new Intl.DateTimeFormat('nl-NL', {timeZone:'UTC',day:'numeric',month:'short'}).format(new Date(key+'T12:00:00Z'));
+}
+function forecastWaarde(value, suffix) { return Number.isFinite(value) ? value.toFixed(1) + suffix : '&#8211;'; }
+function forecastStat(p, field, suffix) {
+  if (!p) return '';
+  var f = p.fields[field];
+  return '<div class="stat-forecast"><span>Verwacht t/m '+korteDatum(p.end)+'</span><strong>'+forecastWaarde(f.value,suffix)+'</strong>'+
+    '<small>'+ (f.value == null ? 'ECMWF niet beschikbaar' : (p.expected-f.missing)+'/'+p.expected+' dagen'+(f.missing?' · '+f.missing+(f.missing===1?' ontbreekt':' ontbreken'):''))+'</small></div>';
+}
 function laadData(achtergrond) {
   var request = ++stationRequest, requestedStation = hSt;
+  verwachtingStation = null; verwachting = null; verwachtingStatus = '';
   if (!achtergrond) {
   weerlabClimateStatus({fixed:"Stationgegevens laden…"});
   document.getElementById("st").innerHTML="";
@@ -558,6 +598,22 @@ function rglToggle(btn) {
 function toon() {
   sync();
   var vd = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  var huidige = nederlandseMaand(), isLive = J === huidige.jaar && M === huidige.maand;
+  document.getElementById('forecast-controls').hidden = !isLive;
+  if (isLive && document.getElementById('forecast-enabled').checked) laadVerwachting();
+  var doorkijk = maandDoorkijk();
+  var note = document.getElementById('forecast-note');
+  if (!document.getElementById('forecast-enabled').checked) note.textContent = 'Doorkijk uitgeschakeld.';
+  else if (verwachtingStatus === 'laden') note.textContent = 'ECMWF-doorkijk laden…';
+  else if (verwachtingStatus === 'fout') note.textContent = 'ECMWF tijdelijk niet beschikbaar. De gemeten maandstanden blijven zichtbaar; automatisch verversen volgt.';
+  else if (doorkijk) {
+    var run = new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(verwachting.run));
+    var missing = doorkijk.fields.tg.missing;
+    note.textContent = 'Voorlopige stand t/m '+korteDatum(doorkijk.end)+' · ECMWF-run '+run+' UTC · '+
+      (missing ? missing+(missing===1?' dag ontbreekt':' dagen ontbreken')+' in de berekening. ' : '') +
+      (verwachting.solarAvailable ? 'Zonduur is een schatting.' : 'Geen ECMWF-zonduur beschikbaar.')+
+      ' Lichte waarden combineren metingen en verwachting.';
+  } else note.textContent = 'Geen verwachte dagwaarden beschikbaar voor deze maand.';
   var nm = (ALLE_NM[hSt.nr] || {})[M] || {};
   var ad = new Date(J, M, 0).getDate();
   var ms = String(M).padStart(2,'0');
@@ -590,21 +646,31 @@ function toon() {
     return '<div class="stat ' + s.c + '"><div class="stat-lbl">' + s.l + '</div>' +
       '<div class="stat-val">' + (s.v!=null ? s.v.toFixed(1)+s.e : '&#8211;') + '</div>' +
       (s.nm!=null ? '<div class="stat-norm">Maandnorm: ' + s.nm + s.e + ((['rr','sq'].includes(s.c) && (s.c==='rr'?rr:sq).length<ad)?'':ds(s.v,s.nm)) + '</div>' : '') +
-      '</div>';
+      forecastStat(doorkijk,s.c,s.e) + '</div>';
   }).join('');
 
-  var mxR = Math.max.apply(null, rr.length ? rr : [0.1]);
-  var mxS = Math.max.apply(null, sq.length ? sq : [0.1]);
+  var forecastRows = doorkijk ? doorkijk.days : {};
+  var mxR = Math.max.apply(null, [0.1].concat(rr, Object.values(forecastRows).map(function(o){return o.rr || 0;})));
+  var mxS = Math.max.apply(null, [0.1].concat(sq, Object.values(forecastRows).map(function(o){return o.sq || 0;})));
+  function forecastRij(k, o) {
+    var dt = new Date(k+'T12:00:00Z');
+    return '<tr class="forecast-row"><td>'+ND[dt.getUTCDay()]+' '+dt.getUTCDate()+' <span class="forecast-tag">ECMWF dagstand</span></td>'+
+      '<td class="tx">'+forecastWaarde(o.tx,'°')+'</td><td class="tn">'+forecastWaarde(o.tn,'°')+'</td><td>'+forecastWaarde(o.tg,'°')+'</td>'+
+      '<td class="rr">'+(o.rr!=null?'<span class="bar brr" style="width:'+Math.min(o.rr/mxR*50,50).toFixed(0)+'px"></span>'+o.rr.toFixed(1):'&#8211;')+'</td>'+
+      '<td class="sq">'+(o.sq!=null?'<span class="bar bsq" style="width:'+Math.min(o.sq/mxS*50,50).toFixed(0)+'px"></span>'+o.sq.toFixed(1)+'u':'&#8211;')+'</td></tr>';
+  }
   var h = '';
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i], dt = new Date(r.k+'T12:00:00');
     var cl = r.vd ? 'vd' : r.tk ? 'tk' : '';
     var dn = ND[dt.getDay()] + ' ' + r.d + (r.vd ? ' &#8592;' : '');
+    if (forecastRows[r.k] && !r.o) { h += forecastRij(r.k,forecastRows[r.k]); continue; }
     if (!r.o) { h += '<tr class="'+cl+'"><td>'+dn+'</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td></tr>'; continue; }
     var o = r.o;
     var rB = o.rr!=null ? '<span class="bar brr" style="width:'+Math.min(o.rr/mxR*50,50).toFixed(0)+'px"></span>'+o.rr.toFixed(1) : '&#8211;';
     var sB = o.sq!=null ? '<span class="bar bsq" style="width:'+Math.min(o.sq/mxS*50,50).toFixed(0)+'px"></span>'+o.sq.toFixed(1)+'u' : '&#8211;';
     h += '<tr class="'+cl+'"><td>'+dn+'</td><td class="tx">'+f(o.tx)+'°</td><td class="tn">'+f(o.tn)+'°</td><td>'+(o.tg!=null?o.tg.toFixed(1)+'°':'&#8211;')+'</td><td class="rr">'+rB+'</td><td class="sq">'+sB+'</td></tr>';
+    if (forecastRows[r.k]) h += forecastRij(r.k,forecastRows[r.k]);
   }
   document.getElementById('tb').innerHTML = h;
 
@@ -617,6 +683,9 @@ function toon() {
     '<td class="rr">'+(rrS!=null?rrS.toFixed(1)+' mm'+rang(rrS,'rr',false,ix):'&#8211;')+'</td>' +
     '<td class="sq">'+(sqS!=null?sqS.toFixed(1)+' u'+rang(sqS,'sq',true,ix):'&#8211;')+'</td>' +
     '</tr>';
+  if (doorkijk) document.getElementById('tf').innerHTML += '<tr class="forecast-row"><td>Voorlopig t/m '+korteDatum(doorkijk.end)+'</td>'+
+    ['tx','tn','tg','rr','sq'].map(function(field){var v=doorkijk.fields[field];return '<td class="'+field+'">'+forecastWaarde(v.value,['rr','sq'].includes(field)?(field==='rr'?' mm':' u'):'°')+
+    (v.value!=null&&v.missing?'<span class="rng" title="Ontbrekende dagen tellen niet als nul">'+(doorkijk.expected-v.missing)+'/'+doorkijk.expected+' dgn</span>':'')+'</td>';}).join('')+'</tr>';
 
   document.getElementById('msg').style.display = 'none';
   document.getElementById('tbl').style.display = '';
@@ -701,6 +770,28 @@ function tekenGrafiek() {
     borderWidth: 1, yAxisID: 'yBar', order: 3,
   });
 
+  var doorkijk = maandDoorkijk();
+  if (doorkijk) {
+    var definitions = {
+      tx:{label:'TX max',color:'#cf8b83',axis:'yTemp'},
+      tn:{label:'TN min',color:'#81acc8',axis:'yTemp'},
+      tg:{label:'TG gem',color:'#a1a8b3',axis:'yTemp'},
+      rr:{label:'Neerslag',color:'rgba(108,178,141,0.45)',axis:'yBar'},
+      sq:{label:'Zon',color:'rgba(239,184,113,0.5)',axis:'yBar'}
+    };
+    Object.keys(definitions).forEach(function(field) {
+      if (!grafiekLijnen[field]) return;
+      var def = definitions[field], bar = field === 'rr' || field === 'sq';
+      var data = labels.map(function(day){var row=doorkijk.days[J+'-'+ms+'-'+String(day).padStart(2,'0')];return row ? row[field] : null;});
+      if (!data.some(Number.isFinite)) return;
+      // Verbind de eerste verwachting met de laatste meting, zonder een gat te overbruggen.
+      if (!bar) { var first=data.findIndex(Number.isFinite), measured={tx:tx,tn:tn,tg:tg}[field];if(first>0&&Number.isFinite(measured[first-1]))data[first-1]=measured[first-1]; }
+      datasets.push({label:def.label+' · ECMWF (voorlopig)',data:data,type:bar?'bar':'line',
+        borderColor:def.color,backgroundColor:def.color,borderWidth:bar?1:2,borderDash:bar?[]:[5,4],
+        pointRadius:bar?0:3,tension:0.3,yAxisID:def.axis,spanGaps:false,order:bar?2:0});
+    });
+  }
+
   // Normaallijnen als annotatie via horizontale dataset
   if (grafiekLijnen.tx && nm.tx != null) datasets.push({
     label: 'Normaal TX', data: Array(ad).fill(nm.tx), type: 'line',
@@ -776,7 +867,7 @@ function downloadGrafiek() {
   var canvas = document.getElementById('grafiek-canvas');
   var mnaam = NL_MAANDEN_LANG[M];
   var titel = hSt.naam + ' (0' + hSt.nr + ') – ' + mnaam.charAt(0).toUpperCase() + mnaam.slice(1) + ' ' + J;
-  var subtitel = 'KNMI daggegevens · weerlab.nl';
+  var subtitel = 'KNMI daggegevens'+(maandDoorkijk()?' · lichte kleuren: voorlopige ECMWF-doorkijk':'')+' · weerlab.nl';
 
   // Tijdelijk canvas met witte achtergrond + titelstrook
   var titelHoogte = 56;
