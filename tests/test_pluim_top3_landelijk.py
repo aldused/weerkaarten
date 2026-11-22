@@ -52,6 +52,27 @@ class CountryRankingsTest(unittest.TestCase):
         self.assertAlmostEqual(lat,52.126537,places=5)
         self.assertAlmostEqual(lon,5.1381216,places=5)
 
+    def test_average_rankings_use_all_members_and_archive_their_winners(self):
+        self.fields['temperature_2m'][50, 3, 1] = -50
+        self.fields['precipitation'][50, 0, 1] = 500
+        summary, documents = self.result()
+        period = self.period((summary, documents))
+        extreme = period['rankings']
+        average = period['average_rankings']
+        self.assertEqual(extreme['cold'][0]['point'], 'cell3')
+        self.assertEqual(average['cold'][0]['point'], 'cell0')
+        self.assertEqual(extreme['precipitation'][0]['point'], 'cell0')
+        self.assertEqual(average['precipitation'][0]['value'], 480)
+        self.assertNotIn('member', average['cold'][0])
+        self.assertTrue(all(row['point'] in documents for rows in average.values() for row in rows))
+
+    def test_period_average_accounts_for_unequal_time_steps(self):
+        self.times = [int(self.run.timestamp()*1000+h*3600000) for h in (0, 6, 9, 15, 21, 24)]
+        self.fields = {key: values[:, :, :6].copy() for key, values in self.fields.items()}
+        self.fields['temperature_2m'][:, 0, 0] = -24
+        summary, _ = self.result()
+        self.assertEqual(summary['periods'][0]['average_rankings']['cold'][0]['value'], -3)
+
     def test_extrema_of_all_51_members_and_interval_totals(self):
         self.fields['wind_speed_10m'][0,0,10]=1000
         self.fields['temperature_2m'][50,3,15]=-70

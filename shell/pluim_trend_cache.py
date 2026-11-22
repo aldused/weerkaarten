@@ -994,7 +994,8 @@ def build_nl_top3(station_runs: dict[str, dict], fields: list[str]) -> dict | No
         if end not in times:
             continue  # A short run cannot masquerade as a 10/15-day forecast.
         last = times.index(end) + 1
-        rankings = {}
+        rankings, average_rankings = {}, {}
+        durations = [b-a for a, b in zip(times[:last-1], times[1:last])]
         for field, keys in (
             ("temperature_2m", ("cold", "mild")),
             ("wind_speed_10m", ("wind",)),
@@ -1002,6 +1003,7 @@ def build_nl_top3(station_runs: dict[str, dict], fields: list[str]) -> dict | No
             ("precipitation", ("precipitation",)),
         ):
             rows = {key: [] for key in keys}
+            average_rows = {key: [] for key in keys}
             valid = field in fields
             if valid:
                 for (name, slug, lat, lon), run in zip(locations, runs):
@@ -1024,25 +1026,34 @@ def build_nl_top3(station_runs: dict[str, dict], fields: list[str]) -> dict | No
                         if field == "snowfall":
                             row["chance_1cm"] = sum(v >= 1 for v in totals)*100/51
                         rows[keys[0]].append(row)
+                        average = {k: v for k, v in row.items() if k != "member"}
+                        average["value"] = math.fsum(totals)/51
+                        average_rows[keys[0]].append(average)
                     else:
+                        mean_series = [math.fsum(values)/51 for values in zip(*matrix)]
+                        average = math.fsum((left+right)*duration for left, right, duration
+                                            in zip(mean_series, mean_series[1:], durations))/(2*(end-start))
                         for key in keys:
+                            average_rows[key].append(dict(base, value=average))
                             index, member = (min if key == "cold" else max)(
                                 ((i,m) for i in range(last) for m in range(51)),
                                 key=lambda pair: matrix[pair[1]][pair[0]])
                             rows[key].append(dict(base, value=matrix[member][index], member=member, time_ms=times[index]))
-            for key in keys:
-                if not valid:
-                    rankings[key] = None
-                    continue
-                candidates = rows[key]
-                if key in ("snow", "precipitation"):
-                    candidates = [row for row in candidates if row["value"] > 1e-9]
-                candidates.sort(key=lambda row: (row["value"] if key == "cold" else -row["value"], row["slug"]))
-                rankings[key] = [
-                    {k: round(v, 4) if isinstance(v, float) else v for k, v in row.items()}
-                    for row in candidates[:3]
-                ]
-        periods.append(dict(days=days, start_ms=start, end_ms=end, rankings=rankings))
+            for output, candidates_by_key in ((rankings, rows), (average_rankings, average_rows)):
+                for key in keys:
+                    if not valid:
+                        output[key] = None
+                        continue
+                    candidates = candidates_by_key[key]
+                    if key in ("snow", "precipitation"):
+                        candidates = [row for row in candidates if row["value"] > 1e-9]
+                    candidates.sort(key=lambda row: (row["value"] if key == "cold" else -row["value"], row["slug"]))
+                    output[key] = [
+                        {k: round(v, 4) if isinstance(v, float) else v for k, v in row.items()}
+                        for row in candidates[:3]
+                    ]
+        periods.append(dict(days=days, start_ms=start, end_ms=end, rankings=rankings,
+                            average_rankings=average_rankings))
     return dict(schema=3, ranking_method='member_extremes_v1', station_count=len(locations), member_count=51, periods=periods)
 
 

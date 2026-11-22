@@ -8,6 +8,15 @@
     ['snow', 'Meeste sneeuw', 'Hoogste sneeuwsom van één lid', 'cm', '#7d65b4'],
     ['precipitation', 'Meeste neerslag', 'Hoogste neerslagsom van één lid', 'mm', '#3d63b2'],
   ];
+  const averageLabels = {
+    cold: ['Gemiddeld koudste', 'Laagste gemiddelde temperatuur'],
+    mild: ['Gemiddeld zachtste', 'Hoogste gemiddelde temperatuur'],
+    wind: ['Gemiddeld meeste wind', 'Hoogste gemiddelde windsnelheid op 10 m'],
+    snow: ['Gemiddeld meeste sneeuw', 'Hoogste gemiddelde sneeuwsom'],
+    precipitation: ['Gemiddeld natste', 'Hoogste gemiddelde neerslagsom'],
+  };
+  const extremeMethod = 'Bij temperatuur en wind telt de laagste of hoogste waarde van één lid op één tijdstip. Bij sneeuw en neerslag telt de grootste periodesom van één lid.';
+  const averageMethod = 'Temperatuur en wind zijn gemiddeld over alle 51 ensembleleden en over de gekozen periode. Bij sneeuw en neerslag telt het gemiddelde van de 51 periodesommen.';
   const dates = new Intl.DateTimeFormat('nl-NL', {timeZone:'Europe/Amsterdam', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
   const number = new Intl.NumberFormat('nl-NL', {minimumFractionDigits:1, maximumFractionDigits:1});
   const make = (tag, className, content) => {
@@ -30,17 +39,27 @@
     label.append(select);
     const status = make('p', 'pluim-top3-status', 'Landelijke top 3 laden…');
     status.setAttribute('role', 'status');
-    controls.append(label, status);
+    const modeLabel = make('label', '', 'Rangschik op');
+    const modeSelect = make('select');
+    for (const [value, caption] of [['extremes','Uitersten'], ['average','Gemiddelden']]) {
+      const option = make('option', '', caption);
+      option.value = value;
+      modeSelect.append(option);
+    }
+    modeLabel.append(modeSelect);
+    controls.append(label, modeLabel, status);
     const grid = make('div', 'pluim-top3-grid');
     const method = make('div', 'pluim-top3-method');
     method.append(
-      make('p', '', 'Gerangschikt op de uiterste berekening van alle 51 ensembleleden. Bij temperatuur en wind telt de laagste of hoogste waarde van één lid op één tijdstip. Sneeuw en neerslag worden eerst voor elk lid over de hele periode opgeteld; de grootste som van één lid telt. Dit zijn uiterste scenario’s, geen gemiddelde verwachting. Klik op een plaats om de bijbehorende pluim te openen.'),
+      make('p', '', extremeMethod),
       make('p', '', 'Dit is een vergelijking van de beschikbare Nederlandse pluimlocaties. Neerslag omvat regen én het waterequivalent van sneeuw. Sneeuwsom is vallende sneeuw, geen voorspelde sneeuwdekdikte. Tijdstippen bij de plaatsen zijn Nederlandse tijd; 00/06/12/18 UTC zijn modelruns en verschijnen na verwerking.')
     );
     body.append(controls, grid, method);
     panel.append(body);
     target.before(panel);
-    let wantedDays = Number(new URLSearchParams(location.search).get('top3_dagen')) || 5, generation = 0;
+    const params = new URLSearchParams(location.search);
+    modeSelect.value = params.get('top3_modus') === 'average' ? 'average' : 'extremes';
+    let wantedDays = Number(params.get('top3_dagen')) || 5, generation = 0;
     let countryPromise=null,countryFetched=0;
     function country() {
       if(!countryPromise||Date.now()-countryFetched>60000){
@@ -55,6 +74,7 @@
       status.textContent = message;
       select.replaceChildren();
       select.disabled = true;
+      modeSelect.disabled = true;
     }
     async function render() {
       const token = ++generation;
@@ -86,6 +106,11 @@
           return option;
         }));
         select.disabled = false;
+        modeSelect.disabled = false;
+        const average = modeSelect.value === 'average';
+        const rankings = average ? period.average_rankings : period.rankings;
+        method.firstElementChild.textContent = (average ? averageMethod : extremeMethod)
+          + ' Klik op een plaats om de bijbehorende pluim te openen.';
         const runDate = new Date(run);
         const dateLabel = new Intl.DateTimeFormat('nl-NL', {timeZone:'UTC', day:'numeric', month:'short', year:'numeric'}).format(runDate);
         const coverage=summary.grid_count?`${summary.station_count} plaatsen / ${summary.grid_count} modelpunten`:`${summary.station_count} locaties`;
@@ -97,11 +122,16 @@
           const credit=make('a','','GeoNames (CC BY 4.0)');credit.href='https://www.geonames.org/';credit.target='_blank';credit.rel='noopener';
           method.lastElementChild.append(' Plaatsencatalogus: ',credit);
         }
+        if (!rankings) {
+          grid.replaceChildren(make('p', 'pluim-top3-empty', 'De landelijke gemiddelden voor deze modelrun zijn nog niet beschikbaar.'));
+          return;
+        }
         grid.replaceChildren(...categories.map(([key, title, metric, unit, color]) => {
+          if (average) [title, metric] = averageLabels[key];
           const card = make('section', 'pluim-top3-card');
           card.style.setProperty('--top3-color', color);
           card.append(make('h3', '', title), make('p', 'pluim-top3-metric', metric));
-          const ranking = period.rankings?.[key];
+          const ranking = rankings[key];
           if (!Array.isArray(ranking) || !ranking.length) {
             card.append(make('p', 'pluim-top3-empty', !Array.isArray(ranking)
               ? 'Geen complete gegevens voor alle locaties en leden.'
@@ -121,12 +151,12 @@
               url.searchParams.set('top3_punt',row.point);
               url.searchParams.set('top3_versie',summary.revision);
               url.searchParams.set('top3_run',entry.run.replaceAll('-','').slice(0,11));
-              url.searchParams.set('top3_lid',row.member);
+              if (row.member != null) url.searchParams.set('top3_lid',row.member);
             }
             link.href = url.href;
             const value = row.value > 0 && row.value < .05 ? '< 0,1' : number.format(row.value);
             link.append(make('span', 'pluim-top3-place', row.name), make('span', 'pluim-top3-value', `${value} ${unit}`));
-            link.append(make('span', 'pluim-top3-detail', row.member === 0 ? 'Controleberekening' : `Ensemblelid ${row.member}`));
+            if (row.member != null) link.append(make('span', 'pluim-top3-detail', row.member === 0 ? 'Controleberekening' : `Ensemblelid ${row.member}`));
             if (row.time_ms != null) link.append(make('span', 'pluim-top3-detail', dates.format(row.time_ms)));
             if (key === 'snow') link.append(make('span', 'pluim-top3-detail', `Kans op ≥ 1 cm: ${Math.round(row.chance_1cm)}%`));
             if(row.equivalent_count>1)link.append(make('span','pluim-top3-detail',`Zelfde modelpunt: ${row.equivalent_places.join(', ')}${row.equivalent_count>4?` en ${row.equivalent_count-4} andere ${row.equivalent_count===5?'plaats':'plaatsen'}`:''}`));
@@ -139,6 +169,12 @@
         if (token === generation) unavailable('De landelijke top 3 kon niet worden geladen. Probeer Vernieuw.');
       }
     }
+    modeSelect.addEventListener('change', () => {
+      const url = new URL(location.href);
+      url.searchParams.set('top3_modus', modeSelect.value);
+      history.replaceState(null, '', url);
+      render();
+    });
     select.addEventListener('change', () => {
       wantedDays = Number(select.value);
       const url = new URL(location.href);

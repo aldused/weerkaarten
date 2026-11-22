@@ -66,9 +66,6 @@
   };
   const showContext=()=>{
     const old=document.getElementById('weerlab-run-switcher');if(old)old.hidden=true;
-    for (const id of ['stSel','plaatsInput','btnZoek']) {
-      const el=document.getElementById(id);if(el){el.disabled=true;el.title='Deze pluim toont de exacte landelijke selectie.';}
-    }
     if (document.querySelector('.pluim-top3-exactrun')) return;
     const bar=document.createElement('div');bar.className='pluim-top3-exactrun';
     const link=document.createElement('a'),url=new URL(location.href);
@@ -76,9 +73,9 @@
     url.searchParams.set('station','De Bilt');url.searchParams.set('lat','52.101');url.searchParams.set('lon','5.178');
     link.href=url.href;link.textContent='Terug naar de landelijke top 3';
     const memberLabel=selectedMember===null ? '' : selectedMember===0 ? ' · uiterste waarde uit de controleberekening' : ` · uiterste waarde uit ensemblelid ${selectedMember}`;
-    bar.append(document.createTextNode(`Exacte landelijke pluim · ${token.slice(9)} UTC${memberLabel} · `),link);
+    bar.append(document.createTextNode(`Exacte landelijke pluim · ${(token||'').slice(9)} UTC${memberLabel} · `),link);
     document.querySelector('.toolbar')?.before(bar);
-    ready.then(doc=>{const input=document.getElementById('plaatsInput');if(input)input.value=doc.name;}).catch(()=>{});
+    ready.then(doc=>{const input=document.getElementById('plaatsInput');if(input && !input.value && document.activeElement!==input)input.value=doc.name;}).catch(()=>{});
   };
   if (document.readyState==='loading')document.addEventListener('DOMContentLoaded',showContext,{once:true});else showContext();
   new MutationObserver(()=>{const bar=document.getElementById('weerlab-run-switcher');if(bar)bar.hidden=true;}).observe(document.body,{childList:true});

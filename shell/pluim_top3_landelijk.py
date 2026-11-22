@@ -138,7 +138,9 @@ def scores(groups, run, times_ms, fields, source):
         if not len(match):
             continue
         n = int(match[0])+1
-        rankings = {}
+        rankings, average_rankings = {}, {}
+        durations = np.diff(times[:n])
+        weights = (np.r_[0, durations] + np.r_[durations, 0]) / (2 * durations.sum())
         for category,field,operation in (
             ('cold','temperature_2m','min'),('mild','temperature_2m','max'),
             ('wind','wind_speed_10m','max'),('snow','snowfall','sum'),
@@ -155,28 +157,44 @@ def scores(groups, run, times_ms, fields, source):
                 extreme = (np.argmin if operation == 'min' else np.argmax)(samples, axis=-1)
                 indices, member_indices = np.divmod(extreme, 51)
                 values = samples[np.arange(len(groups)),extreme]
-            order = sorted(range(len(groups)), key=lambda i: (values[i] if operation == 'min' else -values[i], groups[i]['places'][0]['name']))
-            rows = []
-            for i in order:
-                if operation == 'sum' and values[i] <= 1e-9:
-                    continue
-                group = groups[i]
-                place = group['places'][0]
-                row = {key:place[key] for key in ('name','lat','lon')}
-                row.update(slug=group['id'], point=group['id'], value=round(float(values[i]),4),
-                           member=int(member_indices[i]),
-                           equivalent_count=len(group['places']),
-                           equivalent_places=[p['name'] for p in group['places'][1:4]])
-                if indices is not None:
-                    row['time_ms'] = int(times[indices[i]])
-                if category == 'snow':
-                    row['chance_1cm'] = round(float(np.mean(totals[:,i] >= 1)*100),4)
-                rows.append(row)
-                winner_ids.add(group['id'])
-                if len(rows) == 3:
-                    break
-            rankings[category] = rows
-        periods.append(dict(days=days, start_ms=start, end_ms=int(times[n-1]), rankings=rankings))
+            if operation == 'sum':
+                averages = totals.mean(axis=0)
+            elif category == 'mild':
+                averages = temperature_averages
+            else:
+                averages = arrays[field][:,:,:n].mean(axis=0) @ weights
+                if category == 'cold':
+                    temperature_averages = averages
+            for output, scores_for_category, is_average in (
+                (rankings, values, False), (average_rankings, averages, True),
+            ):
+                order = sorted(range(len(groups)), key=lambda i: (
+                    scores_for_category[i] if operation == 'min' else -scores_for_category[i],
+                    groups[i]['places'][0]['name'],
+                ))
+                rows = []
+                for i in order:
+                    if operation == 'sum' and scores_for_category[i] <= 1e-9:
+                        continue
+                    group = groups[i]
+                    place = group['places'][0]
+                    row = {key:place[key] for key in ('name','lat','lon')}
+                    row.update(slug=group['id'], point=group['id'], value=round(float(scores_for_category[i]),4),
+                               equivalent_count=len(group['places']),
+                               equivalent_places=[p['name'] for p in group['places'][1:4]])
+                    if not is_average:
+                        row['member'] = int(member_indices[i])
+                        if indices is not None:
+                            row['time_ms'] = int(times[indices[i]])
+                    if category == 'snow':
+                        row['chance_1cm'] = round(float(np.mean(totals[:,i] >= 1)*100),4)
+                    rows.append(row)
+                    winner_ids.add(group['id'])
+                    if len(rows) == 3:
+                        break
+                output[category] = rows
+        periods.append(dict(days=days, start_ms=start, end_ms=int(times[n-1]),
+                            rankings=rankings, average_rankings=average_rankings))
     if not periods:
         raise ValueError('Geen complete landelijke vergelijkingsperiode')
     summary = dict(schema=3, ranking_method=RANKING_METHOD, station_count=sum(len(g['places']) for g in groups),

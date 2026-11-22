@@ -166,6 +166,7 @@ def update_native_runs(repo,state,publish=True):
             previous=next((r for r in existing.get('runs',[]) if r['run']==entry['run']),{})
             source=previous.get('top3_nl',{}).get('source',{})
             if (previous.get('top3_nl',{}).get('ranking_method')==RANKING_METHOD
+                    and all('average_rankings' in period for period in previous['top3_nl']['periods'])
                     and source.get('native_revision')==version and source.get('catalog_revision')==city_sha):
                 continue
             print(f'NL_TOP3_BUILD: {entry["run"]}, {len(cities)} plaatsen, {len(groups)} modelpunten',flush=True)

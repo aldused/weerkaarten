@@ -63,8 +63,8 @@
 <link rel="stylesheet" href="weerbewaking_workspace.css?v=20260910-v1">
 <script src="weerbewaking_return.js?v=20260910-v2" defer></script>
 <script src="pluim_ens6_nav.js?v=20261024-zonder-trend" defer></script>
-<link rel="stylesheet" href="pluim-top3.css?v=20261121-extremen">
-<script src="pluim-top3.js?v=20261121-extremen" defer></script>
+<link rel="stylesheet" href="pluim-top3.css?v=20261122-gemiddelden">
+<script src="pluim-top3.js?v=20261122-gemiddelden" defer></script>
 <script src="pluim-presentatie.js?v=20261021-shared-location" defer></script>
 <script src="pluim-dag-nacht.js?v=20261004-all1"></script>
 </head>
@@ -115,7 +115,7 @@
 
 <script src="pluim_run_switcher_e15aa66195fa.js" data-required="temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m"></script>
 <script src="pluim_math.js?v=20260808-expertpluim"></script>
-<script src="pluim-top3-plaats.js?v=20261121-extremen"></script>
+<script src="pluim-top3-plaats.js?v=20261122-gemiddelden"></script>
 <script>
 const STATIONS = [
   { name:"Rotterdam",        lat:51.9244, lon:4.4777 },
@@ -259,13 +259,21 @@ STATIONS.forEach((s,i) => {
 });
 stSel.addEventListener('change', () => {
   currentStation = STATIONS[stSel.value];
+  openSelectedStation();
+});
+function openSelectedStation() {
   const u = new URL(window.location);
   u.searchParams.set('station', currentStation.name);
   u.searchParams.set('lat', String(currentStation.lat));
   u.searchParams.set('lon', String(currentStation.lon));
+  if (['top3_punt', 'top3_versie', 'top3_run'].some(key => u.searchParams.has(key))) {
+    ['top3_punt', 'top3_versie', 'top3_run', 'top3_lid'].forEach(key => u.searchParams.delete(key));
+    location.assign(u.href);
+    return;
+  }
   history.replaceState(null, '', u);
   loadAndRender(isFastUpdateWindow());
-});
+}
 document.getElementById('btnRefresh').addEventListener('click', () => loadAndRender(true, true));
 document.getElementById('btnPng').addEventListener('click', exportPng);
 const btnMosmixWaarden = document.getElementById('btnMosmixWaarden');
@@ -310,12 +318,7 @@ async function zoekPlaats() {
     }
     stSel.value = idx;
     currentStation = STATIONS[idx];
-    const u = new URL(window.location);
-    u.searchParams.set('station', currentStation.name);
-    u.searchParams.set('lat', String(currentStation.lat));
-    u.searchParams.set('lon', String(currentStation.lon));
-    history.replaceState(null, '', u);
-    loadAndRender(isFastUpdateWindow());
+    openSelectedStation();
   } catch(e) {
     err.textContent = 'Zoekfout: '+e.message;
   }
