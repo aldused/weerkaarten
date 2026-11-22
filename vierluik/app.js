@@ -1,7 +1,7 @@
-import {readCatalog} from './data-source.js';
-import {cloudBaseLevels,cloudBaseColors,heightLabels} from './cloud-base.js';
-import {cloudColor} from './clouds.js';
-import {HOUR,dayKey,validateFeed,sharedTimes,closestIndex} from './forecast-core.js';
+import {readCatalog} from './data-source.js?v=20261122-bereik';
+import {cloudBaseLevels,cloudBaseColors,heightLabels} from './cloud-base.js?v=20261122-bereik';
+import {cloudColor} from './clouds.js?v=20261122-bereik';
+import {HOUR,dayKey,validateFeed,comparisonTimes,hasForecastTime,closestIndex} from './forecast-core.js?v=20261122-bereik';
 'use strict';
 const $ = id => document.getElementById(id);
 const iconPaths = {
@@ -36,7 +36,7 @@ const catalogModeFor=layer=>layer==='cloudBase'?'cloudbase':isCloudLayer(layer)?
 const layers={cloudBase:'Wolkenbasis',clouds:'Bewolking H/M/L',cloudHigh:'Hoge bewolking',cloudMiddle:'Middelbare bewolking',cloudLow:'Lage bewolking',vis:'Zicht',td2m:'Dauwpunt',windchill:'Gevoelstemperatuur',rate:'Neerslag',weather:'Significant weer',t2m:'Temperatuur',ws:'Wind',gust:'Windstoten',ptot:'Neerslagsom',ptypeMap:'Neerslagtype',t850:'Temperatuur 850 hPa',t500:'Temperatuur 500 hPa',frz:'0 °C-niveau',sdep:'Sneeuwhoogte',sun:'Zonduur'};
 const units={cloudBase:'m / ft',clouds:'%',cloudHigh:'%',cloudMiddle:'%',cloudLow:'%',vis:'m / km',td2m:'°C',windchill:'°C',rate:'mm/u',weather:'°C / mm/u',t2m:'°C',t850:'°C',t500:'°C',ws:'Bft',gust:'km/u',ptot:'mm',frz:'m',sdep:'cm',sun:'min/uur',ptypeMap:''};
 const MODEL_KEYS=Object.keys(definitions);
-const state={index:0,layer:'weather',sync:true,playing:false,models:null,catalogs:null,times:[],followNow:true,catalogMode:'standard'};
+const state={index:0,layer:'weather',sync:true,playing:false,models:null,catalogs:null,times:[],timeMode:'common',followNow:true,catalogMode:'standard'};
 const timeFormatter=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 const dateFormatter=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'long',day:'numeric',month:'long'});
 const shortDateFormatter=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'short',day:'numeric',month:'short'});
@@ -60,7 +60,7 @@ function updateCardHeader(index){
 function updateMobileTabs(){document.querySelectorAll('.mobile-models button').forEach((b,i)=>{const d=definitions[cards[i].model];b.textContent=d.short;b.style.setProperty('--model',d.color);b.setAttribute('aria-label',`Spring naar kaart ${i+1}: ${d.name}`);b.setAttribute('aria-controls',`card-${i}`);});}
 function setActive(i){const maps=$('maps'),card=$(`card-${i}`);maps.scrollTo({left:card.offsetLeft-maps.offsetLeft,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}
 function buildCards(){
- $('maps').innerHTML=cards.map((c,i)=>`<article class="map-card" id="card-${i}" style="--model:${c.color}" aria-label="Modelkaart ${i+1}"><header class="card-header"><span class="model-mark" aria-hidden="true">${c.short}</span><div class="model-picker"><label class="sr" for="model-${i}">Model voor kaart ${i+1}</label><select class="model-select" id="model-${i}">${Object.entries(definitions).map(([key,d])=>`<option value="${key}" ${key===c.model?'selected':''} ${state.catalogs[key]?'':'disabled'}>${d.name}</option>`).join('')}</select><div class="model-meta"><span class="resolution">${c.resolution}</span><span class="run-label"></span></div></div><button class="icon-button card-expand" aria-label="${c.name} vergroten" title="Deze kaart vergroten">${icon('maximize')}</button></header><div class="map-window"><iframe id="frame-${i}" title="${c.name}: ${layers[state.layer]}" src="map.html?id=${i}&model=${c.model}#model=${c.model}&kaart=weather" loading="eager"></iframe><div class="map-label"><span class="map-label-text">Significant weer</span><span class="layer-unit"></span></div></div><div class="card-bottom"><span class="card-time loading">Kaart laden…</span><span class="lead-time"></span></div></article>`).join('');
+ $('maps').innerHTML=cards.map((c,i)=>`<article class="map-card" id="card-${i}" style="--model:${c.color}" aria-label="Modelkaart ${i+1}"><header class="card-header"><span class="model-mark" aria-hidden="true">${c.short}</span><div class="model-picker"><label class="sr" for="model-${i}">Model voor kaart ${i+1}</label><select class="model-select" id="model-${i}">${Object.entries(definitions).map(([key,d])=>`<option value="${key}" ${key===c.model?'selected':''} ${state.catalogs[key]?'':'disabled'}>${d.name}</option>`).join('')}</select><div class="model-meta"><span class="resolution">${c.resolution}</span><span class="run-label"></span></div></div><button class="icon-button card-expand" aria-label="${c.name} vergroten" title="Deze kaart vergroten">${icon('maximize')}</button></header><div class="map-window"><iframe id="frame-${i}" title="${c.name}: ${layers[state.layer]}" src="map.html?v=20261122-bereik&id=${i}&model=${c.model}#model=${c.model}&kaart=weather" loading="eager"></iframe><div class="map-label"><span class="map-label-text">Significant weer</span><span class="layer-unit"></span></div></div><div class="card-bottom"><span class="card-time loading">Kaart laden…</span><span class="lead-time"></span></div></article>`).join('');
  document.querySelector('.mobile-models').innerHTML=cards.map((c,i)=>`<button data-card="${i}">${c.short}</button>`).join('');
  cards.forEach((c,i)=>{
    updateCardHeader(i);
@@ -96,11 +96,14 @@ function setTime(index,{followNow=false,send=true}={}){
  const time=currentTime();$('valid-clock').textContent=timeFormatter.format(time);$('valid-clock').dateTime=time.toISOString();const date=dateFormatter.format(time);$('valid-date').textContent=date[0].toUpperCase()+date.slice(1);
  $('time-slider').setAttribute('aria-valuetext',`${date} ${timeFormatter.format(time)}`);$('prev').disabled=state.index===0;$('next').disabled=state.index===state.times.length-1;
  renderDays();renderHours();
+ const count=cards.filter(c=>hasForecastTime(state.catalogs?.[c.model],time.getTime())).length;
+ $('time-scope').textContent=state.timeMode==='all'?'GEKOZEN TIJD':'GELDIG OP ALLE KAARTEN';
+ $('time-range-summary').textContent=state.timeMode==='all'?`${count}/4 modellen op dit tijdstip · ontbrekende uren blijven leeg`:'Alleen tijden die in alle gekozen modellen voorkomen';
  if(state.models)cards.forEach((_,i)=>{updateCardHeader(i);const t=$(`card-${i}`).querySelector('.card-time');t.classList.add('loading');t.textContent='Kaart laden…';loadingCards.add(i);});
  if(send)broadcast({time:time.toISOString()});
 }
 function updateComparison(stamp=Date.now(),followNow=state.followNow){
- const times=sharedTimes(state.catalogs,cards.map(c=>c.model));if(!times.length)throw Error('Geen gezamenlijke actuele geldigheid beschikbaar.');
+ const times=comparisonTimes(state.catalogs,cards.map(c=>c.model),state.timeMode);if(!times.length)throw Error('Geen gezamenlijke actuele geldigheid beschikbaar.');
  state.times=times;if(!$('frame-0'))buildCards();setTime(closestIndex(times,stamp),{followNow,send:false});
  cards.forEach((c,i)=>command(i,{catalogs:state.catalogs,model:c.model,time:currentTime().toISOString(),layer:state.layer,details:details()}));
 }
@@ -145,11 +148,13 @@ window.addEventListener('message',e=>{
  const id=cards.findIndex((_,i)=>$(`frame-${i}`)?.contentWindow===e.source);if(id<0)return;
  const d=e.data;
  if(d.type==='map-status'){
+  if(d.model!==cards[id].model||d.layer!==state.layer||((d.ready||d.missing)&&Date.parse(d.valid)!==currentTime().getTime()))return;
   const time=$(`card-${id}`).querySelector('.card-time');
   if(id===0&&d.layer){actualLegends.set(d.layer,d.legend);if(d.layer===state.layer)renderLegend();}
   if(d.ready&&d.layer===state.layer){const period=d.layer==='gust'?d.period:null;$(`card-${id}`).querySelector('.map-label-text').textContent=layers[state.layer]+(d.layer==='cloudBase'&&d.cloudBaseKind==='ceiling'?' · ceiling >50%':d.layer==='cloudBase'&&d.cloudBaseKind==='ukv_cbh'?' · ≥2,5 oktas':period?` · ${period} uur`:d.layer==='sun'&&d.sunSourceHours>1?' · uurgemiddelde':'');}
-  if(d.failed){loadingCards.delete(id);time.classList.remove('loading');time.classList.add('error');time.textContent='Kaart tijdelijk niet beschikbaar';}
-  else if(d.ready){loadingCards.delete(id);time.classList.remove('error');time.classList.remove('loading');time.textContent=`${shortDateFormatter.format(new Date(d.valid))} · ${timeFormatter.format(new Date(d.valid))}`;}
+  if(d.missing){loadingCards.delete(id);time.classList.remove('loading','error');time.classList.add('missing');time.textContent='Geen gegevens voor dit tijdstip';}
+  else if(d.failed){loadingCards.delete(id);time.classList.remove('missing');time.classList.remove('loading');time.classList.add('error');time.textContent='Kaart tijdelijk niet beschikbaar';}
+  else if(d.ready){loadingCards.delete(id);time.classList.remove('error','missing');time.classList.remove('loading');time.textContent=`${shortDateFormatter.format(new Date(d.valid))} · ${timeFormatter.format(new Date(d.valid))}`;}
   else {loadingCards.add(id);time.classList.add('loading');time.textContent='Kaart laden…';}
  }else if(d.type==='map-view'&&state.sync){
    const k=JSON.stringify(d.view);if(k===lastView)return;lastView=k;clearTimeout(viewTimer);viewTimer=setTimeout(()=>broadcast({view:d.view},id),30);
@@ -157,13 +162,17 @@ window.addEventListener('message',e=>{
  else if(d.type==='map-play')togglePlay();
  else if(d.type==='map-close'){if($(`card-${id}`).classList.contains('focused'))toggleFocus(id);}
 });
+$('time-mode').onchange=e=>{
+ const previous=state.timeMode,stamp=currentTime().getTime();stop();state.timeMode=e.target.value;
+ if(state.catalogs)try{updateComparison(stamp,false);}catch(error){state.timeMode=previous;e.target.value=previous;showToast(error.message);}
+};
 $('layer-select').onchange=e=>setLayer(e.target.value);$('show-values').onchange=()=>broadcast({details:details()});
 $('prev').onclick=()=>{stop();setTime(state.index-1);};$('next').onclick=()=>{stop();setTime(state.index+1);};$('time-slider').oninput=e=>{stop();setTime(e.target.value);};$('play').onclick=togglePlay;
 $('zoomout').onclick=()=>broadcast({zoom:1/1.25});$('zoomin').onclick=()=>broadcast({zoom:1.25});$('reset').onclick=()=>broadcast({reset:true});
 $('sync').onclick=()=>{state.sync=!state.sync;$('sync').classList.toggle('active',state.sync);$('sync').setAttribute('aria-pressed',String(state.sync));$('sync').querySelector('span:last-child').textContent=state.sync?'Gekoppeld':'Los';if(state.sync){lastView='';broadcast({reset:true});}showToast(state.sync?'Zoomen en verschuiven zijn gekoppeld.':'Elke kaart kan nu afzonderlijk worden verschoven.');};
 $('settings').onclick=()=>$('options-dialog').showModal();['provinces','arrows','pressure','fog'].forEach(id=>$(id).onchange=()=>broadcast({details:details()}));
 $('fullscreen').onclick=async()=>{if(parent!==window){parent.postMessage({type:'weerlab-fullscreen-toggle'},location.origin);return;}try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{showToast('Gebruik de beeldvullende modus van je browser.');}};
-const demoInfo='<p>Wolkenbasis wordt getoond in meters en voeten boven de grond. ICON-D2 toont ceiling bij meer dan 50% laagbedekking; UKV de basis vanaf 2,5 oktas. De eigen bronrun staat boven de kaart. Diagnosecodes en de bovengrenswaarde 20.000 m worden zonder hoogte weergegeven. Gearceerd betekent geen bruikbare diagnose; mist is daarbij niet uitgesloten. AROME levert geen wolkenbasis.</p><p>Bewolking H/M/L gebruikt de afzonderlijke bronvelden: hoog in blauw, midden in geel en laag in rood. De drie percentages staan als H/M/L op vaste locaties. Kies Hoge, Middelbare of Lage bewolking om één laag los te bekijken. Deze kaarten gebruiken de nieuwste wolkenrun; de run staat boven iedere kaart. ECMWF-tussenuren zijn geïnterpoleerd.</p><p>Extra modellen: AROME HD 1.3 (Météo-France, Licence Ouverte 2.0) en UKMO UKV 2 km (British Crown copyright, Met Office, CC BY-SA 4.0). Bronvelden worden naar hetzelfde kaartrooster als de overige modellen vertaald. UKV gebruikt schermtemperatuur op 1,5 meter. AROME levert geen zichtveld aan; ook andere ontbrekende bronlagen krijgen een melding.</p><p>De compacte bediening geeft de kaarten meer ruimte. Bij significant weer staan temperatuur en neerslag als getallen op vaste locaties; bij andere kaartlagen zie je de waarde van die laag. De uurknoppen onder de slider werken zoals in het oude vierluik.</p><p>Dit vierluik gebruikt de <b>oorspronkelijke kaartweergave van Modelkaarten Benelux</b>: dezelfde geografische ondergrond, kleuren, windpijlen en modelberekeningen. Plaatsnamen zijn weggelaten.</p><p>Dit vierluik haalt bij openen de nieuwste modelruns op en controleert elke 90 seconden opnieuw zolang de pagina zichtbaar is. De tijdlijn bevat uitsluitend gemeenschappelijke geldige uren. Bij een tijdelijke storing blijven reeds geladen kaarten staan en wordt de fout vermeld. ECMWF-velden tussen bronstappen worden volgens de bestaande kaartcode geïnterpoleerd.</p><p>Alle kaarten volgen dezelfde lokale tijd. De modelruns en verwachtingstermijnen kunnen verschillen. De vier kaarten staan altijd naast elkaar. Op een smal scherm schuif je horizontaal of gebruik je de modelknoppen om naar een kaart te springen. De kaarten blijven daarbij groot en leesbaar.</p><p>Sleep om te verschuiven, gebruik + en − om te zoomen, of tik op een plek voor lokale waarden.</p>';
+const demoInfo='<p>Wolkenbasis wordt getoond in meters en voeten boven de grond. ICON-D2 toont ceiling bij meer dan 50% laagbedekking; UKV de basis vanaf 2,5 oktas. De eigen bronrun staat boven de kaart. Diagnosecodes en de bovengrenswaarde 20.000 m worden zonder hoogte weergegeven. Gearceerd betekent geen bruikbare diagnose; mist is daarbij niet uitgesloten. AROME levert geen wolkenbasis.</p><p>Bewolking H/M/L gebruikt de afzonderlijke bronvelden: hoog in blauw, midden in geel en laag in rood. De drie percentages staan als H/M/L op vaste locaties. Kies Hoge, Middelbare of Lage bewolking om één laag los te bekijken. Deze kaarten gebruiken de nieuwste wolkenrun; de run staat boven iedere kaart. ECMWF-tussenuren zijn geïnterpoleerd.</p><p>Extra modellen: AROME HD 1.3 (Météo-France, Licence Ouverte 2.0) en UKMO UKV 2 km (British Crown copyright, Met Office, CC BY-SA 4.0). Bronvelden worden naar hetzelfde kaartrooster als de overige modellen vertaald. UKV gebruikt schermtemperatuur op 1,5 meter. AROME levert geen zichtveld aan; ook andere ontbrekende bronlagen krijgen een melding.</p><p>De compacte bediening geeft de kaarten meer ruimte. Bij significant weer staan temperatuur en neerslag als getallen op vaste locaties; bij andere kaartlagen zie je de waarde van die laag. De uurknoppen onder de slider werken zoals in het oude vierluik.</p><p>Dit vierluik gebruikt de <b>oorspronkelijke kaartweergave van Modelkaarten Benelux</b>: dezelfde geografische ondergrond, kleuren, windpijlen en modelberekeningen. Plaatsnamen zijn weggelaten.</p><p>Dit vierluik haalt bij openen de nieuwste modelruns op en controleert elke 90 seconden opnieuw zolang de pagina zichtbaar is. Kies Gelijke tijden voor de gezamenlijke geldige uren, of Volledig bereik · HARMONIE voor alle beschikbare uren van de gekozen modellen. Buiten het bereik van een model blijft die kaart leeg; er wordt geen ander tijdstip getoond. Bij een tijdelijke storing blijven reeds geladen kaarten staan en wordt de fout vermeld. ECMWF-velden tussen bronstappen worden volgens de bestaande kaartcode geïnterpoleerd.</p><p>Alle kaarten volgen dezelfde lokale tijd. De modelruns en verwachtingstermijnen kunnen verschillen. De vier kaarten staan altijd naast elkaar. Op een smal scherm schuif je horizontaal of gebruik je de modelknoppen om naar een kaart te springen. De kaarten blijven daarbij groot en leesbaar.</p><p>Sleep om te verschuiven, gebruik + en − om te zoomen, of tik op een plek voor lokale waarden.</p>';
 $('help').onclick=$('snapshot-info').onclick=()=>showInfo('Jouw live vierluik',demoInfo);$('close-info').onclick=()=>$('info-dialog').close();
 $('legend-info').onclick=()=>showInfo(layers[state.layer],'<p>Dezelfde kleur betekent op alle vier de kaarten dezelfde waarde. Bij significant weer toont grijs de bewolking; de neerslagkleur geeft het type aan en de tint de intensiteit. De volledige type- en kleurschaal staat hieronder.</p><div id="native-legend"></div><p>Windstoten hebben de bronperiode van het model. Neerslagsommen beginnen bij de eigen modelstart. Zonduur wordt altijd getoond in minuten per uur (0–60). Bij een bronperiode van 3 of 6 uur staat er een uurgemiddelde; de bron geeft dan geen exacte verdeling per uur. Vergelijk deze sommen en maxima daarom met hun tijdvak in gedachten.</p>');
 // Use the renderer’s actual legend inside the explanation, including uncommon precipitation types.
@@ -186,10 +195,11 @@ async function refreshCatalogs(){
    }));
    if(mode!==(catalogModeFor(state.layer)))return;
    const catalogs=Object.fromEntries(results.filter(r=>r.status==='fulfilled').map(r=>r.value));
-   if(cards.some(c=>!catalogs[c.model]))throw Error('Een gekozen model is tijdelijk niet bereikbaar');
+   const unavailable=cards.filter(c=>!catalogs[c.model]);
+   if(unavailable.length){const key=unavailable[0].model,cause=results[MODEL_KEYS.indexOf(key)];throw Error(definitions[key].name+': '+(cause.reason?.message||'modelgegevens tijdelijk niet bereikbaar'));}
    const signature=mode+JSON.stringify(MODEL_KEYS.map(k=>[catalogs[k]?.updated,catalogs[k]?.runs[0]?.id]));
    const stamp=state.followNow?Math.floor(Date.now()/HOUR)*HOUR:currentTime().getTime();
-   const nextTimes=sharedTimes(catalogs,cards.map(c=>c.model));if(!nextTimes.length)throw Error('Geen gezamenlijke actuele geldigheid beschikbaar.');
+   const nextTimes=comparisonTimes(catalogs,cards.map(c=>c.model),state.timeMode);if(!nextTimes.length)throw Error('Geen gezamenlijke actuele geldigheid beschikbaar.');
    if(signature!==lastSignature||JSON.stringify(nextTimes)!==JSON.stringify(state.times)){
     state.catalogMode=mode;state.catalogs=catalogs;state.models=Object.fromEntries(Object.keys(catalogs).map(key=>[key,{run:catalogs[key].runs[0].time,steps:catalogs[key].runs[0].steps}]));
     updateComparison(stamp,state.followNow);document.querySelectorAll('.model-select option').forEach(option=>{option.disabled=!catalogs[option.value];});lastSignature=signature;

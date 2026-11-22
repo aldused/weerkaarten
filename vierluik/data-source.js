@@ -1,5 +1,5 @@
-import {nativeCatalog} from './native-catalog.js';
-import {cloudCatalog} from './cloud-catalog.js';
+import {nativeCatalog} from './native-catalog.js?v=20261122-bereik';
+import {cloudCatalog} from './cloud-catalog.js?v=20261122-bereik';
 const models=new Set(['harmonie','harmonie46','icond2','ecmwf','arome','ukv']);
 export async function readCatalog(key,mode='standard',signal){
  if(!models.has(key))throw Error('Onbekend model');

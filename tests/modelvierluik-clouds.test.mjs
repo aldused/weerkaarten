@@ -25,3 +25,14 @@ test('Een door de hosting verzwakte ETag blijft bruikbaar voor dezelfde gecontro
  globalThis.fetch=async(url,options)=>options?.method==='HEAD'?new Response(null,{headers:{ETag:'W/"same-source"'}}):Response.json(meta);
  try{const feed=await cloudCatalog('harmonie');assert.equal(feed.runs[0].native.meta.parameters.bewolking.etag,'"same-source"');assert.equal(feed.runs[0].steps[0].valid,'2026-11-21T15:00:00.000Z');}finally{globalThis.fetch=original;}
 });
+test('Een nieuwe ECMWF-export met 240 uurlijkse stappen blijft bruikbaar voor wolkenlagen',async()=>{
+ const original=globalThis.fetch,stamp=Date.parse('2026-11-22T00:00Z');
+ const meta={run_utc:'2026-11-22T00:00Z',grid:{n_lat:71,n_lon:109},tijden:Array.from({length:240},(_,i)=>new Date(stamp+(i+1)*3600000).toISOString()),parameters:{bewolking:{file:'ecmwf-native/2026112200/ecmwf_native_data_bewolking.bin',components:3},wolkenbasis:{file:'ecmwf-native/2026112200/ecmwf_om_data_wolkenbasis_2026112200_fad9c8a19374.bin',components:1,source_run_utc:'2026-11-22T00:00Z',valid_until:'2026-11-27T00:00Z'}}};
+ globalThis.fetch=async()=>Response.json(meta);
+ try{
+  assert.equal((await cloudCatalog('ecmwf')).runs[0].steps.length,240);
+  const base=(await cloudCatalog('ecmwf','wolkenbasis')).runs[0];assert.equal(base.steps.length,120);assert.equal(base.native.meta.times.length,240);
+  meta.tijden=Array.from({length:401},(_,i)=>new Date(stamp+(i+1)*3600000).toISOString());
+  await assert.rejects(()=>cloudCatalog('ecmwf'),/Ongeldige wolkenbron/);
+ }finally{globalThis.fetch=original;}
+});

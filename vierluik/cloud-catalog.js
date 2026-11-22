@@ -30,7 +30,7 @@ export async function cloudCatalog(key,field='bewolking'){
  const read=async()=>{const r=await fetch('https://harmonie-data.weerlab.nl/'+config.meta,{headers:{Accept:'application/json'},cache:'no-store'});if(!r.ok)throw Error('Wolkenindex niet beschikbaar');return r.json();};
  const meta=await read(),parentRun=Date.parse(meta.run_utc),g=meta.grid,info=meta.parameters?.[field];
  const run=base&&info?.source_run_utc?Date.parse(info.source_run_utc):parentRun;
- if(!Number.isFinite(run)||!Number.isFinite(parentRun)||!g||g.n_lat<2||g.n_lon<2||g.n_lat*g.n_lon>1000000||!Array.isArray(meta.tijden)||!meta.tijden.length||meta.tijden.length>200)throw Error('Ongeldige wolkenbron');
+ if(!Number.isFinite(run)||!Number.isFinite(parentRun)||!g||g.n_lat<2||g.n_lon<2||g.n_lat*g.n_lon>1000000||!Array.isArray(meta.tijden)||!meta.tijden.length||meta.tijden.length>400)throw Error('Ongeldige wolkenbron');
  if((!info&&!base)||(info&&(info.components!==(base?1:3)||!(base?CLOUD_BASE_FILES[key]?.test(info.file):config.file.test(info.file)))))throw Error('Ongeldig wolkenbestand');
  const id=new Date(run).toISOString().replace(/[-:T]/g,'').slice(0,10),parentId=new Date(parentRun).toISOString().replace(/[-:T]/g,'').slice(0,10);
  if(info?.file.includes('/')&&!info.file.includes('/'+parentId+'/'))throw Error('Wolkenbestand hoort bij andere run');

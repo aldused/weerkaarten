@@ -17,9 +17,13 @@ export function hourlyTimes(feed){
  }
  return out;
 }
-export function sharedTimes(catalogs,keys,now=Date.now()){
+export function comparisonTimes(catalogs,keys,mode='common',now=Date.now()){
  const feeds=[...new Set(keys)].map(k=>catalogs[k]);if(feeds.some(f=>!f))return [];
  const sets=feeds.map(f=>new Set(hourlyTimes(f))),start=Math.floor(now/HOUR)*HOUR;
- return [...sets[0]].filter(t=>t>=start&&sets.every(s=>s.has(t))).sort((a,b)=>a-b);
+ if(!sets.length)return [];
+ const candidates=mode==='all'?new Set(sets.flatMap(s=>[...s])):sets[0];
+ return [...candidates].filter(t=>t>=start&&(mode==='all'||sets.every(s=>s.has(t)))).sort((a,b)=>a-b);
 }
+export const sharedTimes=(catalogs,keys,now=Date.now())=>comparisonTimes(catalogs,keys,'common',now);
+export const hasForecastTime=(feed,stamp)=>!!feed&&hourlyTimes(feed).includes(stamp);
 export function closestIndex(times,stamp){return times.reduce((best,t,i)=>Math.abs(t-stamp)<Math.abs(times[best]-stamp)?i:best,0);}

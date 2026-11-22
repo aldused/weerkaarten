@@ -23,3 +23,22 @@ test('Index met verkeerde asset of niet oplopende tijd wordt geweigerd',()=>{
  const f=feed('harmonie',[1,2]);assert.equal(validateFeed(f,'harmonie').runs[0].id,'2026112112');f.runs[0].steps[0].asset='../other.json';assert.throws(()=>validateFeed(f,'harmonie'));
  assert.throws(()=>validateFeed(feed('harmonie',[2,1]),'harmonie'));
 });
+
+test('Volledig bereik behoudt alle modeluren en laat kortere modellen leeg',async()=>{
+ const {comparisonTimes,hasForecastTime}=await import('../vierluik/forecast-core.js');
+ const c={harmonie:feed('harmonie',[1,2,3,4,5]),icond2:feed('icond2',[1,2]),ecmwf:feed('ecmwf',[0,3,6,9])};
+ const keys=['harmonie','icond2','ecmwf'];
+ assert.deepEqual(comparisonTimes(c,keys,'common',begin),[1,2].map(h=>begin+h*HOUR));
+ assert.deepEqual(comparisonTimes(c,keys,'all',begin),Array.from({length:10},(_,h)=>begin+h*HOUR));
+ assert.equal(hasForecastTime(c.icond2,begin+5*HOUR),false);
+ assert.equal(hasForecastTime(c.harmonie,begin+5*HOUR),true);
+ assert.equal(hasForecastTime(c.ecmwf,begin+5*HOUR),true);
+ assert.equal(closestIndex(comparisonTimes(c,keys,'common',begin),begin+9*HOUR),1);
+});
+test('Volledig bereik vult gaten niet op en negeert niet-gekozen modellen',async()=>{
+ const {comparisonTimes,hasForecastTime}=await import('../vierluik/forecast-core.js');
+ const c={harmonie:feed('harmonie',[1,3]),icond2:feed('icond2',[1,2]),ecmwf:feed('ecmwf',[0,6])};
+ assert.deepEqual(comparisonTimes(c,['harmonie','icond2'],'all',begin+2*HOUR),[2,3].map(h=>begin+h*HOUR));
+ assert.equal(hasForecastTime(c.ecmwf,begin+3*HOUR),false);
+ assert.deepEqual(comparisonTimes({},[],'all',begin),[]);
+});
