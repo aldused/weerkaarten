@@ -663,7 +663,7 @@ const PM = { l: 80, r: 80, t: 92, b: 165 };
 const PLOT_W = PANEL_W - PM.l - PM.r;
 const PLOT_H = PANEL_H - PM.t - PM.b;
 
-function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p50, mean, yMin, yMax, yStep, station, datumTxt, runLabel, footLeft, footRight, times, domainStart, domainEnd, rightAxis, refLines, markers, tickColors}) {
+function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p50, mean, yMin, yMax, yStep, station, datumTxt, runLabel, footLeft, footRight, times, domainStart, domainEnd, rightAxis, refLines, markers, tickColors, operationalControl}) {
   if (arguments[0].unavailableText) {
     const cx = ox + PANEL_W/2;
     const cy = oy + PANEL_H/2;
@@ -741,7 +741,7 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p50, mean, yMin, yM
   for (const m of ensemble) s += `<path d="${pathOf(m)}" fill="none" stroke="${C_GREEN}" stroke-width="0.75" stroke-opacity="0.62" ${expertStroke}/>`;
   if (mean) s += `<path d="${pathOf(mean)}" fill="none" stroke="${C_BLACK}" stroke-width="2" stroke-dasharray="3 5" ${expertStroke}/>`;
   if (p50)  s += `<path d="${pathOf(p50)}" fill="none" stroke="${C_MAGENTA}" stroke-width="2" stroke-dasharray="12 7" ${expertStroke}/>`;
-  if (ctrl) s += `<path d="${pathOf(ctrl)}" fill="none" stroke="${C_BLUE}" stroke-width="2.1" ${expertStroke}/>`;
+  if (ctrl) s += `<path d="${pathOf(ctrl)}" fill="none" stroke="${operationalControl ? C_RED : C_BLUE}" stroke-width="${operationalControl ? 2.3 : 2.1}" ${expertStroke}/>`;
   const hasHres = hres?.some(Number.isFinite);
   if (hasHres) s += `<path d="${pathOf(hres)}" fill="none" stroke="${C_RED}" stroke-width="2.3" ${expertStroke}/>`;
 
@@ -778,7 +778,9 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p50, mean, yMin, yM
   const legY = oy + PANEL_H - 51;
   const legItems = [
     ...(hasHres ? [{color:C_RED, w:2.3, dash:null, txt:"Oper. (HRES)"}] : []),
-    {color:C_BLUE,   w:2.1,  dash:null,   txt:"Controle"},
+    operationalControl
+      ? {color:C_RED, w:2.3, dash:null, txt:"Oper. controle (voorheen HRES)"}
+      : {color:C_BLUE, w:2.1, dash:null, txt:"Controle"},
     {color:C_GREEN,  w:0.75, dash:null,   txt:"Verstoorde leden"},
     {color:C_BLACK,  w:2,    dash:"3 5",  txt:"gemiddelde"},
     {color:C_MAGENTA,w:2,    dash:"12 7", txt:"mediaan (P50)"},
@@ -834,7 +836,7 @@ function buildPageSvg(model) {
     const r = Math.floor(i/COLS), c = i%COLS;
     const ox = PAGE_MARGIN_X + c*(PANEL_W+PANEL_GAP);
     const oy = PAGE_HEADER_H + PAGE_MARGIN_X + r*(PANEL_H+PANEL_GAP);
-    s += buildPanelSvg({ ox, oy, station: model.station, datumTxt: model.datumTxt, runLabel: model.runLabel, footLeft: model.footLeft, footRight: model.footRight, nDays: model.nDays, times: model.times, ...model.panels[i] });
+    s += buildPanelSvg({ ox, oy, station: model.station, datumTxt: model.datumTxt, runLabel: model.runLabel, footLeft: model.footLeft, footRight: model.footRight, nDays: model.nDays, times: model.times, operationalControl: model.operationalControl, ...model.panels[i] });
   }
   s += `<text x="${PAGE_W/2}" y="${PAGE_H-15}" font-size="16" text-anchor="middle" fill="#777" font-style="italic">© Weerlab.nl · ECMWF IFS-ENS · UTC-modeltijden · A4 landscape</text>`;
   s += `</svg>`;
@@ -1041,7 +1043,8 @@ function buildModel(ens, hres, mosmix = null) {
     station: currentStation.name,
     nMembers: temp.perturbed.length,
     nStatsMembers: temp.statistics.length,
-    hresStatus: hres ? "exacte HRES" : "HRES niet beschikbaar",
+    operationalControl: !hres,
+    hresStatus: hres ? "exacte HRES" : "operationele ENS-controle",
     datumTxt, runLabel,
     footLeft: `Weerlab.nl ${todayStr}, gegenereerd op basis van ECMWF`,
     footRight: `Bron: ECMWF IFS-ENS`,
