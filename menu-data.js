@@ -267,43 +267,6 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
-    "id": "hires4",
-    "name": "Vergelijk modellen & runs · 4-/6-luik",
-    "description": "Vergelijk modellen of zes eerdere runs voor hetzelfde tijdstip: neerslag, windkracht en windstoten",
-    "category": "verwachting",
-    "type": "kaarten",
-    "section": "",
-    "icon": "vierluik",
-    "href": "index.html#weerkaarten-vierluik",
-    "thumbnail": "thumbs/hires4.webp",
-    "facets": {
-      "veld": [
-        "neerslag",
-        "temp",
-        "wind",
-        "bewolking"
-      ],
-      "model": [
-        "harmonie",
-        "harmonie46",
-        "icond2",
-        "icond2ruc",
-        "arome",
-        "ukv",
-        "ecmwf",
-        "gfs"
-      ],
-      "gebied": [
-        "nl"
-      ],
-      "weergave": [
-        "4"
-      ]
-    },
-    "keywords": "UKMO UKV 2 km Met Office AROME HD Météo-France Hoge resolutie 4-luik 4 regiomodellen naast elkaar Neerslag Temperatuur Wind Bewolking HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC Nederland 4-luik HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC ECMWF HRES GFS Vergelijk wereldmodellen Globale modellen 4-luik ECMWF · GFS Neerslag Temperatuur Wind ECMWF HRES GFS Europa 4-luik ECMWF HRES GFS",
-    "restricted": false
-  },
-  {
     "id": "sigvier",
     "name": "Significant weer · vierluik",
     "description": "Vergelijk het complete weerbeeld van vier modellen",
@@ -1243,32 +1206,24 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "weerkaart",
-    "name": "Weerkaart",
-    "description": "ECMWF 0,1° · neerslag, bewolking, temperatuur en luchtdruk · 15 uitsneden, tot 15 dagen vooruit",
-    "category": "verwachting",
-    "type": "kaarten",
-    "section": "Analyse",
-    "icon": "map",
-    "href": "index.html#weerkaart",
-    "src": "ecmwf_overview/",
-    "thumbnail": null,
-    "facets": {},
-    "keywords": "Weerkaart Overview ECMWF HRES 0,1 neerslag bewolking temperatuur luchtdruk isobaren Europa Benelux Nederland run",
+    "name": "Modellen 4-luik",
+    "description": "Vier modelkaarten naast elkaar op dezelfde tijd · HARMONIE 43/46, ICON-D2, ECMWF, AROME en UKV",
+    "category": "verwachting", "type": "kaarten", "section": "",
+    "icon": "vierluik", "href": "index.html#weerkaart",
+    "src": "vierluik/index.html?v=20261122-live", "thumbnail": null,
+    "facets": {"veld":["significant","temp","neerslag","wind","bewolking","zon","hoogte"],"model":["harmonie","harmonie46","icond2","ecmwf","arome","ukv"],"gebied":["nl"],"weergave":["4"]},
+    "keywords": "vierluik 4-luik vier modellen vergelijken Benelux HARMONIE 43 HARMONIE 46 ICON-D2 ECMWF IFS AROME HD UKMO UKV significant weer dauwpunt gevoelstemperatuur zicht wolkenbasis bewolking neerslag windstoten zonduur",
     "restricted": false
   },
   {
     "id": "weerkaart-europa",
-    "name": "Weerkaart Europa · ECMWF",
-    "description": "ECMWF · KNMI en DMI HARMONIE Europa · HARMONIE 43 en 46 Benelux",
-    "category": "verwachting",
-    "type": "kaarten",
-    "section": "Analyse",
-    "icon": "map",
-    "href": "index.html#weerkaart-europa",
-    "src": "ecmwf_weerradar/",
-    "thumbnail": null,
-    "facets": {},
-    "keywords": "Weerkaart Europa ECMWF KNMI DMI HARMONIE 43 46 Benelux bewolking neerslag temperatuur wind Bft windstoten mist weerradar",
+    "name": "ECMWF Europa",
+    "description": "Weerkaart Europa en ECMWF overzicht bij elkaar · neerslag, bewolking, temperatuur, wind en luchtdruk",
+    "category": "verwachting", "type": "kaarten", "section": "Analyse",
+    "icon": "map", "href": "index.html#weerkaart-europa",
+    "src": "ecmwf-europa.html?v=20261122-tabs", "thumbnail": null,
+    "facets": {"veld":["significant","temp","neerslag","wind","bewolking","druk"],"model":["ecmwf","harmonie","harmonie46"],"gebied":["eu"]},
+    "keywords": "ECMWF Europa overzicht overview weerkaart 0,1 HRES KNMI DMI HARMONIE 43 46 Benelux neerslag bewolking temperatuur wind Bft windstoten mist luchtdruk isobaren weerradar",
     "restricted": false
   },
   {

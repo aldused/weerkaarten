@@ -39,6 +39,11 @@ if [ -d ecmwf_weerradar ]; then
     -type f ! -name .DS_Store ! -name '*.pyc' -print0)
 fi
 
+# Nieuw modellenvierluik: statische interface en gedeelde kaartmodules.
+if [ -d vierluik ]; then
+  cp -R vierluik "$STAGE/vierluik"
+fi
+
 # Wegdektemperaturen: pagina, kaartassets en echte bronmomentopname.
 if [ -d beta-wegdek ]; then
   cp -R beta-wegdek "$STAGE/beta-wegdek"

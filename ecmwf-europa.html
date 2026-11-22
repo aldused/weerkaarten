@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#102b46">
+  <title>ECMWF Europa · Weerlab</title>
+  <style>
+    :root{font:16px system-ui,sans-serif;color:#173b52;background:#eef4f8;color-scheme:light}
+    *{box-sizing:border-box}body{margin:0;height:100dvh;display:flex;flex-direction:column}
+    nav{display:flex;gap:6px;padding:6px 10px;border-bottom:1px solid #c4d5e0;flex:none;overflow-x:auto}
+    a{display:flex;align-items:center;min-height:36px;padding:6px 15px;border:1px solid #c4d5e0;border-radius:6px;color:#264f66;text-decoration:none;font-weight:600;font-size:.9rem;white-space:nowrap}
+    a[aria-current=page]{background:#173f59;color:white;border-color:#173f59}a:hover{background:#dce9f1}a[aria-current=page]:hover{background:#235671}a:focus-visible{outline:3px solid #248a98;outline-offset:2px}
+    main{flex:1;min-height:0}iframe{width:100%;height:100%;border:0;display:block}
+  </style>
+</head>
+<body>
+  <nav aria-label="ECMWF Europa: kaart kiezen">
+    <a href="#kaart" data-view="kaart" aria-current="page">Weerkaart Europa</a>
+    <a href="#overzicht" data-view="overzicht">ECMWF overzicht</a>
+  </nav>
+  <main id="viewer" aria-label="Gekozen ECMWF-kaart"></main>
+  <script>
+    (()=>{
+      const views={kaart:{src:'ecmwf_weerradar/',title:'Weerkaart Europa'},overzicht:{src:'ecmwf_overview/',title:'ECMWF overzicht'}};
+      let current='';
+      function show(){
+        const key=location.hash==='#overzicht'?'overzicht':'kaart';
+        if(key===current)return;current=key;
+        document.querySelectorAll('[data-view]').forEach(a=>{if(a.dataset.view===key)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
+        const frame=document.createElement('iframe');frame.src=views[key].src;frame.title=views[key].title;frame.allow='fullscreen';frame.allowFullscreen=true;
+        document.getElementById('viewer').replaceChildren(frame);
+        if(parent!==window)parent.postMessage({type:'weerlab-europa-tab',tab:key},location.origin);
+      }
+      document.querySelectorAll('[data-view]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();history.replaceState(null,'',a.hash);show();}));
+      window.addEventListener('hashchange',show);show();
+      window.addEventListener('message',event=>{
+        if(event.origin!==location.origin||event.source!==document.querySelector('iframe')?.contentWindow)return;
+        if(['weerlab-fullscreen-toggle','weerlab-fullscreen-query','weerlab-focus-search'].includes(event.data?.type)&&parent!==window)parent.postMessage(event.data,location.origin);
+      });
+    })();
+  </script>
+</body>
+</html>

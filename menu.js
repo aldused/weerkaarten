@@ -61,7 +61,7 @@
   const defaultFavorites=site.defaultFavorites || (site.storagePrefix?['radar','significant','pluim-ens6']:[]);
   const migrated=Array.isArray(previous)?previous.map(id=>products.find(p=>p.href==='index.html#'+id)?.id).filter(Boolean):[];
   let saved=site.storagePrefix?readStorage(storagePrefix+'-favorites',migrated.length?migrated:defaultFavorites):[];
-  let favorites=Array.isArray(saved)?[...new Set(saved.map(id=>id==='global4'?'hires4':id).filter(id=>byId.has(id)))]:defaultFavorites;
+  let favorites=Array.isArray(saved)?[...new Set(saved.map(id=>['global4','hires4'].includes(id)?'weerkaart':id).filter(id=>byId.has(id)))]:defaultFavorites;
   if(personal)favorites=[];
   let view=readStorage(storagePrefix+'-view','cards')==='list'?'list':'cards';
   let state={}, filterOpen=false, toastTimer, searchTimer, searchOrigin='#start';
@@ -170,6 +170,10 @@
     const incoming=location.hash.slice(1) || site.defaultRoute || '';
     if(/^weerbewaking(?:-|$)/.test(incoming)){location.replace('https://meteobewaking.nl/cms/weerbewaking/weerbewaking.html');return {page:'start',type:'',filters:{},q:''};}
     let raw=site.routeAliases?.[incoming] ?? incoming;
+    // De oude modelvergelijkers hebben één opvolger op de voormalige Weerkaart-plek.
+    if(/^weerkaarten-(vierluik|hires4|hires6|global4)$/.test(raw.split('?')[0])){
+      raw='weerkaart';history.replaceState(null,'','#weerkaart');
+    }
     if(/^(?:menu\/)?modellenbespreking$/.test(raw.split('?')[0])){
       raw='menu/verwachting?type=tekst';
       history.replaceState(null,'','#'+raw);
@@ -308,7 +312,7 @@
     if(cat.types)html+=`<nav class="subnav" aria-label="${cat.name}: onderwerpen">${cat.types.map(([type,name])=>`<a href="${routeUrl(state.page,type)}" ${state.type===type?'aria-current="page"':''}>${name}</a>`).join('')}</nav>`;
     if(climate)html+=`<aside class="climate-guide"><span>${icon('chart')}</span><div><strong>Het weer in context</strong><p>Records en metingen worden aangevuld zodra brondata beschikbaar zijn. Klimaatnormalen hebben de vaste referentieperiode <b>1991–2020</b>. De gegevensdatum staat bij het onderdeel.</p></div></aside>`;
     if(archive)html+=`<aside class="climate-guide"><span>${icon('chart')}</span><div><strong>Van dagkaart tot seizoensbalans</strong><p>Kies een landelijk overzicht of bekijk één station in detail. Bij elk onderdeel staan de meetperiode en de bron; recente dagen kunnen nog worden aangevuld.</p></div></aside>`;
-    if(maps)html+=`<nav class="maps-shortcuts" aria-label="Snel naar weerkaarten"><a href="index.html#mosmix-minikaarten">${icon('map')}<span><strong>MOS/MIX Nederland</strong><small>9 dagen in één overzicht</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-modelkaarten">${icon('cloud')}<span><strong>Modelkaarten</strong><small>Uur voor uur vooruit</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-vierluik">${icon('grid')}<span><strong>Vergelijken</strong><small>Modellen of zes opeenvolgende uren</small></span>${icon('arrow')}</a></nav>`;
+    if(maps)html+=`<nav class="maps-shortcuts" aria-label="Snel naar weerkaarten"><a href="index.html#mosmix-minikaarten">${icon('map')}<span><strong>MOS/MIX Nederland</strong><small>9 dagen in één overzicht</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-modelkaarten">${icon('cloud')}<span><strong>Modelkaarten</strong><small>Uur voor uur vooruit</small></span>${icon('arrow')}</a><a href="index.html#weerkaart">${icon('grid')}<span><strong>Vergelijken</strong><small>Vier modellen op dezelfde tijd</small></span>${icon('arrow')}</a></nav>`;
     html+=controls(result.length+(state.page==='favorieten'?savedPages.length:0),{filters:!!filterSets[state.type]})+filterPanel(base);
     if(!result.length&&state.page==='favorieten'&&savedPages.length)return html;
     if(!result.length)return html+empty(state.page==='favorieten'?'Maak Weerlab een beetje van jou':'Geen onderdelen bij deze combinatie',state.page==='favorieten'?'Tik op het sterretje bij een onderdeel. Je favorieten worden in deze browser bewaard.':'Verwijder een filter om meer weerinformatie te zien.',state.page==='favorieten'?'<a class="button button-primary" href="#start">Ontdek Weerlab</a>':'<button class="button button-primary" data-reset-filters>Alle filters wissen</button>');
@@ -348,7 +352,7 @@
     document.body.classList.toggle('product-open',showingProduct);
     document.body.classList.remove('map-focus-open');
     setProductExpanded(false);
-    document.body.classList.toggle('vierluik-open', showingProduct && /^weerkaarten-(vierluik|hires4|hires6|global4)$/.test(state.productRoute));
+    document.body.classList.toggle('vierluik-open', showingProduct && /^(weerkaart|weerkaarten-(vierluik|hires4|hires6|global4))(?:\?|$)/.test(state.productRoute));
     main.hidden=showingProduct;
     $('#product-workspace').hidden=!showingProduct;
     if(showingProduct){renderProduct();prefixMenuLinks();refreshPageActions();trackPersonalProduct();return;}
@@ -560,7 +564,7 @@
 
   function renderProduct(){
     const route=state.productRoute;
-    document.body.classList.toggle('vierluik-open', /^weerkaarten-(vierluik|hires4|hires6|global4)$/.test(route));
+    document.body.classList.toggle('vierluik-open', /^(weerkaart|weerkaarten-(vierluik|hires4|hires6|global4))(?:\?|$)/.test(route));
     const title=state.product?.name || 'Weerlab';
     $('#product-title').textContent=title;
     $('#product-permalink').href=selfPage+'#'+route;
@@ -580,6 +584,10 @@
       const frame=previousFrame.cloneNode(false);
       frame.hidden=false;frame.dataset.route=route;frame.title=title;
       frame.src=state.product?.src || 'product-host.html?v=20261117-zonder-bespreking'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
+      if(state.product?.id==='weerkaart-europa'){
+        const url=new URL(frame.src,location.href),tab=new URLSearchParams(route.split('?')[1]||'').get('tab');
+        if(tab==='overzicht')url.hash='overzicht';frame.src=url.href;
+      }
       if(state.product?.id==='pluim-ens6plus'){
         const url=new URL(frame.src,location.href),params=new URLSearchParams(route.split('?')[1] || '');
         for(const key of ['run','station','lat','lon'])if(params.has(key))url.searchParams.set(key,params.get(key));
@@ -618,6 +626,11 @@
     if(!state.productRoute || $('#product-workspace').hidden)return;
     queueMicrotask(refreshPageActions);
     const data=event.data;
+    if(data?.type==='weerlab-europa-tab' && state.product?.id==='weerkaart-europa' && ['kaart','overzicht'].includes(data.tab)){
+      const hash='#weerkaart-europa'+(data.tab==='overzicht'?'?tab=overzicht':'');
+      if(location.hash!==hash)history.replaceState(null,'',hash);
+      frame.dataset.route=hash.slice(1);state=readRoute();refreshPageActions();return;
+    }
     if(data?.type==='weerlab-ens6-route' && state.product?.id==='pluim-ens6plus' && typeof data.query==='string'){
       const input=new URLSearchParams(data.query),params=new URLSearchParams();
       for(const key of ['run','station','lat','lon'])if(input.has(key))params.set(key,input.get(key));
