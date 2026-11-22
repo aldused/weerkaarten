@@ -89,3 +89,37 @@ voor Waddenzee of onbekende gebieden wordt geen grens verzonnen. Bij meerdere
 kleurcodes zonder gebiedsverdeling toont de kaart neutrale arcering. Grijs is
 alleen buiten de geselecteerde melding, nooit bewijs voor afwezigheid van andere
 waarschuwingen op dat tijdstip. Ingetrokken meldingen behouden hun historische kaart.
+
+## Historische kleuren, toelichting en doorklikken
+
+Alle positieve aantallen in de maand- en jaartabel zijn knoppen naar de bijbehorende
+meldingen, met dezelfde maand, kleur en fenomeen. De dagkeuze toont alle beschikbare
+dagen, ook als de oorspronkelijke lijst langer is dan de eerste 60 vermeldingen.
+De eerste melding staat direct open met uitleg en kaart. `Wis filters` verwijdert
+een achtergebleven zoekterm of fenomeenkeuze. Een dag kan via `dag=YYYY-MM-DD`
+worden gedeeld. Maandtellingen blijven tellingen voor de hele geselecteerde maand.
+
+`scripts/enrich_knmi_warning_annual.py` vult het jaararchief aan uit de gekoppelde
+KNMI-terugblikken en nieuwsartikelen. Bestaande datums, gebieden, fenomenen en
+kleurcodes veranderen niet. Het script gebruikt een lokale HTML-cache, verwijst
+uitsluitend naar afbeeldingen van `cdn.knmi.nl` en neemt geen hero-foto's over.
+Teksten komen uit de oorspronkelijke terugblik en worden ingekort; bron en de
+onafhankelijke Weerlab-bewerking worden vermeld. Website-inhoud is standaard CC0:
+https://www.knmi.nl/copyright. Relatieve bronlinks en oude HTTP-links worden
+omgezet naar het juiste HTTPS-adres bij het KNMI.
+
+Een oorspronkelijke KNMI-waarschuwingskaart heeft voorrang op de gereconstrueerde
+SVG. Bij meerdere oorspronkelijke kaarten kiest de bezoeker het kaartmoment;
+bij een dagkeuze wordt een passende gedateerde kaart gekozen als het bijschrift
+die dag noemt. Hierdoor tonen gecombineerde oranje/rode jaarvermeldingen de echte
+historische kleurverdeling, zonder deze uit de samengevoegde gebiedstekst af te
+leiden. Alle oorspronkelijke waarschuwingskaarten blijven beschikbaar in de
+momentkeuze; overige weerkaarten en beelden staan bij de KNMI-terugblik. Als geen
+oorspronkelijke kaart is gevonden blijft de als zodanig aangeduide reconstructie
+beschikbaar. Exacte ontbrekende grenzen of kleurverdelingen worden niet verzonnen.
+
+Uitvoeren (pad naar bestaande HTML-cache zelf kiezen):
+`python3 scripts/enrich_knmi_warning_annual.py --annual data/knmi-waarschuwingen-jaararchief.json --cache /pad/naar/cache --report /pad/naar/rapport.json`
+
+Controle: `python3 -m unittest discover -s tests -p test_enrich_knmi_warning_annual.py`
+en `node tests/warning-archive.test.mjs`.

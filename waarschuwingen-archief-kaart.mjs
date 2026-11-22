@@ -59,7 +59,51 @@ function svgNode(tag, attributes = {}, text) {
 }
 const date = value => new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam', day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(value));
 let sequence = 0;
-export async function renderWarningMap(host, record) {
+export function originalWarningMaps(record) {
+  return (record.factsheet_images || []).filter(item => {
+    try {
+      const url = new URL(item.url);
+      return url.protocol === 'https:' && url.hostname === 'cdn.knmi.nl'
+        && (/waarschuw|code (?:oranje|rood|geel)/i.test(item.caption) || /waarschuw/i.test(url.pathname));
+    } catch {return false;}
+  });
+}
+function renderOriginalMap(host, record, maps, day) {
+  host.replaceChildren(element('h4', '', 'Oorspronkelijke KNMI-waarschuwingskaart'));
+  const label = element('label', 'archive-map-version', 'Kaartmoment');
+  const select = element('select');
+  maps.forEach((item,index) => {
+    const option = element('option','',item.caption.replace(/^Figuur\s+\d+\s*:\s*/i,''));
+    option.value = String(index); select.append(option);
+  });
+  let index = maps.length - 1;
+  if (day) {
+    const months = 'januari februari maart april mei juni juli augustus september oktober november december'.split(' ');
+    const pattern = new RegExp(`\\b${Number(day.slice(8))}\\s+${months[Number(day.slice(5,7))-1]}\\b`, 'i');
+    const sameDay = maps.map((item,index) => ({item,index})).filter(({item}) => pattern.test(item.caption));
+    if (sameDay.length) index = sameDay.at(-1).index;
+  }
+  select.value = String(index); label.append(select);
+  if (maps.length > 1) host.append(label);
+  const figure = element('figure', 'archive-original-map'), link = element('a'), img = element('img');
+  link.target = '_blank'; link.rel = 'noopener';
+  img.decoding = 'async';
+  const caption = element('figcaption');
+  link.append(img); figure.append(link,caption);
+  const source = element('a', '', 'Originele kaart bij het KNMI openen');
+  source.target = '_blank'; source.rel = 'noopener';
+  host.append(figure, element('p', 'archive-map-note', 'Dit is de oorspronkelijke KNMI-kaart met de toen afgegeven kleuren. Elk kaartmoment kan andere gebieden en kleuren tonen. Bron: KNMI.'),source);
+  function draw() {
+    const item = maps[Number(select.value)];
+    img.hidden = false; img.src = item.url; img.alt = item.caption;
+    link.href = source.href = item.url; caption.textContent = item.caption;
+  }
+  img.addEventListener('error', () => {img.hidden = true; caption.textContent = 'De oorspronkelijke kaart kan niet worden geladen. Open de kaart via de KNMI-link hieronder.';});
+  select.addEventListener('change',draw); draw();
+}
+export async function renderWarningMap(host, record, {day = null} = {}) {
+  const originalMaps = originalWarningMaps(record);
+  if (originalMaps.length) {renderOriginalMap(host,record,originalMaps,day); return;}
   const geo = await loadBasemap();
   host.replaceChildren();
   const heading = element('h4', '', 'Kaart bij deze waarschuwing');

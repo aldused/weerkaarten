@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const source = fs.readFileSync(new URL('../waarschuwingen-archief.js', import.meta.url), 'utf8');
-const {localDay, recordDays, matches, incompleteYellow, phenomenonGroup, monthlyStatistics} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+const {localDay, recordDays, matches, incompleteYellow, phenomenonGroup, monthlyStatistics, selectedRecords, annualSummary} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 assert.equal(localDay('2026-11-20T23:30:00Z'), '2026-11-21');
 // Local midnight is an exclusive end, including across the DST change.
 assert.deepEqual(recordDays({onset:'2026-10-24T22:00:00Z',expires:'2026-10-25T23:00:00Z'}), ['2026-10-25']);
@@ -40,7 +40,7 @@ assert.equal(phenomenonGroup({phenomenon:'Zware onweersbuien met windstoten'}),'
 assert.equal(phenomenonGroup({phenomenon:'Zeer zware windstoten door storm Poly'}),'Windstoten');
 console.log('Maandtellingen: landelijke waarschuwingen, kleurwissels, maandgrenzen en oude perioden gecontroleerd');
 
-const {namedRegions, geometryPath, mapSelection} = await import('../waarschuwingen-archief-kaart.mjs');
+const {namedRegions, geometryPath, mapSelection, originalWarningMaps} = await import('../waarschuwingen-archief-kaart.mjs');
 assert.deepEqual(namedRegions(['Groningen, Friesland en Drenthe']), ['Groningen','Fryslân','Drenthe']);
 assert.deepEqual(namedRegions(['Hele land met uitzondering van Gelderland, Noord-Brabant en Limburg.']), ['Groningen','Fryslân','Drenthe','Overijssel','Flevoland','Utrecht','Noord-Holland','Zuid-Holland','Zeeland','Waddeneilanden']);
 assert.ok(!namedRegions(['Alle provincies (niet de Waddeneilanden)']).includes('Waddeneilanden'));
@@ -55,3 +55,17 @@ assert.throws(()=>geometryPath({type:'Point',coordinates:[4,52]}));
 assert.deepEqual(mapSelection({geometry:polygon,codes:['geel'],areas:['Delen van Utrecht']}),{exact:true,regions:[],ambiguous:false});
 assert.equal(mapSelection({codes:['oranje','rood'],areas:['Groningen']} ).ambiguous,true,'geen hoogste kleur op alle provincies projecteren');
 console.log('Archiefkaarten: provincies, uitzonderingen, ontbrekende gebieden, kleurverdeling en polygoongaten gecontroleerd');
+
+const dates = [{id:'day-1', dates:['2019-06-04'], codes:['oranje'], phenomenon:'Onweer', headline:'Zware onweersbuien', description:'Buien met hagel', areas:['Gelderland']}, {id:'day-2', dates:['2019-06-05'], codes:['oranje'], phenomenon:'Windstoten', headline:'Storm', description:'Zware windstoten', areas:['Noord-Holland']}];
+assert.deepEqual(selectedRecords(dates,2019,'06','oranje','','Onweersbuien').map(r=>r.id),['day-1'],'een fenomeenaantal leidt naar dezelfde meldingen');
+assert.deepEqual(selectedRecords(dates,2019,'06','oranje','','alle','2019-06-05').map(r=>r.id),['day-2'],'een dag leidt naar de juiste uitleg en kaart');
+assert.equal(selectedRecords(dates,2019,'07','oranje').length,0);
+assert.equal(selectedRecords(dates,2019,'06','rood').length,0);
+assert.match(annualSummary({...dates[0],date_label:'4 juni 2019'}),/onweer op 4 juni 2019/);
+console.log('Doorklikpad: fenomeen, kleur, maand en dag delen dezelfde selectie');
+
+assert.equal(originalWarningMaps({factsheet_images:[{url:'https://cdn.knmi.nl/waarschuwing.gif',caption:'Woensdag 4 februari'},{url:'https://cdn.knmi.nl/temperature.png',caption:'Gemeten temperatuur'},{url:'https://elsewhere.nl/waarschuwing.png',caption:'Code rood'}]}).length,1,'oorspronkelijke waarschuwingskaarten krijgen voorrang boven de reconstructie');
+const annual = JSON.parse(fs.readFileSync(new URL('../data/knmi-waarschuwingen-jaararchief.json', import.meta.url), 'utf8')).records;
+assert.ok(annual.filter(record => record.codes.length > 1).every(record => originalWarningMaps(record).length > 0), 'alle huidige gecombineerde oranje/rode meldingen hebben oorspronkelijke gekleurde kaarten');
+assert.ok(annual.filter(record => record.context_source).every(record => record.description), 'ingelezen terugblikken hebben daadwerkelijke uitleg');
+console.log('Originele kaarten: alle gecombineerde oranje/rode jaarmeldingen gecontroleerd');

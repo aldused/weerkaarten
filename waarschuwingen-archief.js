@@ -29,6 +29,14 @@ export function matches(record, year, month, color, search = '') {
     && (color === 'alle' || record.codes.includes(color))
     && searchCache.get(record).includes(fold(search));
 }
+export function selectedRecords(records, year, month, color, search = '', phenomenon = 'alle', day = null) {
+  return records.filter(record => matches(record, year, month, color, search)
+    && (phenomenon === 'alle' || phenomenonGroup(record) === phenomenon)
+    && (!day || recordDays(record).includes(day)));
+}
+export function annualSummary(record) {
+  return `Het KNMI gaf ${record.codes.map(code => 'code ' + code).join(' en ')} af voor ${record.phenomenon.toLowerCase()} op ${record.date_label}. Gebied: ${record.areas.join(' · ')}.`;
+}
 export function fold(text) { return String(text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
 export function incompleteYellow(coverage, year, month) {
   const start = `${year}-${month === 'alle' ? '01' : month}-01`;
@@ -115,7 +123,7 @@ function safeLink(title, href) {
     return link;
   } catch { return el('span', '', title); }
 }
-function recordCard(record) {
+function recordCard(record, selectedDay = null) {
   const box = el('details', 'record'), summary = el('summary'), grid = el('div', 'record-summary');
   const day = el('div', 'record-date', record.date_label || SHORT.format(new Date(record.onset)));
   if (record.onset) day.append(el('small', '', period(record)));
@@ -128,6 +136,7 @@ function recordCard(record) {
   area.append(el('small', '', 'Kaart, toelichting en bron bekijken'));
   grid.append(day, codes, reason, area); summary.append(grid);
   const detail = el('div', 'record-detail');
+  detail.append(el('h4', '', 'Wat was er aan de hand?'), el('p', '', record.description || (record.source_kind === 'annual' ? annualSummary(record) : record.headline)));
   const mapHost = el('section', 'archive-map');
   detail.append(mapHost);
   let mapLoaded = false;
@@ -136,16 +145,31 @@ function recordCard(record) {
     mapLoaded = true;
     mapHost.textContent = 'Waarschuwingskaart laden…';
     try {
-      const {renderWarningMap} = await import('./waarschuwingen-archief-kaart.mjs?v=20261122-1');
-      await renderWarningMap(mapHost, record);
+      const {renderWarningMap} = await import('./waarschuwingen-archief-kaart.mjs?v=20261122-herstel-2');
+      await renderWarningMap(mapHost, record, {day: selectedDay});
     } catch {
       mapLoaded = false;
       mapHost.textContent = 'De kaart kon niet worden geladen. Sluit en open deze melding om opnieuw te proberen. De gebiedsbeschrijving staat hieronder.';
     }
   });
-  detail.append(el('h4', '', record.headline));
-  for (const text of [record.description, record.detail]) if (text) detail.append(el('p', '', text));
-  for (const [title, text] of [['Mogelijke gevolgen', record.impact], ['Advies van het KNMI', record.instruction]]) {
+  if (record.detail) detail.append(el('h4', '', record.context_source ? 'Uit de KNMI-terugblik' : 'Toelichting van het KNMI'), el('p', '', record.detail));
+  if (record.factsheet_images?.length) {
+    const gallery = el('div', 'archive-figures');
+    for (const item of record.factsheet_images) {
+      if (/waarschuw|code (?:oranje|rood|geel)/i.test(item.caption) || /waarschuw/i.test(item.url)) continue;
+      try {
+        const source = new URL(item.url), thumbnail = new URL(item.thumbnail || item.url);
+        if (![source, thumbnail].every(url => url.protocol === 'https:' && url.hostname === 'cdn.knmi.nl')) continue;
+        const figure = el('figure'), link = safeLink('', source.href), img = el('img');
+        img.src = thumbnail.href; img.alt = item.caption; img.loading = 'lazy'; img.decoding = 'async';
+        img.addEventListener('error', () => {img.hidden = true; link.textContent = 'Afbeelding bij het KNMI bekijken';});
+        link.append(img, el('span', 'archive-figure-zoom', 'Afbeelding vergroten'));
+        figure.append(link, el('figcaption', '', item.caption)); gallery.append(figure);
+      } catch { /* Keep the warning and map readable if one source URL is invalid. */ }
+    }
+    if (gallery.childElementCount) detail.append(el('h4', '', 'Kaarten en beelden uit de KNMI-terugblik'), gallery);
+  }
+  for (const [title, text] of [[record.context_source ? 'Gevolgen volgens de KNMI-terugblik' : 'Mogelijke gevolgen', record.impact], ['Advies van het KNMI', record.instruction]]) {
     if (text) detail.append(el('h4', '', title), el('p', '', Array.isArray(text) ? text.join('\n') : text));
   }
   const meta = el('dl', 'metadata');
@@ -154,6 +178,7 @@ function recordCard(record) {
   }
   detail.append(meta);
   if (record.status === 'cancelled') detail.append(el('p', 'source-note', 'Deze afgegeven waarschuwing is later door het KNMI ingetrokken.'));
+  if (record.context_source) detail.append(el('p', 'source-note', 'Bron terugblik en beelden: KNMI. De tekst is verkort weergegeven. Het KNMI is niet betrokken bij deze bewerking.'));
   if (record.source_kind === 'annual') detail.append(el('p', 'source-note', 'Overgenomen uit het KNMI-jaaroverzicht. Exacte tijden zijn niet beschikbaar. Bij meerdere kleurcodes vermeldt dit overzicht niet altijd op welke dag en in welk deelgebied elke code gold.'));
   if (record.revisions?.length > 1) {
     const revisions = el('details'), head = el('summary', '', `${record.revisions.length} uitgiftes en wijzigingen bekijken`), list = el('ul');
@@ -169,17 +194,19 @@ function recordCard(record) {
 if (typeof document !== 'undefined') {
   if (window.parent !== window) document.body.classList.add('embedded');
   const $ = id => document.getElementById(id);
-  let archive = null, shown = 60;
+  let archive = null, shown = 60, selectedDay = null;
   let selectedPhenomenon = new URLSearchParams(location.search).get('fenomeen') || 'alle';
   const nowDay = localDay(Date.now()), params = new URLSearchParams(location.search);
   let year = Number(params.get('jaar')) || Number(nowDay.slice(0, 4));
   let month = /^(alle|0[1-9]|1[0-2])$/.test(params.get('maand') || '') ? params.get('maand') : nowDay.slice(5, 7);
   let color = COLORS.includes(params.get('code')) ? params.get('code') : 'alle';
+  selectedDay = /^\d{4}-\d{2}-\d{2}$/.test(params.get('dag') || '') ? params.get('dag') : null;
   $('search').value = (params.get('zoek') || '').slice(0, 200);
 
   function saveFilters() {
     const p = new URLSearchParams(location.search);
     p.set('jaar', String(year)); p.set('maand', month);
+    if (selectedDay) p.set('dag', selectedDay); else p.delete('dag');
     if(selectedPhenomenon==='alle')p.delete('fenomeen');else p.set('fenomeen',selectedPhenomenon);
     if (color === 'alle') p.delete('code'); else p.set('code', color);
     if ($('search').value.trim()) p.set('zoek', $('search').value.trim()); else p.delete('zoek');
@@ -215,6 +242,16 @@ if (typeof document !== 'undefined') {
       node.textContent=unknown&&!value?'—':`${approximate?'≈ ':''}${value}${unknown?'*':''}`;
       node.title=unknown?'De geschiedenis voor code geel is hier nog onvolledig.':approximate?'Oude gele waarschuwingen: samengevoegde aaneengesloten perioden.':`${value} afgegeven ${value===1?'code':'codes'}`;
       if(unknown||approximate)node.classList.add('count-provisional');
+      if (value > 0) {
+        const button = el('button', 'count-link', node.textContent);
+        button.type = 'button'; button.dataset.countPeriod = period;
+        button.dataset.countCode = code === 'total' ? color : code;
+        button.dataset.countPhenomenon = row.phenomenon || selectedPhenomenon;
+        const periodLabel = period === 'alle' ? `heel ${year}` : `${MONTHS[Number(period)-1]} ${year}`;
+        button.setAttribute('aria-label', `${node.textContent} ${code === 'total' ? 'codes' : 'keer code '+code} · ${row.phenomenon || 'alle geselecteerde fenomenen'} · ${periodLabel}: kaarten en uitleg bekijken`);
+        button.title = 'Bekijk de dagen, kaarten en uitleg bij dit aantal';
+        node.replaceChildren(button);
+      }
       return node;
     }
     function table(firstLabel,rows,periods){
@@ -243,6 +280,37 @@ if (typeof document !== 'undefined') {
     $('statistics-note').textContent=`De telling volgt je gekozen fenomeen, kleurcode en zoekterm. Elke waarschuwing telt maximaal één keer per kleur per geldigheidsmaand.${year===Number(today.slice(0,4))&&(month==='alle'||month===today.slice(5,7))?' De huidige periode loopt nog; stand t/m '+dateOnly(today)+'.':''}`;
   }
 
+  function revealResults() {
+    const heading = $('result-heading'); heading.tabIndex = -1;
+    heading.focus({preventScroll:true}); heading.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  function showCount(button) {
+    month = button.dataset.countPeriod; color = button.dataset.countCode;
+    selectedPhenomenon = button.dataset.countPhenomenon;
+    $('phenomenon').value = selectedPhenomenon; selectedDay = null; shown = 60;
+    render(); revealResults();
+  }
+  function renderDays(records) {
+    const days = [...new Set(records.flatMap(recordDays))].filter(day => day.startsWith(year+'-') && (month === 'alle' || day.slice(5,7) === month)).sort().reverse();
+    const root = $('days'); root.replaceChildren();
+    $('day-navigation').hidden = !days.length;
+    if (month === 'alle') {
+      const label = el('label', 'archive-day-label', 'Kies een dag met waarschuwingen'), select = el('select');
+      const all = el('option', '', 'Alle dagen'); all.value = ''; select.append(all);
+      for (const day of days) {const option = el('option', '', dateOnly(day)); option.value = day; select.append(option);}
+      select.value = selectedDay || ''; select.addEventListener('change', () => {selectedDay = select.value || null;shown=60;render();revealResults();});
+      label.append(select); root.append(label); return;
+    }
+    const all = el('button', 'archive-day', 'Alle dagen'); all.type = 'button'; all.dataset.day = ''; all.setAttribute('aria-pressed', String(!selectedDay)); root.append(all);
+    for (const day of days) {
+      const warnings = records.filter(record => recordDays(record).includes(day));
+      const phenomena = [...new Set(warnings.map(phenomenonGroup))];
+      const button = el('button', 'archive-day', SHORT.format(new Date(day+'T12:00Z')));
+      button.type = 'button'; button.dataset.day = day; button.setAttribute('aria-pressed', String(selectedDay === day));
+      button.append(el('small', '', phenomena.join(' · '))); root.append(button);
+    }
+  }
+
   function render() {
     if (!archive) return;
     $('year').value = String(year);
@@ -251,8 +319,11 @@ if (typeof document !== 'undefined') {
     const c = archive.coverage;
     $('coverage').textContent = `Oranje en rood: KNMI-jaaroverzichten vanaf 2010. Geel: ingelezen vanaf ${dateOnly(c.all_colors_since)}.${c.legacy_complete ? '' : ' Oudere gele meldingen worden automatisch aangevuld, terug tot februari 2023.'}`;
     const title = `${month === 'alle' ? 'Alle maanden' : MONTHS[Number(month) - 1]} ${year}`;
-    const selected = archive.records.filter(r => matches(r, year, month, color, $('search').value) && (selectedPhenomenon==='alle'||phenomenonGroup(r)===selectedPhenomenon)).sort((a, b) => recordDays(b).at(-1).localeCompare(recordDays(a).at(-1)) || a.id.localeCompare(b.id));
-    $('result-heading').replaceChildren(el('h3', '', title), el('span', '', `${selected.length} ${selected.length === 1 ? 'vermelding' : 'vermeldingen'}`));
+    const available = selectedRecords(archive.records, year, month, color, $('search').value, selectedPhenomenon);
+    if (selectedDay && !available.some(record => recordDays(record).includes(selectedDay))) selectedDay = null;
+    renderDays(available); saveFilters();
+    const selected = available.filter(record => !selectedDay || recordDays(record).includes(selectedDay)).sort((a, b) => recordDays(b).at(-1).localeCompare(recordDays(a).at(-1)) || a.id.localeCompare(b.id));
+    $('result-heading').replaceChildren(el('h3', '', selectedDay ? dateOnly(selectedDay) : title), el('span', '', `${selected.length} ${selected.length === 1 ? 'vermelding' : 'vermeldingen'}`));
     const incomplete = incompleteYellow(c, year, month);
     $('period-note').textContent = incomplete && color !== 'oranje' && color !== 'rood' ? (year < 2023 ? 'Voor deze periode is code geel niet beschikbaar in deze bronnen. Je ziet hier het officiële archief voor oranje en rood.' : 'De gele meldingen zijn voor deze periode nog niet volledig ingelezen. Ontbrekende gele meldingen betekenen niet dat er geen waarschuwingen waren.') : '';
     renderStatistics();
@@ -268,7 +339,9 @@ if (typeof document !== 'undefined') {
         for (const title of ['Datum / geldigheid', 'Kleurcode', 'Waarvoor', 'Gebied']) labels.append(el('span', '', title));
         group.append(labels); root.append(group); previousMonth = key;
       }
-      group.append(recordCard(record));
+      const card = recordCard(record, selectedDay);
+      group.append(card);
+      if (record === selected[0]) card.open = true;
     }
     $('more').hidden = selected.length <= shown;
     $('more').textContent = `Meer meldingen tonen (${Math.min(shown, selected.length)} van ${selected.length})`;
@@ -326,12 +399,19 @@ if (typeof document !== 'undefined') {
       ]);
     } finally { loading = false; $('refresh').disabled = false; }
   }
-  $('months').addEventListener('click', event => { const button = event.target.closest('button[data-month]'); if (button) {month = button.dataset.month; shown = 60; render();} });
-  $('colors').addEventListener('click', event => { const button = event.target.closest('button[data-color]'); if (button) {color = button.dataset.color; shown = 60; render();} });
-  $('year').addEventListener('change', () => {year = Number($('year').value); month = 'alle'; shown = 60; render();});
-  $('search').addEventListener('input', () => {shown = 60; render();});
-  $('phenomenon').addEventListener('change',()=>{selectedPhenomenon=$('phenomenon').value;shown=60;render();});
-  $('year-statistics').addEventListener('click',event=>{const button=event.target.closest('button[data-count-month]');if(button){month=button.dataset.countMonth;shown=60;render();}});
+  $('months').addEventListener('click', event => { const button = event.target.closest('button[data-month]'); if (button) {month = button.dataset.month; selectedDay = null; shown = 60; render(); revealResults();} });
+  $('colors').addEventListener('click', event => { const button = event.target.closest('button[data-color]'); if (button) {color = button.dataset.color; selectedDay = null; shown = 60; render();} });
+  $('year').addEventListener('change', () => {year = Number($('year').value); month = 'alle'; selectedDay = null; shown = 60; render();});
+  $('search').addEventListener('input', () => {selectedDay = null; shown = 60; render();});
+  $('phenomenon').addEventListener('change',()=>{selectedPhenomenon=$('phenomenon').value;selectedDay=null;shown=60;render();});
+  for (const id of ['statistics','year-statistics']) $(id).addEventListener('click', event => {
+    const count = event.target.closest('button[data-count-period]');
+    if (count) {showCount(count); return;}
+    const button = event.target.closest('button[data-count-month]');
+    if (button) {month=button.dataset.countMonth;selectedDay=null;shown=60;render();revealResults();}
+  });
+  $('days').addEventListener('click', event => {const button=event.target.closest('button[data-day]');if(button){selectedDay=button.dataset.day||null;shown=60;render();revealResults();}});
+  $('clear-filters').addEventListener('click', () => {color='alle';selectedPhenomenon='alle';selectedDay=null;$('phenomenon').value='alle';$('search').value='';shown=60;render();});
   $('more').addEventListener('click', () => {shown += 60; render();});
   $('refresh').addEventListener('click', load);
   document.addEventListener('visibilitychange', () => {if (!document.hidden) load();});
