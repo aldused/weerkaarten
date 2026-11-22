@@ -100,7 +100,8 @@ h2{font-size:15px;margin:0;letter-spacing:0}
  <section class="panel"><h2>Berekening in het kort</h2><p class="noot">Dezelfde Weerlab-MOS als op de landelijke kaarten: modellen gewogen op eerdere fouten, met bodemsoort, vocht en ligging als invoer. De nacht loopt van 18.00 tot 09.00 Nederlandse tijd; TX geldt voor 00–24 UTC. De grondvorstkans komt uit de foutmarge van het grasminimum. Kaarten voorbij circa 60 uur zijn indicatief.</p><p class="noot"><a href="demo_wgt_grondtemp.html?regio=zh&amp;laag=tn">Verloop met standaard de koudste plaats in Zuid-Holland →</a></p></section>
  <div class="acties">
   <p class="noot" id="bron"></p>
-  <button type="button" class="knop" id="png">Kaart opslaan (PNG)</button>
+  <button type="button" class="knop" id="png" disabled>Download kaart (PNG)</button>
+  <span role="status" id="pngMelding"></span>
  </div>
 </div>
 
@@ -279,6 +280,7 @@ h2{font-size:15px;margin:0;letter-spacing:0}
       return '<li><span class="nr">' + (i + 1) + '</span><span class="sw" style="background:' + kleur(lu, p.v) + '"></span><span class="nm" title="' + p.naam + '">' + p.naam + "</span><b>" + tekst(p.v) + "</b></li>";
     }).join("") || '<li style="display:block">Geen waarden beschikbaar.</li>';
   }
+  var exportLegend;
   function legenda() {
     var L = LAGEN[S.laag], lu = LUT[L.lut], lo, hi;
     if (L.pct) { lo = 0; hi = 100; } else {
@@ -290,6 +292,9 @@ h2{font-size:15px;margin:0;letter-spacing:0}
     var stap = L.pct ? 25 : (hi - lo) / 4 <= 2 ? 2 : Math.ceil((hi - lo) / 4 / 2) * 2, t = "";
     for (var w = lo; w <= hi + 1e-6; w += stap) t += '<span style="left:' + ((w - lo) / (hi - lo) * 100) + '%">' + fmt(w, 0) + "</span>";
     $("ticks").innerHTML = t; $("legKop").textContent = L.leg;
+    var marks = Array.from($("ticks").children);
+    exportLegend = {label:L.leg, labels:marks.map(m=>m.textContent), positions:marks.map(m=>parseFloat(m.style.left)/100),
+      stops:Array.from({length:25},(_,i)=>[i/24,kleur(lu,lo+(hi-lo)*i/24)])};
   }
 
   // ── tijdknoppen en kopcijfers ──
@@ -351,15 +356,15 @@ h2{font-size:15px;margin:0;letter-spacing:0}
   var rs; window.addEventListener("resize", function () { clearTimeout(rs); rs = setTimeout(function () { if (S.veld) labels(plaatsWaarden()); }, 120); });
 
   // ── PNG ──
-  $("png").onclick = function () {
-    var cv = $("cv"), c = document.createElement("canvas"), kopH = 64; c.width = cv.width; c.height = cv.height + kopH;
+  $("png").onclick = async function () {
+    var knop=$("png"), melding=$("pngMelding");knop.disabled=true;melding.textContent="";
+    try {
+    var cv = $("cv"), c = document.createElement("canvas"); c.width = cv.width; c.height = cv.height;
     var x = c.getContext("2d"), L = LAGEN[S.laag], it = items()[S.ti[L.tijd]], sch = cv.width / cv.clientWidth;
-    x.fillStyle = "#00205b"; x.fillRect(0, 0, c.width, kopH); x.fillStyle = "#fff"; x.font = "700 24px system-ui,sans-serif"; x.textBaseline = "middle";
-    x.fillText(L.kop + " · " + (L.tijd === "nacht" ? "nacht " + itemLabel(it) : dagLang.format(new Date(it.label + "T12:00:00Z"))), 18, 24);
-    x.font = "500 15px system-ui,sans-serif"; x.fillText("weerlab.nl · berekend " + klok.format(new Date((L.tijd === "nacht" ? S.N : S.T).gemaakt_utc)), 18, 48);
-    x.drawImage(cv, 0, kopH);
+    x.textBaseline = "middle";
+    x.drawImage(cv, 0, 0);
     [].forEach.call($("labels").children, function (el) {
-      var X = parseFloat(el.style.left) * sch, Y = parseFloat(el.style.top) * sch + kopH, links = el.classList.contains("l"), ext = el.classList.contains("ext");
+      var X = parseFloat(el.style.left) * sch, Y = parseFloat(el.style.top) * sch, links = el.classList.contains("l"), ext = el.classList.contains("ext");
       var t = el.textContent, fs = (ext ? 14 : 13) * sch; x.font = (ext ? "800 " : "600 ") + fs + "px system-ui,sans-serif";
       var w = x.measureText(t).width, tx = links ? X + el.offsetWidth * sch - w - (ext ? 22 : 10) * sch : X + (ext ? 22 : 10) * sch;
       if (ext) { x.fillStyle = "#00205b"; x.fillRect(X, Y - 13 * sch, el.offsetWidth * sch, 26 * sch); }
@@ -368,7 +373,16 @@ h2{font-size:15px;margin:0;letter-spacing:0}
       var dx = links ? X + el.offsetWidth * sch - (ext ? 12 : 3) * sch : X + (ext ? 12 : 3) * sch;
       x.beginPath(); x.arc(dx, Y, (ext ? 5 : 3) * sch, 0, 7); x.fillStyle = ext ? "#f2c43d" : "#fff"; x.fill();
     });
-    var a = document.createElement("a"); a.download = "temperatuur_rijnmond_" + S.laag + "_" + it.label + ".png"; a.href = c.toDataURL("image/png"); a.click();
+    var tijd = L.tijd === "nacht" ? "Nacht " + itemLabel(it) + " · 18.00–09.00 uur" : dagLang.format(new Date(it.label + "T12:00:00Z")) + " · 00–24 UTC";
+    var details = {title:L.kop,time:tijd,run:"Bijgewerkt "+klok.format(new Date((L.tijd==="nacht"?S.N:S.T).gemaakt_utc)),
+      lead:it.buiten_training?"Buiten toetsbereik":it.onvolledig?"Onvolledige periode":"MOS-verwachting",legends:[exportLegend],
+      source:"Weerlab MOS · KNMI, DWD, ECMWF en NOAA",mapAttribution:"Regiokaart: Weerlab"};
+    var filename = "weerlab-temperatuur-rijnmond-" + S.laag + "-" + it.label + ".png";
+    const {saveMapPNG}=await import("./temperature-map-export.mjs?v=20261122-1");
+    await saveMapPNG(c,details,filename);
+    } catch(error) {
+      melding.textContent="De kaart kon niet worden gedownload. Probeer het opnieuw.";console.error(error);
+    } finally {knop.disabled=false;}
   };
 
   // ── start ──
@@ -384,7 +398,7 @@ h2{font-size:15px;margin:0;letter-spacing:0}
   Promise.all([laad(true), fetch(GEBIED).then(function (r) { if (!r.ok) throw new Error("Het kaartgebied kon niet worden geladen."); return r.json(); }), basis]).then(function (r) {
     bouwGeometrie(r[2], r[1]);
     var l = new URLSearchParams(location.search).get("laag"); if (l && LAGEN[l]) S.laag = l;
-    $("laden").hidden = true; ververs();
+    $("laden").hidden = true; ververs(); $("png").disabled=false;
     setInterval(function () { laad(false).then(ververs).catch(function () {}); }, 10 * 60 * 1000);   // elke 10 min verversen; bij een fout blijft de laatste kaart staan
   }).catch(function (e) { $("laden").hidden = true; $("fout").textContent = e.message; $("fout").hidden = false; });
 })();

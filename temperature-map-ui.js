@@ -4,6 +4,7 @@ window.TemperatureMapUI = (function() {
   const NS='http://www.w3.org/2000/svg';
   const node=(tag,attrs,parent)=>{const n=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);parent.append(n);return n;};
   const date=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  let exportDetails, exportLegend, exporting=false;
   function setup(redraw) {
     const values=document.getElementById('waardenChk');
     const names=document.createElement('label'); names.className='chk';
@@ -11,6 +12,34 @@ window.TemperatureMapUI = (function() {
     values.closest('label').after(names); names.querySelector('input').onchange=redraw;
     const map=document.getElementById('kaart'), stamp=document.createElement('div');
     stamp.className='map-validity';stamp.id='mapValidity';map.before(stamp);
+    const download=document.createElement('button');download.type='button';download.className='knop';
+    download.id='kaartPng';download.textContent='Download kaart (PNG)';download.disabled=true;
+    stamp.before(download);
+    const message=document.createElement('p');message.setAttribute('role','status');message.hidden=true;
+    download.after(message);
+    download.onclick=async()=>{
+      if(!exportDetails||exporting)return;
+      exporting=true;download.disabled=true;message.hidden=true;
+      try {
+        const {svgMapImage,saveMapPNG}=await import('./temperature-map-export.mjs?v=20261122-1');
+        const details=exportDetails;
+        const title=document.getElementById('kaartTitel').textContent;
+        const area=document.getElementById('regio').selectedOptions[0].textContent;
+        const categories=[...document.querySelectorAll('#legenda .leg-cat span')].map(item=>({
+          label:item.textContent,color:getComputedStyle(item.querySelector('i')).backgroundColor,
+        }));
+        const legends=categories.length?categories:[exportLegend].filter(Boolean);
+        const mapImage=await svgMapImage(document.getElementById('svg'));
+        const namen=`${area}-${title}-${details.period}`.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/-+$/,'');
+        await saveMapPNG(mapImage,{
+          ...details,title:`${title} · ${area}`,legends,source:'Weerlab MOS · KNMI, DWD, ECMWF en NOAA · BRO Bodemkaart',
+          mapAttribution:'Plaatsnamen: GeoNames',
+        },`weerlab-${namen}.png`);
+      }catch(error){
+        message.textContent='De kaart kon niet worden gedownload. Probeer het opnieuw.';
+        message.hidden=false;console.error(error);
+      }finally{exporting=false;download.disabled=false;}
+    };
     const footer=document.createElement('p');footer.className='map-footnote';footer.id='mapFootnote';
     document.getElementById('legenda').after(footer);
     const card=document.createElement('section');card.className='paneel map-location';card.id='mapLocation';
@@ -27,12 +56,16 @@ window.TemperatureMapUI = (function() {
     state.textContent=partial?'Onvolledige periode':indicative?'Buiten toetsbereik':soil?'Statische ondergrond':'MOS-verwachting';
     stamp.append(title,state);
     const line=document.createElement('small');line.textContent='Bijgewerkt '+date.format(new Date(created))+' · Nederlandse tijd';stamp.append(line);
+    exportDetails={time:period,period,run:'Bijgewerkt '+date.format(new Date(created)),lead:state.textContent};
+    document.getElementById('kaartPng').disabled=exporting;
     const foot=document.getElementById('mapFootnote');
     foot.textContent=(Number.isFinite(range.low)?`Kaartbereik ${range.low.toFixed(1).replace('.',',')} tot ${range.high.toFixed(1).replace('.',',')} ${unit} · `:'')+
       `${Math.round(coverage)}% geldige roostercellen · uitvoerrooster circa 5 km. Kleuren zijn vloeiend weergegeven; waarden en uitersten komen uit de roostercellen. Gearceerd = geen waarde.`+
       (scale&&(range.low<scale.lo||range.high>scale.hi)?` Buiten ${scale.lo} tot ${scale.hi} ${unit} blijft de eindkleur van de schaal gelijk.`:'');
   }
   function legend(container,lu,title,ticks,format) {
+    exportLegend={label:title,labels:ticks.map(format),positions:ticks.map(v=>(v-lu.lo)/(lu.hi-lu.lo)),
+      stops:Array.from({length:lu.n},(_,i)=>[i/(lu.n-1),`rgb(${lu.lut.subarray(3*i,3*i+3).join(',')})`])};
     container.replaceChildren();
     const wrap=document.createElement('div');wrap.className='leg-balk';
     const label=document.createElement('span');label.className='leg-titel';label.textContent=title;wrap.append(label);
@@ -51,7 +84,10 @@ window.TemperatureMapUI = (function() {
     const names=document.getElementById('namenChk').checked, scale=Math.abs(svg.getScreenCTM()?.a||1), [vx,vy,vw,vh]=bounds;
     const occupied=[], context=document.createElement('canvas').getContext('2d');
     const callout=document.getElementById('gLaagst');
-    if(callout.childElementCount){const b=callout.getBBox();occupied.push({x:b.x-4/scale,y:b.y-4/scale,w:b.width+8/scale,h:b.height+8/scale});}
+    for(const item of callout.children){
+      const b=item.getBBox();
+      occupied.push({x:b.x-4/scale,y:b.y-4/scale,w:b.width+8/scale,h:b.height+8/scale});
+    }
     const overlap=(a,b)=>a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
     for(const [name,lat,lon,c] of places) {
       if(!inArea(lat,lon))continue;const v=value(c);if(!Number.isFinite(v))continue;

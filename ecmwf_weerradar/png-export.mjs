@@ -66,12 +66,13 @@ export function captureMap(mapElement,places,rectSelection=null,{scale=2}={}){
   ctx.getImageData(0,0,1,1); // Fail explicitly if a source blocks CORS export.
   return cropMapCanvas(canvas,rectSelection?Object.fromEntries(Object.entries(rectSelection).map(([key,value])=>[key,Math.round(value*scale)])):null);
 }
-export function composePNG(mapImage,{title,time,run,lead,source,opacity,legends}){
+export function composePNG(mapImage,{title,time,run,lead,source,opacity,legends,mapAttribution='Kaart © Esri, Maxar, Earthstar Geographics · Natural Earth · Plaatsnamen: GeoNames'}){
   const width=Math.max(640,Math.min(1920,mapImage.width/2)),pad=28,inner=width-pad*2,scale=2;
   const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
   ctx.font='16px system-ui';
   const lines=text=>wrapText(text,inner,t=>ctx.measureText(t).width);
-  const timeLines=lines(time),runLines=lines(`${run} · ${lead}`),sourceLines=lines(`Bron: ${source} · Kaart © Esri, Maxar, Earthstar Geographics · Natural Earth · Plaatsnamen: GeoNames`);
+  const timeLines=lines(time),runLines=lines([run,lead].filter(Boolean).join(' · '));
+  const sourceLines=lines([source&&`Bron: ${source}`,mapAttribution].filter(Boolean).join(' · '));
   const header=88+timeLines.length*23,mapHeight=Math.round(mapImage.height*width/mapImage.width);
   const footer=108+(runLines.length+sourceLines.length)*22+legends.reduce((n,l)=>n+(l.stops?78:30),0);
   canvas.width=width*scale;canvas.height=(header+mapHeight+footer)*scale;ctx.scale(scale,scale);
@@ -84,7 +85,7 @@ export function composePNG(mapImage,{title,time,run,lead,source,opacity,legends}
   let y=header+mapHeight+30;
   ctx.fillStyle='#00205b';ctx.font='bold 21px system-ui';ctx.fillText('Ed Aldus · Weerlab',pad,y);y+=29;
   ctx.font='16px system-ui';runLines.forEach(line=>{ctx.fillText(line,pad,y);y+=22;});
-  ctx.fillStyle='#5c6f85';ctx.fillText(`Instelling laag-opacity: ${opacity}% · Nederlandse tijd (Europe/Amsterdam)`,pad,y,inner);y+=28;
+  ctx.fillStyle='#5c6f85';ctx.fillText([opacity==null?'':`Instelling laag-opacity: ${opacity}%`,'Nederlandse tijd (Europe/Amsterdam)'].filter(Boolean).join(' · '),pad,y,inner);y+=28;
   for(const row of legends){
     ctx.font='15px system-ui';ctx.fillStyle='#18314c';
     if(row.stops){
@@ -92,7 +93,11 @@ export function composePNG(mapImage,{title,time,run,lead,source,opacity,legends}
       const gradient=ctx.createLinearGradient(pad,0,pad+inner,0);
       row.stops.forEach(([position,color])=>gradient.addColorStop(Math.max(0,Math.min(1,position)),color));
       ctx.fillStyle='#f1f4f7';ctx.fillRect(pad,y,inner,14);ctx.fillStyle=gradient;ctx.fillRect(pad,y,inner,14);y+=32;
-      ctx.fillStyle='#18314c';row.labels.forEach((label,i)=>{ctx.textAlign=i===0?'left':i===row.labels.length-1?'right':'center';ctx.fillText(label,pad+i*inner/(row.labels.length-1),y);});ctx.textAlign='left';y+=36;
+      ctx.fillStyle='#18314c';row.labels.forEach((label,i)=>{
+        const position=row.positions?.[i]??i/(row.labels.length-1);
+        ctx.textAlign=position<0.03?'left':position>0.97?'right':'center';
+        ctx.fillText(label,pad+position*inner,y);
+      });ctx.textAlign='left';y+=36;
     }else{
       ctx.fillStyle='#f1f4f7';ctx.fillRect(pad,y-16,32,21);ctx.fillStyle=row.color;ctx.fillRect(pad,y-16,32,21);ctx.strokeStyle='#9aa8b6';ctx.strokeRect(pad,y-16,32,21);ctx.fillStyle='#18314c';ctx.fillText(row.label,pad+44,y,inner-44);y+=30;
     }

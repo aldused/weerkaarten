@@ -167,6 +167,7 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .grafiek .rl{stroke:var(--border);stroke-width:1}
 .grafiek .band{fill:var(--accent);opacity:.18}
 .grafiek .lt{fill:none;stroke:var(--primary-strong);stroke-width:2.2}
+.grafiek .tx-punt{fill:var(--accent);stroke:var(--surface);stroke-width:1.5}
 :root[data-theme="dark"] .grafiek .lt{stroke:var(--accent)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .grafiek .lt{stroke:var(--accent)}}
 .grafiek .lm{fill:none;stroke:var(--soft);stroke-width:.9;opacity:.8}
@@ -245,7 +246,7 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 </style>
 <link rel="stylesheet" href="temperature-overview.css?v=20261122-verfijning1">
 <script src="temperature-map-core.js?v=20261122-1"></script>
-<script src="temperature-map-ui.js?v=20261122-1"></script>
+<script src="temperature-map-ui.js?v=20261122-tx-png"></script>
 </head>
 <body>
 <div class="wrap">
@@ -381,6 +382,8 @@ const TZ = "Europe/Amsterdam";
 const dagFmt = new Intl.DateTimeFormat("nl-NL", {timeZone: TZ, weekday: "short", day: "numeric", month: "short"});
 const dagKort = new Intl.DateTimeFormat("nl-NL", {timeZone: TZ, weekday: "short", day: "numeric"});
 const uurFmt = new Intl.DateTimeFormat("nl-NL", {timeZone: TZ, hour: "2-digit", minute: "2-digit"});
+const dagIsVandaag = dag => dag.label === new Date().toISOString().slice(0, 10);
+const dagNaam = dag => dagIsVandaag(dag) ? "vandaag" : dagFmt.format(new Date(dag.label + "T12:00:00Z"));
 
 (function () {
   try { const t = localStorage.getItem("weerlab_theme"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch (e) {}
@@ -481,10 +484,12 @@ async function laad() {
       t2: i2(V.t2), sigma: i2(V.sigma), u: i2(V.u), c: u1(V.c), mix: i2(V.mix), mos: i2(V.mos),
       pm: Object.fromEntries(Object.entries(j.per_model).map(([k, v]) => [k, i2(v)])),
       gw: Object.fromEntries(Object.entries(j.gewicht).map(([k, v]) => [k, u1(v)])),
-      dagen: j.dagen.map(d => ({...d, txmax: i2(d.txmax), sigma: i2(d.sigma), p25: u1(d.p25), uur: u1(d.uur), cmax: u1(d.cmax), umax: i2(d.umax)})),
+      dagen: j.dagen.map(d => ({...d, txmax: i2(d.txmax), sigma: i2(d.sigma), p25: u1(d.p25), uur: u1(d.uur), cmax: u1(d.cmax), umax: i2(d.umax),
+        gemeten: d.gemeten_basis ? u1(d.gemeten_basis) : null})),
       plaats: j.statisch.plaats};
-    const nu = Date.now(); staat.di = 0;
-    for (let i = 0; i < D.dagen.length; i++) { if (new Date(D.dagen[i].label + "T23:59:59Z") >= nu) { staat.di = i; break; } }
+    const vandaag = new Date().toISOString().slice(0, 10);
+    const eerstvolgende = D.dagen.findIndex(dag => dag.label >= vandaag);
+    staat.di = eerstvolgende < 0 ? D.dagen.length - 1 : eerstvolgende;
     bouwDagen(); statusEnMeldingen(); kpis(); runsLijst(); teken(); stationsTabel();
   } catch (e) {
     $("statusBadge").className = "badge oud"; $("statusBadge").innerHTML = "<i></i>Geen gegevens";
@@ -532,8 +537,8 @@ function bouwDagen() {
     const d = new Date(dg.label + "T12:00:00Z");
     const b = document.createElement("button"); b.type = "button"; b.setAttribute("aria-pressed", String(i === staat.di));
     if (dg.buiten_training) b.classList.add("let");
-    const tm = dg.txmax; let mx = -1e9; for (const c of gebiedCellen()) { const v = v16(tm[c]); if (isFinite(v) && v > mx) mx = v; }
-    b.innerHTML = `<b>${fmt(mx)}°</b><small>${i === 0 ? "vandaag" : dagKort.format(d)}${dg.onvolledig ? " (onvolledig)" : ""}</small>`;
+    const tm = dg.txmax; let mx = -Infinity; for (const c of gebiedCellen()) { const v = v16(tm[c]); if (Number.isFinite(v) && v > mx) mx = v; }
+    b.innerHTML = `<b>${Number.isFinite(mx) ? fmt(mx) + '°' : '–'}</b><small>${dagIsVandaag(dg) ? "vandaag" : dagKort.format(d)}${dg.onvolledig ? " (onvolledig)" : ""}</small>`;
     b.onclick = () => { staat.di = i; bouwDagen(); teken(); };
     wrap.appendChild(b);
   });
@@ -629,8 +634,8 @@ function laagsteHoogste() {
   const group=$('gLaagst');group.replaceChildren();if(!$('laagChk').checked)return;
   const range=TemperatureMap.summary(gebiedCellen(),waarde,c=>ll[2*c]);
   if(range.maxCell<0)return;
-  const items=[[range.maxCell,staat.laag==='kans'?'Hoogste kans':staat.laag==='sigma'?'Grootste onzekerheid':'Hoogste']];
-  if(staat.laag==='tx'&&range.minCell!==range.maxCell)items.push([range.minCell,'Laagste']);
+  const items=[[range.maxCell,staat.laag==='kans'?'Hoogste kans':staat.laag==='sigma'?'Grootste onzekerheid':'Hoogste dagmaximum']];
+  if(staat.laag==='tx'&&range.minCell!==range.maxCell)items.push([range.minCell,'Laagste dagmaximum']);
   for(const [c,label] of items){const [x,y]=xy(ll[2*c+1],ll[2*c]);
     TemperatureMapUI.extreme({svg,group,x,y,title:label+' '+(staat.laag==='kans'?TemperatureMap.percent(waarde(c)):fmt(waarde(c))+' °C'),name:D.plaats[c],bounds:regioBox().split(' ').map(Number)});}
 }
@@ -649,7 +654,7 @@ function legenda() {
 function titels() {
   const L = staat.laag, dg = D.dagen[staat.di];
   $("kaartTitel").textContent = {tx: "Maximumtemperatuur (TX)", kans: "Kans op een zomerse dag (≥ 25 °C)", sigma: "Onzekerheid van de TX-verwachting"}[L];
-  const naam = staat.di === 0 ? "vandaag" : dagFmt.format(new Date(dg.label + "T12:00:00Z"));
+  const naam = dagNaam(dg);
   $("kaartSub").textContent = `${naam}${dg.onvolledig ? " (onvolledige dagdekking)" : ""}${dg.buiten_training ? " · voorbij het geverifieerde bereik" : ""}`;
   kaartMetadata();
 }
@@ -660,10 +665,13 @@ function tipHtml(c) {
   const [bk, bl] = bhKlasse(s); const tu = D.tijden[dg.uur[c]];
   const plaats = D.plaats[c];
   let h = `<button class="sluit" aria-label="Sluiten" hidden>×</button><div class="tk2"><b>${plaats}</b></div>`;
-  h += `<div class="loc">${staat.di === 0 ? "vandaag" : dagFmt.format(new Date(dg.label + "T12:00:00Z"))} · hoogste rond ${uurFmt.format(tu)} uur</div>
+  const gemeten = dg.gemeten?.[c] === 1;
+  const maximumTijd = gemeten ? 'Maximum tot ' + uurFmt.format(new Date(dg.gemeten_tot_utc)) + ' uur, geschat uit KNMI-metingen'
+    : tu ? 'Hoogste rond ' + uurFmt.format(tu) + ' uur' : 'Maximumuur onbekend';
+  h += `<div class="loc">${dagNaam(dg)} · ${maximumTijd}</div>
     <div class="val"><span class="gr">${fmt(tm)}°C</span><span class="eh">op 2 m</span><span class="int">80 %: ${fmt(tm - 1.28 * s)} tot ${fmt(tm + 1.28 * s)}</span></div>
     <dl><dt>Dagmaximum</dt><dd>${fmt(tm)} °C</dd><dt>Kans ≥ 25 °C</dt><dd>${dg.p25[c]<=100 ? dg.p25[c]+"%" : "–"}</dd>
-    <dt>Wind / bewolking</dt><dd>${fmt(v16(dg.umax[c]))} m/s · ${TemperatureMap.percent(dg.cmax[c])}</dd>
+    ${tu && !gemeten ? `<dt>Wind / bewolking</dt><dd>${fmt(v16(dg.umax[c]))} m/s · ${TemperatureMap.percent(dg.cmax[c])}</dd>` : ''}
     <dt>Foutmarge TX (1 σ)</dt><dd>${fmt(s)} °C</dd></dl>`;
   const rows=[];
   for(const [m,a] of Object.entries(D.pm)) {
@@ -717,28 +725,45 @@ function werkGrafiek() {
   if (c<0) { $('graf').replaceChildren(); return; }
   grafiek(c); lokaleKaart(c);
   $('graf').setAttribute('aria-label','Temperatuurverloop bij '+D.plaats[c]);
-  $('grafSub').textContent=(staat.auto?'Laagste dagmaximum binnen '+gebiedNaam()+' op de gekozen dag. ':'Zelf gekozen plaats. ')+'Luchttemperatuur per uur, met een modelmatige 80%-marge.';
+  const dag = D.dagen[staat.di];
+  const bron = dag.gemeten?.[c] === 1 ? 'De stip markeert het geschatte maximum tot ' + uurFmt.format(new Date(dag.gemeten_tot_utc)) + ' uur. '
+    : 'De stip markeert het maximum op de gekozen kaart. ';
+  $('grafSub').textContent=(staat.auto?'Laagste dagmaximum binnen '+gebiedNaam()+' op de gekozen dag. ':'Zelf gekozen plaats. ')+bron+'De lijn toont de uurverwachting.';
 }
 
 function grafiek(c) {
   const G = $("graf"); G.innerHTML = ""; const Wg = 360, Hg = 190, ml = 30, mr = 8, mt = 8, mb = 22;
-  $("grafTitel").textContent = "Verloop " + D.plaats[c]; $("grafSub").textContent = "Temperatuur op 2 m met 80 %-interval en de losse modellen (na biascorrectie, zonder MOS).";
+  $("grafTitel").textContent = "Verloop " + D.plaats[c];
+  const dag = D.dagen[staat.di], maximum = v16(dag.txmax[c]);
   const s2 = [], sg = []; const mods = staat.modellen ? Object.keys(D.pm) : []; let lo = 99, hi = -99;
   for (let t = 0; t < NT; t++) { const o = t * C + c; const a = v16(D.t2[o]), s = v16(D.sigma[o]); s2.push(a); sg.push(s);
-    if (isFinite(a)) { lo = Math.min(lo, a - 1.28 * s); hi = Math.max(hi, a + 1.28 * s); } }
+    if (Number.isFinite(a)) { const marge = Number.isFinite(s) ? 1.28 * s : 0; lo = Math.min(lo, a - marge); hi = Math.max(hi, a + marge); } }
   mods.forEach(m => { for (let t = 0; t < NT; t++) { const v = v16(D.pm[m][t * C + c]); if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } } });
+  if (Number.isFinite(maximum)) { lo = Math.min(lo, maximum); hi = Math.max(hi, maximum); }
+  if (lo > hi || NT < 2) return;
   lo = Math.floor(lo - 0.5); hi = Math.ceil(hi + 0.5);
   const X = t => ml + (Wg - ml - mr) * t / (NT - 1), Y = v => mt + (Hg - mt - mb) * (hi - v) / (hi - lo);
-  for (let t = 0; t < NT; t++) { const h = new Date(D.tijden[t]).getUTCHours(); if (h === 0) el("rect", {x: X(t), y: mt, width: (Wg - ml - mr) / (NT - 1) * 24, height: Hg - mt - mb, class: "dagvlak", opacity: (Math.floor(t / 24) % 2) ? 0 : 0.4}, G); }
+  el("rect", {x: X(dag.i0), y: mt, width: X(Math.min(dag.i1 + 1, NT - 1)) - X(dag.i0), height: Hg - mt - mb, class: "dagvlak"}, G);
   const stap = hi - lo > 16 ? 5 : hi - lo > 8 ? 2 : 1;
   for (let v = Math.ceil(lo / stap) * stap; v <= hi; v += stap) { el("line", {x1: ml, x2: Wg - mr, y1: Y(v), y2: Y(v), class: "rl"}, G); const tx = el("text", {x: ml - 4, y: Y(v) + 3, "text-anchor": "end", class: "as"}, G); tx.textContent = v; }
   for (let t = 0; t < NT; t++) { const h = new Date(D.tijden[t]).getUTCHours(); if (h === 12) { const tx = el("text", {x: X(t), y: Hg - 6, "text-anchor": "middle", class: "as"}, G); tx.textContent = dagKort.format(D.tijden[t]); } }
   const pad = s => { let d = ""; let pen = false; s.forEach((v, t) => { if (!isFinite(v)) { pen = false; return; } d += (pen ? "L" : "M") + X(t).toFixed(1) + "," + Y(v).toFixed(1); pen = true; }); return d; };
-  let band = "", terug = "";
-  s2.forEach((v, t) => { if (isFinite(v)) { band += (band ? "L" : "M") + X(t).toFixed(1) + "," + Y(v + 1.28 * sg[t]).toFixed(1); terug = "L" + X(t).toFixed(1) + "," + Y(v - 1.28 * sg[t]).toFixed(1) + terug; } });
-  if (band) el("path", {d: band + terug + "Z", class: "band"}, G);
+  let boven = [], onder = [];
+  for (let t = 0; t <= NT; t++) {
+    if (Number.isFinite(s2[t]) && Number.isFinite(sg[t])) {
+      boven.push([X(t),Y(s2[t]+1.28*sg[t])]);onder.push([X(t),Y(s2[t]-1.28*sg[t])]);
+    } else if (boven.length) {
+      el("path",{d:"M"+boven.concat(onder.reverse()).join("L")+"Z",class:"band"},G);
+      boven=[];onder=[];
+    }
+  }
   mods.forEach(m => { const s = []; for (let t = 0; t < NT; t++) s.push(v16(D.pm[m][t * C + c])); el("path", {d: pad(s), class: "lm"}, G); });
   el("path", {d: pad(s2), class: "lt"}, G);
+  const peak = dag.gemeten?.[c] === 1 ? (Date.parse(dag.gemeten_tot_utc) - +D.tijden[0]) / 36e5 : dag.uur[c];
+  if (Number.isFinite(maximum) && peak >= dag.i0 && peak <= dag.i1) {
+    const point = el("circle", {cx:X(peak),cy:Y(maximum),r:4,class:"tx-punt"}, G);
+    el("title",{},point).textContent = "Dagmaximum " + fmt(maximum) + " °C";
+  }
 }
 
 function statusEnMeldingen() {
@@ -752,7 +777,7 @@ function statusEnMeldingen() {
   if (ontbr.length) txt.push("Niet meegenomen: " + ontbr.map(r => `${r.label} (${r.reden || r.status})`).join("; ") + ".");
   if (D.dagen.some(d => d.buiten_training)) txt.push("De verste dag(en) liggen voorbij het geverifieerde bereik (48–60 u) — gemarkeerd op de kaart.");
   if (txt.length) toonMelding(txt.join(" "), leeftijd >= 5);
-  $("infoRij").innerHTML = `<span>Vandaag <b>${dagFmt.format(a)}</b> (etmaal 00–24 UTC)</span><span>Bijgestuurd met <b>${(j.waarnemingen || []).length}</b> KNMI-stations</span>`;
+  $("infoRij").innerHTML = `<span>Publicatie voor <b>${dagFmt.format(a)}</b> (etmaal 00–24 UTC)</span><span>Bijgestuurd met <b>${(j.waarnemingen || []).length}</b> KNMI-stations</span>`;
   toonBodemvochtBron();
 }
 function toonBodemvochtBron(){const bron=D.j.bodemvocht_bron;if(!bron)return;const span=document.createElement('span');span.textContent='Bodemvocht: '+bron;$("infoRij").append(span);}
@@ -794,7 +819,7 @@ function stationsTabel() {
     if (!isFinite(va)) return 1; if (!isFinite(vb)) return -1;
     return dir * (va - vb);
   });
-  const kopTekst = i => i === 0 ? "vandaag" : dagKort.format(new Date(D.dagen[i].label + "T12:00:00Z"));
+  const kopTekst = i => dagIsVandaag(D.dagen[i]) ? "vandaag" : dagKort.format(new Date(D.dagen[i].label + "T12:00:00Z"));
   const ariaVoor = i => i !== kol ? "none" : (dir === 1 ? "ascending" : "descending");
   let t = `<thead><tr><th data-k="-1" aria-sort="${kol === -1 ? (dir === 1 ? "ascending" : "descending") : "none"}">KNMI-station</th>` +
     D.dagen.map((dg, i) => `<th data-k="${i}" aria-sort="${ariaVoor(i)}">${kopTekst(i)}</th>`).join("") + `</tr></thead><tbody>`;
@@ -832,12 +857,13 @@ function lokaleKaart(c) {
   if(!D.frac){D.frac=Object.fromEntries(Object.entries(D.j.statisch.frac||{}).map(([k,a])=>[k,u1(a)]));D.vocht=D.j.statisch.vocht?u1(D.j.statisch.vocht):null;}
   const names={zand:'zand',zavel:'zavel',klei:'klei',veen:'veen',loss:'löss',bebouwd:'bebouwd/onbekend'};
   const soil=Object.entries(D.frac).map(([k,a])=>[k,a[c]]).filter(([,v])=>v>=10&&v<=100).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(names[k]||k)+' '+v+'%').join(', ')||'onbekend';
+  const gemeten = d.gemeten_stations ? ' Verstreken uren geschat met '+d.gemeten_stations+' KNMI-stations tot '+uurFmt.format(new Date(d.gemeten_tot_utc))+' uur.' : '';
   TemperatureMapUI.location({name:D.plaats[c],value:fmt(v)+' °C',kind:'Dagmaximum op 2 m · 00–24 UTC',
     interval:Number.isFinite(s)?'Modelmatig 80%-interval: '+fmt(v-1.28155*s)+' tot '+fmt(v+1.28155*s)+' °C':null,
     details:[['Kans op ≥ 25 °C',TemperatureMap.percent(d.p25[c])],['Bodem',soil],['Bodemvocht',D.vocht&&D.vocht[c]<=100?'index '+D.vocht[c]+'/100':'onbekend']],
     note:(staat.auto?'Volgt de roostercel met het laagste dagmaximum. ':'Zelf gekozen roostercel. ')+
       (d.buiten_training?'Deze dag ligt buiten het toetsbereik; de verwachting en marge zijn indicatief. ':'De marge beschrijft de berekende spreiding van mogelijke uitkomsten. ')+
-      (d.onvolledig?'De modelinvoer dekt dit etmaal niet volledig.':'Lokale verschillen binnen een cel van 5 km blijven mogelijk.')});
+      (d.onvolledig?'De modelinvoer dekt dit etmaal niet volledig.':'Lokale verschillen binnen een cel van 5 km blijven mogelijk.')+gemeten});
 }
 
 TemperatureMapUI.setup(teken);

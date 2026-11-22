@@ -1,0 +1,174 @@
+--- a/run_forecast_tx.py
++++ b/run_forecast_tx.py
+@@ -57,6 +57,74 @@
+     return result
+
+
++def gemeten_tx(stations, start, nu):
++    """Read the operational KNMI ten-minute archive for the elapsed UTC day."""
++    from knmi_live_day import aggregate
++
++    uit = {}
++    for stn in stations:
++        pad = config.WEERLAB / "data" / "observations" / str(stn) / f"{start:%Y-%m-%d}.json"
++        try:
++            data = json.loads(pad.read_text())
++            rows = {}
++            for row in data["rows"]:
++                stamp = pd.Timestamp(row["time"])
++                if not start < stamp <= nu:
++                    continue
++                vals = {key: value for key in ("tx", "ta")
++                        if isinstance(value := row.get(key), (int, float)) and -55 <= value <= 55}
++                if vals:
++                    rows[stamp] = vals
++        except (OSError, ValueError, TypeError, KeyError):
++            continue
++        if not rows:
++            continue
++        laatste = max(rows)
++        verwacht = (laatste - start).total_seconds() / 600
++        if (nu - laatste).total_seconds() > 30 * 60 or len(rows) < 0.9 * verwacht:
++            continue
++        uit[stn] = (aggregate(rows.values())["tx"], laatste)
++    return uit
++
++
++def verstreken_maximum(tijden, uurveld, lats, lons, stations, gemeten, kd):
++    """Calibrate the elapsed model peak with the observed peak at each station."""
++    if not gemeten:
++        return None
++    xy = np.column_stack(static_grid._km(lats, lons))
++    modeluren = (tijden - tijden[0]).total_seconds().to_numpy() / 3600
++    peilen, afwijkingen, eindtijden = [], [], []
++    for stn, (tx, laatst) in gemeten.items():
++        s = stations[stn]
++        punt = static_grid._km(s["lat"], s["lon"])
++        d, j = kd.query(punt, k=4)
++        gewichten = 1 / np.maximum(d, 0.5)
++        reeks = np.average(uurveld[j], axis=0, weights=gewichten)
++        einduur = (laatst - tijden[0]).total_seconds() / 3600
++        einde = np.interp(einduur, modeluren, reeks, left=np.nan, right=np.nan)
++        top = np.nanmax(np.append(reeks[modeluren <= einduur], einde))
++        if np.isfinite(top):
++            peilen.append(punt)
++            afwijkingen.append(tx - top)
++            eindtijden.append(laatst)
++    if not peilen:
++        return None
++    tot = max(eindtijden)
++    uren = tijden <= tot
++    uur_tot = (tot - tijden[0]).total_seconds() / 3600
++    eind = np.searchsorted(modeluren, uur_tot)
++    waarden = uurveld[:, uren]
++    if 0 < eind < len(modeluren) and modeluren[eind] > uur_tot:
++        fractie = (uur_tot - modeluren[eind - 1]) / (modeluren[eind] - modeluren[eind - 1])
++        eindwaarde = (1 - fractie) * uurveld[:, eind - 1] + fractie * uurveld[:, eind]
++        waarden = np.column_stack((waarden, eindwaarde))
++    basis = np.nanmax(waarden, axis=1)
++    km = np.linalg.norm(xy[:, None, :] - np.asarray(peilen)[None, :, :], axis=2)
++    gewicht = np.exp(-(km / 35.0) ** 2)
++    veld = basis + (gewicht @ afwijkingen) / (gewicht.sum(1) + 0.3)
++    return veld, tot, len(peilen)
++
++
+ def main():
+     t_start = time.time()
+     LOG.clear()
+@@ -248,21 +316,24 @@
+     except Exception as e:
+         log(f"waarnemingen niet beschikbaar: {e}"); obs = {}
+     bias_pts = []
+-    uur_frac = (nu - t0.to_pydatetime()).total_seconds() / 3600
+-    idx_nu = int(np.clip(np.floor(uur_frac), 0, T - 2))
+-    frac_nu = float(np.clip(uur_frac - idx_nu, 0, 1))
+     from scipy.spatial import cKDTree
+     kd = cKDTree(np.column_stack(static_grid._km(lats, lons)))
+     for stn, o in obs.items():
+         if "ta" not in o:
+             continue
+         tobs = pd.Timestamp(o["ta_t"])
+-        if (pd.Timestamp(nu) - tobs).total_seconds() > 40 * 60:
++        if not t0 <= tobs <= nu or (pd.Timestamp(nu) - tobs).total_seconds() > 40 * 60:
+             continue
+         s = stat[stn]
+         d, j = kd.query(static_grid._km(s["lat"], s["lon"]), k=4)
+         wj = 1 / np.maximum(d, 0.5)
+-        f_t2 = np.sum(wj * (tx_uur[j, idx_nu] * (1 - frac_nu) + tx_uur[j, idx_nu + 1] * frac_nu)) / wj.sum()
++        uur_frac = (tobs - t0).total_seconds() / 3600
++        idx = min(int(uur_frac), T - 2)
++        frac_uur = uur_frac - idx
++        f_t2 = np.average(tx_uur[j, idx] if not frac_uur else
++                          (1 - frac_uur) * tx_uur[j, idx] + frac_uur * tx_uur[j, idx + 1], weights=wj)
++        if not np.isfinite(f_t2) or not geldig[j, idx].all() or (frac_uur and not geldig[j, idx + 1].all()):
++            continue
+         bias_pts.append({"stn": stn, "naam": s["naam"], "lat": s["lat"], "lon": s["lon"], "ta": o["ta"],
+                          "t": o["ta_t"], "b2": float(np.clip(o["ta"] - f_t2, -4, 4))})
+     b2 = np.zeros(C)
+@@ -281,7 +352,8 @@
+     tx_fin = np.where(geldig, tx_fin, np.nan)
+
+     # --- per kalenderdag: dagmaximum + uur, warme-dagenkans -------------------------------
+-    lok = tijden.tz_localize(None)   # KNMI-etmaal = UTC-dag, geen tijdzone-omzetting nodig
++    gemeten = gemeten_tx(stat, t0, nu)
++    verstreken = verstreken_maximum(tijden[:24], tx_fin[:, :24], lats, lons, stat, gemeten, kd)
+     dagen_uit = []
+     for dnr in range(TX_DAGEN):
+         d0 = t0 + pd.Timedelta(days=dnr)
+@@ -289,14 +361,30 @@
+         if sel.sum() < 6:
+             continue
+         i0, i1 = int(np.nonzero(sel)[0][0]), int(np.nonzero(sel)[0][-1])
+-        blok = np.where(np.isfinite(tx_fin[:, i0:i1 + 1]), tx_fin[:, i0:i1 + 1], -np.inf)
++        daguren = tijden[sel]
++        dagveld = tx_fin[:, sel]
++        metingen = verstreken if dnr == 0 else None
++        prognose = dagveld if metingen is None else np.where(daguren > metingen[1], dagveld, np.nan)
++        blok = np.where(np.isfinite(prognose), prognose, -np.inf)
+         im = np.argmax(blok, 1)
+         rows = np.arange(C)
+-        tmax = tx_fin[:, i0:i1 + 1][rows, im]
++        tmax = prognose[rows, im]
+         smax = sigma[:, i0:i1 + 1][rows, im]
++        waargenomen = np.zeros(C, dtype=bool)
++        if metingen is not None:
++            veld, tot, aantal = metingen
++            verleden = np.where(daguren <= tot, dagveld, np.nan)
++            im_verleden = np.argmax(np.where(np.isfinite(verleden), verleden, -np.inf), 1)
++            # Waar geen metingen kunnen worden verwerkt, blijft het volledige modelmaximum beschikbaar.
++            verleden_max = verleden[rows, im_verleden]
++            waargenomen = np.isfinite(veld) & (~np.isfinite(tmax) | (veld >= tmax))
++            behoud_model = ~np.isfinite(veld) & np.isfinite(verleden_max) & (~np.isfinite(tmax) | (verleden_max >= tmax))
++            im = np.where(behoud_model, im_verleden, im)
++            tmax = np.where(waargenomen, veld, np.where(behoud_model, verleden_max, tmax))
++            smax = np.where(waargenomen | behoud_model, sigma[:, i0:i1 + 1][rows, im_verleden], smax)
++        geldig_max = np.isfinite(tmax) & ~waargenomen
+         n_mod = int(sum(aanw_uit[mi][:, i0:i1 + 1].mean() >= 0.5 for mi in range(M)))
+         lead_max = float(np.nanmax(np.where(np.isfinite(LEAD[:, i0:i1 + 1]), LEAD[:, i0:i1 + 1], np.nan)))
+-        # tijdvak grotendeels in het verleden (rest van vandaag) → onvolledig, apart gemarkeerd
+         onvolledig = bool(np.any(np.isfinite(tx_fin[:, i0:i1 + 1]).sum(axis=1) < sel.sum()))
+         dagen_uit.append({"label": f"{d0:%Y-%m-%d}", "i0": i0, "i1": i1, "n_modellen": n_mod,
+                           "lead_max_u": round(lead_max), "buiten_training": bool(lead_max > 62),
+@@ -304,8 +392,11 @@
+                           "txmax": rf.b64(rf.q16(tmax), "<i2"), "sigma": rf.b64(rf.q16(smax), "<i2"),
+                           # kans op een warme dag (TX ≥ 25 °C, "zomers")
+                           "p25": rf.b64(rf.qprob(norm.sf((25 - tmax) / smax)), "u1"),
+-                          "uur": rf.b64(im + i0, "u1"), "cmax": rf.b64(np.round(100 * cm[:, i0:i1 + 1][rows, im]), "u1"),
+-                          "umax": rf.b64(rf.q16(um[:, i0:i1 + 1][rows, im]), "<i2")})
++                          "uur": rf.b64(np.where(geldig_max, im + i0, 255), "u1"),
++                          "cmax": rf.b64(rf.qprob(np.where(geldig_max, cm[:, sel][rows, im], np.nan)), "u1"),
++                          "umax": rf.b64(rf.q16(np.where(geldig_max, um[:, sel][rows, im], np.nan)), "<i2"),
++                          **({"gemeten_tot_utc": tot.isoformat(), "gemeten_stations": aantal,
++                              "gemeten_basis": rf.b64(waargenomen, "u1")} if metingen is not None else {})})
+
+     uit = {
+         "versie": "TX-MOS 0.1 (demo)",
+@@ -339,7 +430,7 @@
+     # Compact bestand met alleen de dagvelden (regiokaart Rijnmond, klantpagina's).
+     klein = {k: uit[k] for k in ("versie", "analyse_utc", "gemaakt_utc", "rooster") if k in uit}
+     klein["dagen"] = [{k: d[k] for k in ("label", "n_modellen", "lead_max_u", "buiten_training", "onvolledig",
+-                                          "txmax", "p25") if k in d} for d in dagen_uit]
++                                          "txmax", "p25", "gemeten_tot_utc", "gemeten_stations") if k in d} for d in dagen_uit]
+     tmp = config.OUT_DIR / "wgt_tx_dagen.json.tmp"
+     tmp.write_text(json.dumps(klein, ensure_ascii=False, separators=(",", ":")))
+     tmp.replace(config.OUT_DIR / "wgt_tx_dagen.json")
