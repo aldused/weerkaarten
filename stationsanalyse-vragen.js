@@ -27,7 +27,7 @@ const presets=[
  ['summer-last','Laatste zomerse dag (25 °C)','TX','ge',25,'01-01','12-31','last'],
  ['tropical-first','Eerste tropische dag (30 °C)','TX','ge',30,'01-01','12-31','first'],
  ['tropical-last','Laatste tropische dag (30 °C)','TX','ge',30,'01-01','12-31','last'],
- ['ice','IJsdag (maximum onder 0 °C)','TX','lt',0,'01-01','12-31','count'],
+ ['ice','IJsdag (maximum onder 0 °C)','TX','lt',0,'08-01','07-31','first'],
  ['rain','Natte dag (minstens 10 mm)','RH','ge',10,'01-01','12-31','first'],
  ['dry','Droge dagen (minder dan 0,1 mm)','RH','lt',.1,'01-01','12-31','streak'],
  ['gust','Windstoot van minstens 90 km/u','FXX','ge',90,'01-01','12-31','first'],
@@ -117,7 +117,7 @@ function stationValues(hit,a){
  return observations.slice(0,2).map(row).join('')+(observations.length>2?`<details class="q-tied-stations"><summary>Alle ${observations.length} stations op deze dag</summary>${observations.slice(2).map(row).join('')}</details>`:'');
 }
 function simpleDate(hit){return hit?new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',day:'numeric',month:'long'}).format(hit.time):'Niet gevonden';}
-function renderFrost(a,frost){
+function renderFirstLast(a,event){
  syncView(a);shareSelection();
  const place=$('q-station').value==='all'?'Alle stations in Nederland, inclusief historische stations':$('q-station').selectedOptions[0].textContent;
  const periodName=a.start==='08-01'&&a.end==='07-31'?'winterjaar':a.start==='10-01'&&a.end==='04-30'?'oktober–aprilperiode':a.start==='12-01'&&a.end==='02-29'?'meteorologische winter':a.cross?'seizoen':'jaar';
@@ -128,10 +128,10 @@ function renderFrost(a,frost){
   return `<article class="q-date-card" data-record="${key}"><h4>${esc(a.national?label.replace('dag:','gevonden dag:'):label)}</h4><p class="q-big-date">${simpleDate(hit)}</p>${best?`<p class="q-record-year">${best.label} · ${date(hit.time)}</p>${stationValues(hit,a)}${a.national&&!best.dailyComplete?'<p class="q-coverage-note">Meetgaten in de stationsreeksen; dit is de gevonden grensdatum.</p>':''}${entries.length>1?`<details class="q-other-years"><summary>Ook in ${entries.length-1} andere ${entries.length===2?periodName:periodName==='winterjaar'?'winterjaren':periodName+'en'}</summary>${entries.slice(1).map(p=>`<p><strong>${p.label} · ${date(p[side].time)}</strong></p>${stationValues(p[side],a)}${a.national&&!p.dailyComplete?'<p class="q-coverage-note">Meetgaten in de stationsreeksen.</p>':''}`).join('')}</details>`:''}`:'<p>Geen afgesloten periode met voldoende dagdekking en een passende meting beschikbaar.</p>'}</article>`;
  }).join('');
  const selected=a.periods.find(p=>p.label===focusYear);
- const yearCards=selected?['first','last'].map(side=>`<article class="q-date-card"><h4>${side==='first'?'Eerste':'Laatste'} dag</h4><p class="q-big-date">${simpleDate(selected[side])}</p>${selected[side]?`<p class="q-record-year">${date(selected[side].time)}</p>${stationValues(selected[side],a)}`:`<p>${selected.complete?'Geen dag in deze vorstklasse.':'Er is geen passende meting gevonden.'}</p>`}</article>`).join(''):'';
- const tableRows=a.periods.slice().reverse().map(p=>`<tr><th scope="row">${p.label}${p.running?'<span class="q-running">lopend</span>':a.national&&!p.dailyComplete?'<span class="q-running">meetgaten</span>':''}</th>${['first','last'].map(side=>`<td>${p[side]?`<strong>${date(p[side].time)}</strong>${stationValues(p[side],a)}`:p.complete?'Geen dag in deze klasse':'Niet gevonden'}</td>`).join('')}</tr>`).join('');
- $('q-output').innerHTML=`<section class="q-simple-results" aria-labelledby="q-simple-title"><header class="q-simple-heading"><p class="q-eyebrow">${esc(place)}</p><h3 id="q-simple-title">${frost.label} · ${viewMode==='all'?'alle jaren vergeleken':selected?.label||'geen jaar beschikbaar'}</h3><p class="q-range">${frost.range} · ${periodName}: ${windowLabel}</p></header>
- ${viewMode==='all'?`<p class="q-compare-intro">Wanneer viel de eerste of laatste dag met ${frost.label.toLowerCase()} het vroegst of het laatst binnen een ${periodName}? Vergelijking op dag en maand, over alle beschikbare jaren.</p><div class="q-record-grid">${recordCards}</div>`:`<div class="q-record-grid q-year-cards">${yearCards}</div>${selected?.running?'<p class="q-coverage-note">Deze periode loopt nog. Er kunnen nog nieuwe metingen bijkomen.</p>':''}`}
+ const yearCards=selected?['first','last'].map(side=>`<article class="q-date-card"><h4>${side==='first'?'Eerste':'Laatste'} dag</h4><p class="q-big-date">${simpleDate(selected[side])}</p>${selected[side]?`<p class="q-record-year">${date(selected[side].time)}</p>${stationValues(selected[side],a)}`:`<p>${selected.complete?'Geen dag die aan deze grens voldoet.':'Er is geen passende meting gevonden.'}</p>`}</article>`).join(''):'';
+ const tableRows=a.periods.slice().reverse().map(p=>`<tr><th scope="row">${p.label}${p.running?'<span class="q-running">lopend</span>':a.national&&!p.dailyComplete?'<span class="q-running">meetgaten</span>':''}</th>${['first','last'].map(side=>`<td>${p[side]?`<strong>${date(p[side].time)}</strong>${stationValues(p[side],a)}`:p.complete?'Geen dag die aan deze grens voldoet':'Niet gevonden'}</td>`).join('')}</tr>`).join('');
+ $('q-output').innerHTML=`<section class="q-simple-results" aria-labelledby="q-simple-title"><header class="q-simple-heading"><p class="q-eyebrow">${esc(place)}</p><h3 id="q-simple-title">${event.label} · ${viewMode==='all'?'alle jaren vergeleken':selected?.label||'geen jaar beschikbaar'}</h3><p class="q-range">${esc(event.range)} · ${periodName}: ${windowLabel}</p></header>
+ ${viewMode==='all'?`<p class="q-compare-intro">De eerste en laatste dag worden vergeleken op dag en maand, over alle beschikbare jaren.</p><div class="q-record-grid">${recordCards}</div>`:`<div class="q-record-grid q-year-cards">${yearCards}</div>${selected?.running?'<p class="q-coverage-note">Deze periode loopt nog. Er kunnen nog nieuwe metingen bijkomen.</p>':''}`}
  <p class="q-coverage-note">${viewMode==='year'?a.national?'Dit zijn de eerste en laatste gevonden metingen. Historische meetreeksen zijn niet altijd volledig.':selected?.complete?'Volledige dagreeks voor deze periode.':'Deze periode mist meetdagen of loopt nog; dit zijn de gevonden grensdatums.':a.national?`${a.comparisonPeriodCount} afgesloten perioden met gevonden metingen vergeleken. Ook perioden met meetgaten tellen mee; die zijn gemarkeerd. De datums zijn de eerste en laatste gevonden waarnemingen. Ontbrekende metingen kunnen deze grenzen veranderen. De lopende periode telt niet mee.`:`Records vergelijken volledige, afgesloten perioden. ${a.excluded} onvolledige of lopende perioden tellen niet mee voor de records; hun gevonden datums staan wel in de tabel.`}</p>
  <section class="q-simple-year-table"><h3>Overzicht per ${periodName}</h3><div class="q-scroll"><table><thead><tr><th scope="col">${periodName==='winterjaar'?'Winterjaar':'Jaar / seizoen'}</th><th scope="col">Eerste dag</th><th scope="col">Laatste dag</th></tr></thead><tbody>${tableRows||'<tr><td colspan="3">Geen jaren beschikbaar.</td></tr>'}</tbody></table></div></section>
  </section>`;
@@ -141,9 +141,9 @@ function render(a){
  const frost=frostFor(a);
  const simple=['first','last'].includes($('q-question').value);$('q-simple-period').hidden=!simple;
  if(simple){
-  const key=$('q-preset').value.replace(/-(first|last)$/,''),labels={warm:'Warme dag',summer:'Zomerse dag',tropical:'Tropische dag',autumn:'Vorstdag',spring:'Vorstdag',rain:'Natte dag',gust:'Windstoot',sun:'Zonnige dag'};
-  const range=a.op==='between'?`${number(a.threshold)} t/m ${number(a.upper)} ${a.variable.unit}`:`${symbols[a.op]} ${number(a.threshold)} ${a.variable.unit}`;
-  renderFrost(a,frost||{label:labels[key]||a.variable.label,range});return;
+  const key=$('q-preset').value.replace(/-(first|last)$/,''),labels={warm:'Warme dag',summer:'Zomerse dag',tropical:'Tropische dag',autumn:'Vorstdag',spring:'Vorstdag',ice:'IJsdag',rain:'Natte dag',gust:'Windstoot',sun:'Zonnige dag'};
+  const range=a.op==='between'?`${number(a.threshold)} t/m ${number(a.upper)} ${a.variable.unit}`:`${key==='ice'?'TX ':''}${symbols[a.op]} ${number(a.threshold)} ${a.variable.unit}`;
+  renderFirstLast(a,frost||{label:labels[key]||a.variable.label,range});return;
  }
  const q=$('q-question').value,condition=frost?`${frost.label} · ${frost.range}`:a.op==='between'?`${a.variable.label} van ${number(a.threshold)} t/m ${number(a.upper)} ${a.variable.unit}`:`${a.variable.label} ${symbols[a.op]} ${number(a.threshold)} ${a.variable.unit}`,complete=a.periods.filter(p=>p.complete),chosen=a.periods.find(p=>p.label===document.getElementById('q-focus')?.value)||a.periods.at(-1);
  const map={earlyFirst:['first',false],lateFirst:['first',true],earlyLast:['last',false],lateLast:['last',true]},rankInfo=map[q],rank=rankInfo?a.rank(...rankInfo):[],side=q==='last'?'last':'first';

@@ -65,6 +65,14 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   assert.match(await page.locator('#records-body tr').first().innerText(),/1962\/1963[\s\S]*Twenthe[\s\S]*72/);
   assert.match(await page.locator('#records-periode').innerText(),/TN < −5[\s\S]*strenge en zeer strenge/);
   assert.match(await page.locator('.record-period-help').innerText(),/winterjaar/);
+  await page.locator('.archive-secondary').getByRole('button',{name:'IJsdagen',exact:true}).click();
+  assert.equal(await page.inputValue('#sel-param-mobile'),'dagen_ijs');
+  assert.equal(await page.inputValue('#sel-periode-mobile'),'winterjaar');
+  assert.equal(await page.inputValue('#sel-station'),'alle');
+  assert.match(await page.locator('#records-sub').innerText(),/historische dagreeksen tellen mee/);
+  assert.match(await page.locator('#records-body').innerText(),/Winterswijk/);
+  assert.match(await page.locator('#records-body tr').first().innerText(),/1946\/1947[\s\S]*Eelde[\s\S]*63/);
+  await page.selectOption('#sel-param-mobile','dagen_matige_vorst');
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:'/private/tmp/weerrecords-vorst-desktop.png',fullPage:true});
   for(const key of ['lichte_vorst','strenge_vorst','zeer_strenge_vorst','extreem_koud']) {

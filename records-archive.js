@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  shortcut('CSV downloaden',()=>{const table=$('records-tabel');const rows=[...table.rows].filter(r=>!r.hidden);if(getComputedStyle(table).display==='none'||rows.length<2){feedback.textContent='Geen zichtbare ranglijst om te downloaden.';return;}const csv='\uFEFF'+rows.map(r=>[...r.cells].map(c=>'"'+c.textContent.trim().replaceAll('"','""')+'"').join(';')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=make('a','',{href:url,download:'weerlab-recordselectie.csv'});a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
  shortcut('Selectie delen',async()=>{const url=selectionURL();try{await navigator.clipboard.writeText(url);feedback.textContent='Link naar deze selectie gekopieerd.';}catch{feedback.replaceChildren(make('a','Open de link naar deze selectie',{href:url}));}});
  shortcut('Vorstdagen',()=>{wisselHoofdtab('records');wisselParam('dagen_matige_vorst');});
+ shortcut('IJsdagen',()=>{wisselHoofdtab('records');wisselParam('dagen_ijs');});
  panel.append(shortcuts);filters.before(panel);
  const tabs=make('nav','',{class:'archive-categories','aria-label':'Recordcategorie'});
  categories.forEach(([title,param])=>{const b=make('button',title,{type:'button','data-param':param});b.onclick=()=>{wisselHoofdtab('records');wisselParam(param);};tabs.append(b);});

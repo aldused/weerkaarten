@@ -33,6 +33,20 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
    assert.equal(await page.inputValue('#q-field'),field);assert.equal(await page.inputValue('#q-threshold'),threshold);
    assert.equal(await page.locator(`[data-weather-preset="${key}"]`).getAttribute('aria-pressed'),'true');
    assert.equal(await page.locator('#q-advanced').getAttribute('open'),null);
+   if(key==='ice'){
+    assert.equal(await page.inputValue('#q-question'),'first');
+    assert.equal(await page.inputValue('#q-simple-window'),'winterjaar');
+    assert.equal(await page.locator('#q-view-all').isVisible(),true);
+    assert.match(await page.locator('#q-simple-title').innerText(),/IJsdag/);
+    assert.match(await page.locator('.q-simple-year-table tbody').textContent(),/historisch/);
+    await page.click('#q-view-year');
+    await page.selectOption('#q-year','1962/1963');
+    assert.equal(await page.locator('.q-year-cards .q-date-card').count(),2);
+    await page.selectOption('#q-question','last');
+    assert.equal(await page.inputValue('#q-preset'),'ice');
+    assert.equal(await page.inputValue('#q-year'),'1962/1963');
+    await page.click('#q-view-all');
+   }
   }
   await page.locator('[data-weather-preset="warm-first"]').click();await ready(page);await page.selectOption('#q-question','last');assert.equal(await page.inputValue('#q-preset'),'warm-last');
   assert.equal(await page.locator('[data-record]').count(),4);assert.match(await page.locator('#q-simple-title').innerText(),/Warme dag/);assert.equal(await page.locator('#q-view-all').isVisible(),true);
