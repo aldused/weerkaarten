@@ -27,12 +27,13 @@ class SnowfallNormalsTest(unittest.TestCase):
         module.add_hour(masks, 2, None)
         self.assertEqual(masks, [0, 0, 1])
 
-    def test_snow_and_thunder_are_distinguished_in_visual_observations(self):
-        self.assertFalse(module.snowfall('19610101', '17', '', '1'))
-        self.assertTrue(module.snowfall('19610101', '85', '', '0'))
-        self.assertFalse(module.snowfall('19750101', '17', '1', '1'))
-        self.assertTrue(module.snowfall('20100101', '22', '7', '1'))
-        self.assertIsNone(module.snowfall('20100101', '', '7', ''))
+    def test_snow_indicator_covers_the_hour_from_1971(self):
+        self.assertFalse(module.snow_indicator('19610101', '17', '', '1'))
+        self.assertTrue(module.snow_indicator('19610101', '85', '', '0'))
+        self.assertTrue(module.snow_indicator('19710101', '60', '1', '1'))
+        self.assertFalse(module.snow_indicator('19710101', '60', '1', '0'))
+        self.assertTrue(module.snow_indicator('20100101', '', '7', '1'))
+        self.assertIsNone(module.snow_indicator('20100101', '', '7', ''))
 
     def test_year_quality_tracks_days_and_hour_gaps(self):
         days = {(date(2020, 1, 1) + timedelta(days=i)).strftime('%Y%m%d'): [module.FULL_DAY, 0, 0] for i in range(366)}
@@ -60,7 +61,7 @@ class SnowfallNormalsTest(unittest.TestCase):
             self.assertEqual(monthly[2020][module.NATIONAL][0], [1, 1, 2])
 
     def test_published_data_uses_both_real_thirty_year_periods(self):
-        for start, end, expected in [(1961, 1990, 27.9667), (1991, 2020, 18.4667)]:
+        for start, end, expected in [(1961, 1990, 29.7333), (1991, 2020, 19.3)]:
             data = json.loads((ROOT / f'winter-data/sneeuwval-normalen-{start}-{end}.json').read_text())
             self.assertEqual(data['period'], [start, end])
             self.assertEqual(len(data['inputSHA256']), 360)

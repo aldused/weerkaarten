@@ -279,7 +279,7 @@
   async function init() {
     if (window.weerlabSeizoenen) source = window.weerlabSeizoenen;
     else {
-      const response = await fetch('winter-data/seizoenskalender.json?v=20261117-september');
+      const response = await fetch('winter-data/seizoenskalender.json?v=20261123-sneeuwindicator');
       if (!response.ok) throw new Error('De seizoensgegevens zijn niet beschikbaar');
       source = await response.json();
     }

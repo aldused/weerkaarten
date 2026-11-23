@@ -125,7 +125,7 @@
     $('download').href=`winter-data/${stem}.csv`;
     try{
       if(!cache.has(key)){
-        const response=await fetch(`winter-data/${stem}.json?v=20261123-winterhalfjaar`);
+        const response=await fetch(`winter-data/${stem}.json?v=20261123-sneeuwindicator`);
         if(!response.ok)throw Error('Sneeuwdeknormalen niet bereikbaar.');
         cache.set(key,await response.json());
       }

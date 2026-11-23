@@ -43,7 +43,7 @@ test('Whole-year aggregation reproduces every published station mean and coverag
  }
 });
 test('Real De Bilt November normals are independent for both snow metrics and climate periods',()=>{
- for(const [type,id,old,recent]of [['sneeuwval',260,2.4667,1],['sneeuwdek',550,1.3333,.2667]])for(const [period,expected]of [['1961-1990',old],['1991-2020',recent]]){
+ for(const [type,id,old,recent]of [['sneeuwval',260,2.7333,1.0667],['sneeuwdek',550,1.3333,.2667]])for(const [period,expected]of [['1961-1990',old],['1991-2020',recent]]){
   const data=require(`../winter-data/${type}-normalen-${period}.json`),station=data.stations.find(s=>s.id===id);
   assert.equal(core.aggregate(station,data,'month-11').mean,expected);
  }

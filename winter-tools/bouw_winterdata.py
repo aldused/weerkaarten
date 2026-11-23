@@ -22,6 +22,8 @@ def snow_indicator(date, ww, ix, snow):
         if ix not in ("", "1", "4") or not ww.isdecimal() or int(ww) > 99:
             return None
         return int(ww) in VISUAL_SNOW
+    # S geldt voor het hele uur. De afzonderlijke weercode kan ook een ander
+    # verschijnsel tijdens de waarneming of in het afgelopen uur aangeven.
     if snow in ("0", "1"):
         return snow == "1"
     return None

@@ -36,11 +36,14 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.selectOption('#season-year','2026');await page.selectOption('#season-metric','snowfall');
   assert.equal(await page.locator('#season-history-details').isVisible(),true);
   assert.match(await page.locator('#season-first-snow').innerText(),/19 november/);
+  const snowNormals=page.locator('#season-snow-normals tr');
+  assert.deepEqual(await snowNormals.filter({hasText:'1961–1990'}).locator('td').allTextContents(),['3 november','1961–1990 (30 winters)','1 november']);
+  assert.deepEqual(await snowNormals.filter({hasText:'1991–2020'}).locator('td').allTextContents(),['10 november','1991–2020 (30 winters)','9 november']);
   await page.locator('#season-station-details').evaluate(e=>{e.open=false;});
   await page.locator('#seizoenskalender').screenshot({path:'/private/tmp/eerste-landelijke-vorst-desktop.png'});
   for(const width of [320,390,768]){await page.setViewportSize({width,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)){console.log(await page.evaluate(()=>[...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.right>innerWidth+1&&!e.closest('.table-wrap,svg');}).map(e=>({tag:e.tagName,id:e.id,cls:e.className,width:e.getBoundingClientRect().width,right:e.getBoundingClientRect().right})).slice(0,12)));await page.locator('#seizoenskalender').screenshot({path:'/private/tmp/eerste-landelijke-vorst-mobile.png'});}assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`No overflow at ${width}`);}
   await page.setViewportSize({width:390,height:844});await page.locator('#seizoenskalender').screenshot({path:'/private/tmp/eerste-landelijke-vorst-mobile.png'});
   assert.deepEqual(errors,[]);
-  console.log('PASS: all four first national frost dates in all winter years, historical Winterswijk, January 2020, no frost averages, CSV export, unchanged snowfall and responsive layout');
+  console.log('PASS: national frost dates, CSV export, first snowfall and its climate averages, responsive layout');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());

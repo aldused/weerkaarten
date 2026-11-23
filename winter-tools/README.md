@@ -46,7 +46,7 @@ De afgeleide statistieken laten specifieke station/code-combinaties weg die in 1
 
 ## Seizoenskalender
 
-De seizoenskalender combineert TN uit de KNMI-dagselectie, sneeuwval uit de KNMI-uurselectie en sneeuwdekcode SX uit het sneeuwdekarchief. Voor de eerste sneeuwval zoekt hij vanaf 1 september in de uurgegevens van landstations. Bij visuele meldingen moet de weercode WW uitdrukkelijk op sneeuw wijzen. Bij automatische meldingen telt de sneeuwindicator S of W3. Het meetmoment volgt het UTC-uurvak. Sneeuwdek en vorst lopen van juli t/m juni.
+De seizoenskalender combineert TN uit de KNMI-dagselectie, sneeuwval uit de KNMI-uurselectie en sneeuwdekcode SX uit het sneeuwdekarchief. Voor de eerste sneeuwval zoekt hij vanaf 1 september in de uurgegevens van landstations. Vóór 1971 telt een expliciete visuele sneeuwcode in WW. Vanaf 1971 telt de sneeuwindicator S of W3. Het meetmoment volgt het UTC-uurvak. Sneeuwdek en vorst lopen van juli t/m juni.
 
 ```sh
 python3 winter-tools/haal_knmi_dagminima.py /pad/naar/dagminimacache 1902 2026
@@ -108,10 +108,10 @@ alle twaalf kalendermaanden van ieder jaar. Rijen buiten de geselecteerde
 maand worden genegeerd, inclusief een eventueel extra uur op 1 januari van
 het volgende jaar. KNMI HH=24 blijft bij de opgegeven UTC-datum horen.
 
-Vóór 1971 telt alleen een expliciete visuele sneeuwcode in WW; de oude S-code
-kan ook bij onweer staan. Daarna telt de sneeuwindicator S, met bij visuele
-waarnemingen aanvullend een expliciete sneeuwcode. Dit volgt dezelfde regels
-als de seizoenskalender. Een sneeuwdag telt eenmaal, ongeacht het aantal
+Vóór 1971 telt een expliciete visuele sneeuwcode in WW. De oude S-code komt
+ook voor bij onweer. Daarna telt de sneeuwindicator S, die sneeuw tijdens de
+waarneming of in het afgelopen uur vastlegt. De seizoenskalender gebruikt
+dezelfde regels. Een sneeuwdag telt eenmaal, ongeacht het aantal
 sneeuwuren. Identieke dubbele uren tellen eenmaal, tegenstrijdige uren worden
 onbekend. Noordzeeplatforms en openwaterstations zijn uitgesloten.
 

@@ -16,7 +16,7 @@ from pathlib import Path
 import re
 
 from bouw_seizoenskalender import OFFSHORE
-from bouw_winterdata import VISUAL_SNOW, snow_indicator
+from bouw_winterdata import snow_indicator
 
 ROOT = Path(__file__).resolve().parents[1]
 PERIODS = ((1961, 1990), (1991, 2020))
@@ -25,13 +25,6 @@ NATIONAL = "national"
 STATION = re.compile(r'^#\s*(\d+):?\s+([-.\d]+)\s+([-.\d]+)\s+[-.\d]+\s+(.+?)\s*$')
 SOURCE = 'https://www.daggegevens.knmi.nl/klimatologie/uurgegevens'
 METHOD_SOURCE = 'https://www.knmi.nl/kennis-en-datacentrum/achtergrond/achtergrondinformatie-berekening-klimaatnormalen-1991-2020'
-
-
-def snowfall(day, ww, ix, snow):
-    event = snow_indicator(day, ww, ix, snow)
-    if event and ix in ('', '1', '4'):
-        event = int(ww) in VISUAL_SNOW if ww.isdecimal() else None
-    return event
 
 
 def add_hour(masks, hour, event):
@@ -91,7 +84,7 @@ def read_year(root, year, stations, hashes, monthly=None, months=range(1, 13)):
                     continue
                 hour, ww, ix, snow = (row[i].strip() for i in indices)
                 masks = daily[sid].setdefault(day, [0, 0, 0])
-                add_hour(masks, int(hour), snowfall(day, ww, ix, snow))
+                add_hour(masks, int(hour), snow_indicator(day, ww, ix, snow))
     if monthly is not None:
         monthly[year] = {}
         national = defaultdict(lambda: [0, 0])
