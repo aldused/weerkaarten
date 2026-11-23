@@ -345,16 +345,29 @@ const COORDS = {
   "Ell":[5.763,51.198],"Maastricht":[5.770,50.911],"Arcen":[6.196,51.500],"Horst":[6.029,51.449],
 };
 
+const TEMPERATUUR_MIN = -22;
+const TEMPERATUUR_STAP = 2;
+const TEMPERATUUR_KLEUREN = [
+  "#f3e7f4","#d59bcf","#b04ca9","#8f248e","#672080","#472080",
+  "#232080","#13268c","#1536a4","#154bbd","#1466d6",
+  "#167264","#168653","#1a9c4b","#24b83a","#48ce23","#75d91c",
+  "#a2e724","#cce82b","#e9e72c","#f9e627","#ffdb1b","#ffc51a",
+  "#ffa316","#ff7c18","#f94f1a","#ed291e","#d91d24","#bf1728",
+  "#9e1534","#7a123b","#821866","#9b23a7"
+];
+const TEMPERATUUR_KLASSEN = TEMPERATUUR_KLEUREN.map((kleur,i)=>({
+  kleur, rgb:hexToRgb(kleur), vanaf:TEMPERATUUR_MIN+i*TEMPERATUUR_STAP
+}));
+
+function temperatuurKlasse(waarde) {
+  const index=Math.floor((waarde-TEMPERATUUR_MIN)/TEMPERATUUR_STAP);
+  return TEMPERATUUR_KLASSEN[Math.max(0,Math.min(index,TEMPERATUUR_KLASSEN.length-1))];
+}
+
 const PARAMS = {
-  max: { label:"Maximum temperatuur (°C)", eenheid:"°", decimalen:1,
-    kleuren:[["#084594",-5],["#1565c0",-3],["#64b5f6",0],["#a5d6a7",2],["#2e8b57",4],["#388e3c",6],["#43a047",8],["#66bb6a",9],["#7cb342",10],["#8bc34a",11],["#aed581",12],["#c5e17a",13],["#dce775",14],["#f0ef80",15],["#fff176",16],["#ffee58",17],["#fdd835",18],["#fbc02d",19],["#f9a825",20],["#ffa726",21],["#ff8f00",24],["#fb8c00",27],["#ef6c00",30],["#e65100",33],["#d84315",36],["#4a148c",40]],
-    schaal:[-5,40] },
-  min: { label:"Minimum temperatuur (°C)", eenheid:"°", decimalen:1,
-    kleuren:[["#084594",-12],["#1565c0",-9],["#1e88e5",-6],["#42a5f5",-3],["#90caf9",-1],["#b2dfdb",0],["#2e8b57",3],["#66bb6a",6],["#cddc39",9],["#ffeb3b",12],["#fbc02d",15],["#f57f17",18],["#ef6c00",21]],
-    schaal:[-15,22] },
-  t10n: { label:"Min grastemperatuur 10cm", eenheid:"°", decimalen:1,
-    kleuren:[["#1a3a6b",-10],["#2980b9",-5],["#a8d8ea",0],["#ffffcc",5],["#fed976",10],["#fd8d3c",15],["#e65100",20]],
-    schaal:[-15,25] },
+  max: { label:"Maximum temperatuur (°C)", eenheid:"°", decimalen:1, temperatuur:true },
+  min: { label:"Minimum temperatuur (°C)", eenheid:"°", decimalen:1, temperatuur:true },
+  t10n: { label:"Min grastemperatuur 10cm", eenheid:"°", decimalen:1, temperatuur:true },
   rr: { label:"Neerslagsom (mm)", eenheid:" mm", decimalen:1,
     kleuren:[["#c6dbef","0.1"],["#6baed6","5"],["#2171b5","15"],["#084594","30+"]],
     schaal:[0,30] },
@@ -364,9 +377,7 @@ const PARAMS = {
   ff: { label:"Gem. wind hoogste uur (m/s)", eenheid:" m/s", decimalen:1,
     kleuren:[["#ffffff",0],["#c8e6c9",2],["#81c784",4],["#4caf50",6],["#ffee58",8],["#ffa726",11],["#ff7043",14],["#e53935",17],["#b71c1c",21],["#7b1fa2",25]],
     schaal:[0,25] },
-  gevoels: { label:"Min gevoelstemperatuur (°C)", eenheid:"°", decimalen:1,
-    kleuren:[["#1a3a6b","≤-15°"],["#2980b9","-10°"],["#a8d8ea","-5°"],["#e8f4f8","0°"],["#ffffcc","5°"]],
-    schaal:[-20,10] },
+  gevoels: { label:"Min gevoelstemperatuur (°C)", eenheid:"°", decimalen:1, temperatuur:true },
   sq: { label:"Zonneschijn (uur)", eenheid:" u", decimalen:1,
     kleuren:[["#fffacd","1u"],["#ffe066","4u"],["#ffa500","8u"],["#ff6600","12u+"]],
     schaal:[0,12] },
@@ -615,10 +626,12 @@ function tekenHeatmap(ddata, param){
   for(let i=0;i<w*h;i++){
     if(!landMask.data[i]){ buf[i*4+3]=0; continue; }
     const v = veld[i];
-    const [bg] = interpKleur(v, p.schaal, p.kleuren);
-    const m = bg.match(/\d+/g);
-    buf[i*4]=+m[0]; buf[i*4+1]=+m[1]; buf[i*4+2]=+m[2];
-    buf[i*4+3] = Math.round(HEATMAP_ALPHA*255);
+    if(!Number.isFinite(v)) continue;
+    const [r,g,b] = p.temperatuur
+      ? temperatuurKlasse(v).rgb
+      : interpKleur(v, p.schaal, p.kleuren)[0].match(/\d+/g).map(Number);
+    buf[i*4]=r; buf[i*4+1]=g; buf[i*4+2]=b;
+    buf[i*4+3] = p.temperatuur ? 255 : Math.round(HEATMAP_ALPHA*255);
   }
   tctx.putImageData(imgData, 0, 0);
   ctx.imageSmoothingEnabled = true;
@@ -767,8 +780,10 @@ function tekenContouren(svg, param){
     const path = ns("path");
     path.setAttribute("d", d);
     path.setAttribute("fill","none");
-    path.setAttribute("stroke", isMajor ? "rgba(15,23,42,0.75)" : "rgba(15,23,42,0.32)");
-    path.setAttribute("stroke-width", isMajor ? "1.2" : "0.55");
+    const vriesgrens = PARAMS[param].temperatuur && level === 0;
+    path.setAttribute("stroke", vriesgrens ? "#101e32" :
+      isMajor ? "rgba(15,23,42,0.75)" : PARAMS[param].temperatuur ? "rgba(15,23,42,0.48)" : "rgba(15,23,42,0.32)");
+    path.setAttribute("stroke-width", vriesgrens ? "1.85" : isMajor ? "1.2" : "0.55");
     path.setAttribute("stroke-linecap","round");
     path.setAttribute("stroke-linejoin","round");
     gLines.appendChild(path);
@@ -901,7 +916,10 @@ function tekenKaart(dagData, param) {
 
     const [lon,lat] = COORDS[naam];
     const cx = lonToX(lon), cy = latToY(lat);
-    const [bg,fg] = interpKleur(val, p.schaal, p.kleuren);
+    const tint= p.temperatuur ? temperatuurKlasse(val) : null;
+    const [bg,fg] = tint
+      ? [tint.kleur,(.299*tint.rgb[0]+.587*tint.rgb[1]+.114*tint.rgb[2])/255<.55?"white":"#222"]
+      : interpKleur(val, p.schaal, p.kleuren);
     let tekst;
     if (param === "fx") tekst = (val*3.6).toFixed(0);
     else tekst = val.toFixed(p.decimalen);
@@ -911,7 +929,7 @@ function tekenKaart(dagData, param) {
     const circle = ns("circle");
     circle.setAttribute("cx", cx); circle.setAttribute("cy", cy);
     circle.setAttribute("r", r);
-    circle.setAttribute("fill", bg); circle.setAttribute("fill-opacity", "0.72");
+    circle.setAttribute("fill", bg); circle.setAttribute("fill-opacity", p.temperatuur ? "1" : "0.72");
     circle.setAttribute("stroke", idx === 0 ? "#cc0000" : idx === 1 ? "#e6a800" : "white");
     circle.setAttribute("stroke-width", idx <= 1 ? "3.5" : "1.5");
     g.appendChild(circle);
@@ -1027,14 +1045,85 @@ function tekenKaart(dagData, param) {
       (param === "rr" ? " · piek om " : " om ") + tijdstip : "");
     svg.appendChild(wrd);
   });
+
+  tekenKaartLegenda(svg, param, paneel_x, paneel_y + paneel_h + 12);
+}
+
+function legendaSchaal(param) {
+  const p = PARAMS[param];
+  if(p.temperatuur){
+    return {
+      eenheid:"°C", stapsgewijs:true, kleuren:TEMPERATUUR_KLEUREN,
+      labels:TEMPERATUUR_KLASSEN.flatMap(({vanaf,kleur},i,klassen)=>{
+        const eerste=i===0, laatste=i===klassen.length-1;
+        if(!eerste&&!laatste&&(vanaf%8!==0||i===klassen.length-2))return [];
+        const getal=String(vanaf).replace("-","−");
+        return [{positie:eerste?0:i/klassen.length, kleur, tekst:eerste?"≤"+getal:laatste?getal+"+":getal}];
+      })
+    };
+  }
+  const kleuren=p.kleuren.map(([kleur])=>kleur);
+  const [min,max]=p.schaal;
+  const posities=p.kleuren.map(([,waarde],i)=> typeof waarde === "number"
+    ? (waarde-p.kleuren[0][1])/(p.kleuren.at(-1)[1]-p.kleuren[0][1]) : i/(kleuren.length-1));
+  const labels=p.kleuren.map(([kleur,waarde],i)=>{
+    const getal=typeof waarde === "number"?waarde:min+(max-min)*posities[i];
+    const label=param==="fx"?Math.round(getal*3.6):getal;
+    return {kleur,positie:posities[i],tekst:String(label)+(i===kleuren.length-1?"+":"")};
+  });
+  return {eenheid:p.eenheid.trim(),kleuren,posities,labels,stapsgewijs:false};
+}
+
+function tekenKaartLegenda(svg, param, x, y){
+  const {eenheid, kleuren, posities, labels, stapsgewijs}=legendaSchaal(param);
+  const kleinsteStap=Math.min(...labels.slice(1).map((label,i)=>label.positie-labels[i].positie));
+  const lengte=stapsgewijs?350:Math.max(152,Math.ceil(24/kleinsteStap));
+  const boven=48, breedte=122, balkX=14, balkBreedte=24;
+  const groep=ns("g");
+  groep.setAttribute("transform",`translate(${x} ${y})`);
+  groep.setAttribute("role","img");
+  groep.setAttribute("aria-label",`Kleurenschaal ${eenheid}: ${labels.map(l=>l.tekst).join(", ")}`);
+  function element(tag, attributen, tekst) {
+    const node=ns(tag);
+    for(const [naam,waarde] of Object.entries(attributen))node.setAttribute(naam,waarde);
+    if(tekst!==undefined)node.textContent=tekst;
+    groep.appendChild(node);
+    return node;
+  }
+  const tekstStijl={"font-family":"Arial,sans-serif","font-size":22,fill:"#172b40"};
+  element("rect",{width:breedte,height:boven+lengte+24,rx:10,fill:"#ffffff","fill-opacity":.94,stroke:"#a7c0d2"});
+  element("text",{x:14,y:30,...tekstStijl,"font-weight":700},eenheid);
+  if(stapsgewijs){
+    const stap=lengte/kleuren.length;
+    kleuren.forEach((kleur,i)=>element("rect",{
+      x:balkX,y:boven+lengte-(i+1)*stap,width:balkBreedte,height:stap+.15,fill:kleur
+    }));
+  }else{
+    const id="topkaart-legenda-verloop";
+    const verloop=element("linearGradient",{id,x1:"0%",x2:"0%",y1:"100%",y2:"0%"});
+    kleuren.forEach((kleur,i)=>{
+      const stop=ns("stop");
+      stop.setAttribute("offset",posities[i]);
+      stop.setAttribute("stop-color",kleur);
+      verloop.appendChild(stop);
+    });
+    element("rect",{x:balkX,y:boven,width:balkBreedte,height:lengte,fill:`url(#${id})`});
+  }
+  element("rect",{x:balkX,y:boven,width:balkBreedte,height:lengte,fill:"none",stroke:"#384d61"});
+  for(const {positie,tekst} of labels){
+    const ry=boven+lengte-Math.min(1,positie)*lengte;
+    const nul=stapsgewijs&&tekst==="0";
+    element("line",{x1:balkX+balkBreedte,x2:balkX+balkBreedte+8,y1:ry,y2:ry,stroke:"#384d61","stroke-width":nul?2.5:1.25});
+    element("text",{x:balkX+balkBreedte+13,y:ry,...tekstStijl,"dominant-baseline":"central","font-weight":nul?700:500},tekst);
+  }
+  svg.appendChild(groep);
 }
 
 function maakLegenda(param) {
-  const p = PARAMS[param];
-  document.getElementById("legenda").innerHTML = p.kleuren.map(([k,l],i,arr)=>{
-    const label=typeof l==='number'?(i===0?`≤${l}°`:i===arr.length-1?`${l}°+`:`${l}°`):l;
-    return `<div class="legenda-item"><div class="legenda-blok" style="background:${k}"></div>${label}</div>`;
-  }).join("");
+  const {eenheid,labels}=legendaSchaal(param);
+  document.getElementById("legenda").innerHTML = labels.map(({kleur,tekst})=>
+    `<div class="legenda-item"><div class="legenda-blok" style="background:${kleur}"></div>${tekst} ${eenheid}</div>`
+  ).join("");
 }
 
 const NL_DAGEN = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
