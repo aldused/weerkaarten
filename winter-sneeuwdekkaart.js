@@ -83,7 +83,10 @@
     reset();
   }
   function renderTable(){
-    const term=$('search').value.trim().toLocaleLowerCase('nl'),stations=data.stations.filter(s=>(s.name+' '+String(s.id).padStart(3,'0')).toLocaleLowerCase('nl').includes(term)).sort((a,b)=>a.name.localeCompare(b.name,'nl'));
+    const term = $('search').value.trim().toLocaleLowerCase('nl');
+    const stations = data.stations
+      .filter(station => (station.name + ' ' + String(station.id).padStart(3, '0')).toLocaleLowerCase('nl').includes(term))
+      .sort((a, b) => (b.mean ?? -1) - (a.mean ?? -1) || a.name.localeCompare(b.name, 'nl') || a.id - b.id);
     $('table').replaceChildren(...stations.map(station=>{const tr=element('tr'),cell=element('th'),button=element('button',station.name);cell.scope='row';button.type='button';button.className='snowmap-table-button';button.addEventListener('click',()=>{choose(station.id);$('details').scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});});cell.append(button);tr.append(element('td',String(station.id).padStart(3,'0')),cell,element('td',station.mean===null?missingLabel():number.format(station.mean)),element('td',station.years+' / 30'));return tr;}));
     $('table-count').textContent=stations.length+' stations';
   }
