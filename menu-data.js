@@ -1210,9 +1210,9 @@ const MENU_PRODUCTS = [
     "description": "Vier modelkaarten naast elkaar op dezelfde tijd · HARMONIE 43/46, ICON-D2, ECMWF, AROME en UKV",
     "category": "verwachting", "type": "kaarten", "section": "",
     "icon": "vierluik", "href": "index.html#weerkaart",
-    "src": "vierluik/index.html?v=20261122-nulgradenniveau-voet", "thumbnail": null,
+    "src": "vierluik/index.html?v=20261123-wolkenlagen-rgb", "thumbnail": null,
     "facets": {"veld":["significant","temp","neerslag","wind","bewolking","zon","hoogte"],"model":["harmonie","harmonie46","icond2","ecmwf","arome","ukv"],"gebied":["nl"],"weergave":["4"]},
-    "keywords": "vierluik 4-luik vier modellen vergelijken Benelux HARMONIE 43 HARMONIE 46 ICON-D2 ECMWF IFS AROME HD UKMO UKV significant weer dauwpunt gevoelstemperatuur zicht wolkenbasis bewolking neerslag windstoten zonduur",
+    "keywords": "vierluik 4-luik vier modellen vergelijken Benelux HARMONIE 43 HARMONIE 46 ICON-D2 ECMWF IFS AROME HD UKMO UKV significant weer dauwpunt gevoelstemperatuur zicht wolkenbasis bewolking wolkenlagen RGB neerslag windstoten zonduur",
     "restricted": false
   },
   {

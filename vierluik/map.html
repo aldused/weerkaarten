@@ -226,7 +226,7 @@ import {visibilityMinima} from './visibility-labels.js?v=20261122-bereik';
 import {cloudBaseLevels,cloudBaseColors,heightLabels} from './cloud-base.js?v=20261122-nulgradenniveau-voet';
 import {borderLines} from './border-lines.js?v=20261122-bereik';
 import {boundaryLines} from './boundaries.js?v=20261122-bereik';
-import {cloudColor,cloudColors} from './clouds.js?v=20261122-bereik';
+import {cloudColor,cloudRgbColor,cloudRgbLegend} from './clouds.js?v=20261123-wolkenlagen-rgb';
 import {sunshinePerHour} from './sunshine.js?v=20261122-bereik';
 'use strict';
 const $ = id => document.getElementById(id);
@@ -249,7 +249,7 @@ const LIMITS = {west:grid.lon0, east:grid.lon0+grid.dx*(grid.w-1), north:grid.la
 const HOME = {lat:51.58, lon:5.08, zoom:1};
 const state = {...HOME, layer:'weather', unit:'kmh', idx:0, run:runs[0], frame:null, selected:null, playing:false};
 const comparison = {active:false, run:null, step:null, frame:null, loading:false, failed:false};
-const titles = {cloudBase:'Wolkenbasis',clouds:'Bewolking hoog/midden/laag',cloudHigh:'Hoge bewolking',cloudMiddle:'Middelbare bewolking',cloudLow:'Lage bewolking',vis:'Zicht',rate:'Neerslagintensiteit',weather:'Significant weer', t2m:'Temperatuur op 2 m', ws:'Wind op 10 m', gust:'Windstoten op 10 m',
+const titles = {cloudBase:'Wolkenbasis',clouds:'Bewolking hoog/midden/laag',cloudRgb:'Wolkenlagen (RGB)',cloudHigh:'Hoge bewolking',cloudMiddle:'Middelbare bewolking',cloudLow:'Lage bewolking',vis:'Zicht',rate:'Neerslagintensiteit',weather:'Significant weer', t2m:'Temperatuur op 2 m', ws:'Wind op 10 m', gust:'Windstoten op 10 m',
   ptot:'Neerslagsom', sun:'Zonduur', t850:'Temperatuur op 850 hPa', t500:'Temperatuur op 500 hPa',
   sdep:'Sneeuwhoogte (cm)', frz:'0 °C-niveau', ptypeMap:'Neerslagtype',td2m:'Dauwpunttemperatuur op 2 m',windchill:'Gevoelstemperatuur · JAG/TI'};
 const temperatureLayers = ['t2m','td2m','windchill','t850','t500'];
@@ -556,8 +556,11 @@ function rasterValue(field,x,y,nearest){
   const a=x.fraction,b=y.fraction;
   return Number.isFinite(p+q+r+s)?(1-b)*(p+(q-p)*a)+b*(r+(s-r)*a):field[nearest];
 }
+function fieldForLayer(fields,layer){
+  return fields?.[layer==='cloudRgb'?'clouds':layer];
+}
 function paintRaster(ctx,fields){
-  if(!fields || (state.layer!=='weather'&&!fields[state.layer]))return;
+  if(!fields || (state.layer!=='weather'&&!fieldForLayer(fields,state.layer)))return;
   const rw=Math.min(850,Math.max(1,Math.round(width*.86))),rh=Math.min(890,Math.max(1,Math.round(height*.86)));
   raster.width=rw;raster.height=rh;
   const im=rasterCtx.createImageData(rw,rh), out=im.data;
@@ -583,9 +586,11 @@ function paintRaster(ctx,fields){
         const cloud=clamp((rasterValue(fields.tcc,x,y,k)||0)/100,0,1);
         color=[102,113,129];alpha=Math.round(cloud*135);
       }
-    }else if(layer==='clouds'||layer==='cloudHigh'||layer==='cloudMiddle'||layer==='cloudLow'){
+    }else if(layer==='cloudRgb'||layer==='clouds'||layer==='cloudHigh'||layer==='cloudMiddle'||layer==='cloudLow'){
       const h=rasterValue(fields.cloudHigh,x,y,k),m=rasterValue(fields.cloudMiddle,x,y,k),l=rasterValue(fields.cloudLow,x,y,k);
-      color=cloudColor(layer==='clouds'||layer==='cloudHigh'?h:0,layer==='clouds'||layer==='cloudMiddle'?m:0,layer==='clouds'||layer==='cloudLow'?l:0);
+      color=layer==='cloudRgb'
+        ? cloudRgbColor(h,m,l)
+        : cloudColor(layer==='clouds'||layer==='cloudHigh'?h:0,layer==='clouds'||layer==='cloudMiddle'?m:0,layer==='clouds'||layer==='cloudLow'?l:0);
       if(!color)continue;alpha=255;
     }else if(layer==='ptypeMap'){
       const p=fields.precipKind[k];
@@ -694,6 +699,8 @@ function mapHeightLabels(ctx,fields){
 }
 
 function cloudLabels(ctx,fields){
+ const rgbLayer=state.layer==='cloudRgb';
+ const labelColors=['#1266a9',rgbLayer?'#126a38':'#956900','#a72135'];
  const font=Math.round(clamp(14+(width-420)/170,14,21)),marked=[];let count=0;
  ctx.font='750 '+font+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
  for(const p of valueAnchors){
@@ -701,16 +708,16 @@ function cloudLabels(ctx,fields){
   if(x<45||x>width-45||y<65||y>height-45||i<0||j<0||i>grid.w-1||j>grid.h-1||marked.some(([a,b])=>Math.abs(x-a)<font*4.8&&Math.abs(y-b)<font*4.1))continue;
   const values=[fields.cloudHigh,fields.cloudMiddle,fields.cloudLow].map(field=>bilinear(field,i,j));if(!values.every(Number.isFinite))continue;
   marked.push([x,y]);count++;
-  values.forEach((v,n)=>{const text=['H ','M ','L '][n]+num(v)+'%',yy=y+(n-1)*font*1.15;ctx.strokeStyle='#fffffff2';ctx.lineWidth=4;ctx.strokeText(text,x,yy);ctx.fillStyle=['#1266a9','#956900','#a72135'][n];ctx.fillText(text,x,yy);});
+  values.forEach((v,n)=>{const text=['H ','M ','L '][n]+num(v)+'%',yy=y+(n-1)*font*1.15;ctx.strokeStyle='#fffffff2';ctx.lineWidth=4;ctx.strokeText(text,x,yy);ctx.fillStyle=labelColors[n];ctx.fillText(text,x,yy);});
  }
- ctx.canvas.dataset.valueCount=String(count);ctx.canvas.setAttribute('aria-label','Weerkaart bewolking. '+count+' lokale waarden zonder plaatsnamen. H hoog blauw, M midden geel, L laag rood, elk als bedekkingspercentage.');
+ ctx.canvas.dataset.valueCount=String(count);ctx.canvas.setAttribute('aria-label','Weerkaart '+titles[state.layer]+'. '+count+' lokale waarden zonder plaatsnamen. H hoog blauw, M midden '+(rgbLayer?'groen':'geel')+', L laag rood, elk als bedekkingspercentage.');
 }
 
 function cityLabels(ctx,fields){
   const canvas=ctx.canvas;canvas.dataset.valueCount='0';
   if(!$('values').checked||!fields){canvas.setAttribute('aria-label','Weerkaart '+titles[state.layer]+'. '+(!$('values').checked?'Getallen verborgen.':'Kaart laden.'));return;}
   if(state.layer==='cloudBase'||state.layer==='frz'){mapHeightLabels(ctx,fields);return;}
-  if(state.layer==='clouds'){cloudLabels(ctx,fields);return;}
+  if(state.layer==='clouds'||state.layer==='cloudRgb'){cloudLabels(ctx,fields);return;}
   const composite=state.layer==='weather'||state.layer==='ptypeMap';
   const font=Math.round(clamp(16+(width-420)/140,16,26));
   const marked=[], spoken=[];
@@ -754,10 +761,11 @@ function render(ctx,fields){
   ctx.fillStyle='#d7e8f7';ctx.fillRect(0,0,width,height);
   featureSet(ctx,'land','#f6f4eb',null,0);
   paintRaster(ctx,fields);
-  featureSet(ctx,'water',null,'#32587e9c',.6);
-  featureSet(ctx,'rivers',null,'#396fa66b',.55);
-  if($('province').checked)featureSet(ctx,'provinces',null,'#233d6868',.65);
-  featureSet(ctx,'borders',null,'#2b4963d9',1);
+  const rgbLayer=state.layer==='cloudRgb'&&fieldForLayer(fields,state.layer);
+  featureSet(ctx,'water',null,rgbLayer?'#9da9b6a6':'#32587e9c',.6);
+  featureSet(ctx,'rivers',null,rgbLayer?'#9da9b68c':'#396fa66b',.55);
+  if($('province').checked)featureSet(ctx,'provinces',null,rgbLayer?'#adb7c38c':'#233d6868',.65);
+  featureSet(ctx,'borders',null,rgbLayer?'#929eac':'#2b4963d9',1);
   if(state.layer==='weather'&&$('pressure').checked&&fields?.msl){
     contours(ctx,fields.msl,Array.from({length:30},(_,i)=>944+4*i),'#28334ec8',1.1);
   }
@@ -821,7 +829,7 @@ function updateLegend(){
   const scaleHours=sunScaleHours(), regional=state.run.regional, ownSunHours=sunHours(step);
   $('legend-eyebrow').textContent=weather?'COMPOSIET':isWind?'OP 10 METER':
     ({ptot:'SINDS DE MODELSTART',sun:'ZONNEDUUR',sdep:'SNEEUWDEK',frz:'BOVEN ZEENIVEAU',t850:'850 HPA',t500:'500 HPA',
-      ptypeMap:'SOORT NEERSLAG',windchill:'WINDCHILL · JAG/TI'})[state.layer]||'OP 2 METER';
+      cloudRgb:'HOOG · MIDDEN · LAAG',ptypeMap:'SOORT NEERSLAG',windchill:'WINDCHILL · JAG/TI'})[state.layer]||'OP 2 METER';
   $('units').hidden=true;$('direction-row').hidden=!(weather||isWind);
   $('pressure-row').hidden=!weather;$('fog-row').hidden=!weather;
   $('fog-text').textContent=regional?'Modelzicht onder 1 km':'Geschat zicht onder 1 km';
@@ -884,6 +892,11 @@ function updateLegend(){
     target.append(legendRow('Geen modelwaarde','repeating-linear-gradient(90deg,#8d9aab 0 2px,#e5e9ee 2px 4px)'));
     note('Hoogste 0 °C-overgang. Bij een geheel koude modelkolom ligt de indicatie aan de grond.'+
       (modelKey.startsWith('icon')?'':' De hoogte is geschat tussen drukvlakken.'));
+  }else if(state.layer==='cloudRgb'){
+    const scale=labelNode('div','','class-legend');
+    for(const [label,color] of cloudRgbLegend)scale.append(legendRow(label,color));
+    target.append(scale);
+    note('Rood is laag, groen is midden en blauw is hoog. Zwart is helder; wit is volledige bedekking in alle drie de lagen.');
   }else if(['clouds','cloudHigh','cloudMiddle','cloudLow'].includes(state.layer)){
     for(const [name,key,values] of [['Hoog · blauw','cloudHigh',[100,0,0]],['Midden · geel','cloudMiddle',[0,100,0]],['Laag · rood','cloudLow',[0,0,100]]]){if(state.layer!=='clouds'&&state.layer!==key)continue;target.append(labelNode('div',name,'legend-sub'));legendScale(Array.from({length:11},(_,i)=>rgb(cloudColor(...values.map(v=>v*i/10)))),['0','20','40','60','80','100%']);}
     note('Blauw = hoog, geel = midden, rood = laag. Meer kleur betekent meer bedekking. Overlappende lagen mengen; lage bewolking ligt vooraan. H/M/L-getallen tonen de drie afzonderlijke percentages. Gebruik de afzonderlijke kaartlagen om een laag los te vergelijken.');
@@ -970,7 +983,7 @@ function valuesAt(lon,lat,f=state.frame){
     if(!Number.isFinite(v))return [];
     return state.layer==='t2m'?[temp,wind].filter(Boolean):[titles[state.layer]+': '+num(v,1)+' °C'];
   }
-  if(['clouds','cloudHigh','cloudMiddle','cloudLow'].includes(state.layer))return [['Hoog (blauw)',f.cloudHigh],['Midden (geel)',f.cloudMiddle],['Laag (rood)',f.cloudLow]].map(([name,field])=>{const value=bilinear(field,x,y);return name+': '+(Number.isFinite(value)?num(value)+'%':'geen bronwaarde');});
+  if(['clouds','cloudRgb','cloudHigh','cloudMiddle','cloudLow'].includes(state.layer))return [['Hoog (blauw)',f.cloudHigh],[state.layer==='cloudRgb'?'Midden (groen)':'Midden (geel)',f.cloudMiddle],['Laag (rood)',f.cloudLow]].map(([name,field])=>{const value=bilinear(field,x,y);return name+': '+(Number.isFinite(value)?num(value)+'%':'geen bronwaarde');});
   if(state.layer==='cloudBase'){const labels=heightLabels(f.cloudBase?.[i],f.cloudBaseKind==='ceiling');return labels?['Wolkenbasis: '+labels.join(' · ')+' boven de grond',f.cloudBaseKind==='ceiling'?'Ceiling bij meer dan 50% laagbedekking':f.cloudBaseKind==='ukv_cbh'?'Basis vanaf 2,5 oktas':''].filter(Boolean):['Geen wolkenbasis gediagnosticeerd · mist niet uitgesloten.'];}
   if(state.layer==='vis')return [Number.isFinite(v)?'Zicht: '+visibilityText(v):'Geen zichtwaarde beschikbaar'];
   if(state.layer==='rate')return ['Neerslagintensiteit: '+num(f.rate[i],1)+' mm/u'];
@@ -1120,7 +1133,7 @@ function showNotice(message='',id='notice'){
   $(id).textContent=message;$(id).hidden=!message;
 }
 function noticeFor(f,step){
-  if(f?.nativeSource&&state.layer!=='weather'&&!f[state.layer])return 'Deze kaartlaag wordt voor dit model niet door de bron geleverd.';
+  if(f?.nativeSource&&state.layer!=='weather'&&!fieldForLayer(f,state.layer))return 'Deze kaartlaag wordt voor dit model niet door de bron geleverd.';
   if(state.layer==='vis'&&!f?.vis)return 'Voor deze modelrun of verwachtingstijd is geen zichtveld beschikbaar.';
   if(state.layer==='td2m'&&!f?.td2m){
     return 'Voor deze modelrun of verwachtingstijd is geen dauwpunttemperatuur beschikbaar.';
@@ -1128,7 +1141,7 @@ function noticeFor(f,step){
   if(state.layer==='gust'&&!f?.gust){
     return step.lead===0?'Windstoten hebben een tijdvak. Kies een latere verwachtingstijd.':'Geen gecontroleerd windstootveld voor deze verwachtingstijd.';
   }
-  if(!f?.[state.layer]&&state.layer!=='weather'){
+  if(!fieldForLayer(f,state.layer)&&state.layer!=='weather'){
     return state.layer==='sun'&&step.lead===0?
       'Kies een latere tijdstap voor de schatting van zon-minuten.' : 'Voor deze tijdstap is dit modelveld niet beschikbaar.';
   }
@@ -1446,7 +1459,7 @@ bindMap(canvas);
 bindMap($('compare-canvas'),true);
 
 function canExport(frame){
-  return !!(frame && (state.layer==='weather' ? frame.tcc : frame[state.layer]));
+  return !!(frame && (state.layer==='weather' ? frame.tcc : fieldForLayer(frame,state.layer)));
 }
 function exportLegendBlocks(){
   const blocks=[];
