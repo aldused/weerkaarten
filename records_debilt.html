@@ -848,6 +848,7 @@
         <option value="dagen_zomer">Aantal zomerse dagen (TX ≥25°C)</option>
         <option value="dagen_tropisch">Aantal tropische dagen (TX ≥30°C)</option>
         <option value="dagen_extreem">Aantal extreem warme dagen (TX ≥35°C)</option>
+        <option value="dagen_ijs">Aantal ijsdagen (TX &lt; 0 °C)</option>
         <option value="dagen_lichte_vorst">Aantal dagen met lichte vorst (−5,0 °C ≤ TN < 0 °C)</option>
         <option value="dagen_matige_vorst">Aantal dagen met matige vorst of kouder (TN < −5 °C)</option>
         <option value="dagen_strenge_vorst">Aantal dagen met strenge vorst of kouder (TN < −10 °C)</option>
@@ -870,6 +871,7 @@
     <div class="param-tab" onclick="wisselParam('dagen_zomer')">☀️ Aantal zomerse dagen</div>
     <div class="param-tab" onclick="wisselParam('dagen_tropisch')">🌡️ Aantal tropische dagen</div>
     <div class="param-tab" onclick="wisselParam('dagen_extreem')">♨️ Aantal ≥35°C-dagen</div>
+    <div class="param-tab" onclick="wisselParam('dagen_ijs')">❄️ IJsdagen</div>
     <div class="param-tab" onclick="wisselParam('dagen_lichte_vorst')">❄️ Lichte vorst</div>
     <div class="param-tab" onclick="wisselParam('dagen_matige_vorst')">❄️ Matige vorst of kouder</div>
     <div class="param-tab" onclick="wisselParam('dagen_strenge_vorst')">❄️ Strenge vorst of kouder</div>
@@ -1537,6 +1539,7 @@ const KLIMAATDAG_RECORDS = {
   dagen_zomer:    { label:"zomerse dagen",       kort:"Zomerse dagen",       key:"tx", drempel:25, kleur:"#f59e0b" },
   dagen_tropisch: { label:"tropische dagen",     kort:"Tropische dagen",     key:"tx", drempel:30, kleur:"#f97316" },
   dagen_extreem:  { label:"extreem warme dagen", kort:"Extreem warme dagen", key:"tx", drempel:35, kleur:"#ef4444" },
+  dagen_ijs: {...ColdDays.categories[1], label:ColdDays.categories[1].noun, kort:"IJsdagen", key:"tx", coldCategory:1, kleur:ColdDays.categories[1].color},
   dagen_lichte_vorst: {...ColdDays.categories[2], label:ColdDays.categories[2].noun, kort:ColdDays.categories[2].label, key:"tn", coldCategory:2, kleur:ColdDays.categories[2].color},
   dagen_matige_vorst: {...ColdDays.categories[3], label:ColdDays.categories[3].noun, kort:ColdDays.categories[3].label, key:"tn", coldCategory:3, kleur:ColdDays.categories[3].color},
   dagen_strenge_vorst: {...ColdDays.categories[4], label:ColdDays.categories[4].noun, kort:ColdDays.categories[4].label, key:"tn", coldCategory:4, kleur:ColdDays.categories[4].color},
@@ -4002,7 +4005,7 @@ function klimaatdagRecordRijen(cfg) {
         if (!aantal || (huidigePeriode === "jaar" && Number(year) !== Number(document.getElementById("sel-jaar").value))) continue;
         const expected = meta.running ? meta.elapsed : meta.expected;
         rijen.push({jaar:Number(year), periode:ColdDays.label(year,mode), station:ds.station, stationNr:ds.station_nr,
-          aantal, piek:c.minima[year].tn, lopend:meta.running, meetdagen:meta.valid[cfg.coldCategory], verwacht:expected,
+          aantal, piek:c.minima[year][cfg.key], lopend:meta.running, meetdagen:meta.valid[cfg.coldCategory], verwacht:expected,
           meetgaten:meta.valid[cfg.coldCategory] < expected});
       }
     }
@@ -4064,6 +4067,7 @@ function toonKlimaatdagRecords() {
   const periodeOmschrijving = klimaatdagPeriodeOmschrijving();
   const koud = Number.isInteger(cfg.coldCategory);
   const periodeKolom = huidigePeriode === "winterjaar" ? "Winterjaar" : huidigePeriode === "seizoen" ? "Seizoen" : (huidigePeriode === "periode" ? "Periode" : "Jaar");
+  const temperatuurKolom = !koud ? "Heetste dag" : cfg.key === "tx" ? "Laagste maximum" : "Koudste dag";
 
   document.getElementById("records-titel").textContent =
     `Meeste ${cfg.label} ${periodeOmschrijving} – ${stnNaam}`;
@@ -4079,7 +4083,7 @@ function toonKlimaatdagRecords() {
     ${isMulti ? '<th id="th-station">Station</th>' : ""}
     <th style="text-align:right;">Aantal dagen</th>
     <th style="text-align:right;">Achter record</th>
-    <th style="text-align:right;">${koud ? "Koudste dag" : "Heetste dag"}</th>
+    <th style="text-align:right;">${temperatuurKolom}</th>
     ${koud ? '<th style="text-align:right;">Meetdagen</th>' : ""}
   `;
 

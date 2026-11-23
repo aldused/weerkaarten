@@ -193,7 +193,7 @@
       const product=products.find(p=>new URL(p.href,location.href).hash==='#'+raw.split('?')[0])
         || products.find(p=>p.id===recordParent[raw]);
       if(site.directProducts && !product)return {page:'start',type:'',filters:{},q:''};
-      const selectedProduct=recordViews[raw]&&product?{...product,name:recordViews[raw]==='warmedagen'?'Warme dagen tellen':recordViews[raw]==='koudedagen'?'Koude dagen tellen':'Dagrecords per jaar',src:'records_debilt.html?v=20261121-vorst-records&tab='+recordViews[raw]}:product;
+      const selectedProduct=recordViews[raw]&&product?{...product,name:recordViews[raw]==='warmedagen'?'Warme dagen tellen':recordViews[raw]==='koudedagen'?'Koude dagen tellen':'Dagrecords per jaar',src:product.src+'&tab='+recordViews[raw]}:product;
       return {page:product?.category || 'start',type:product?.type || '',filters:{},q:'',productRoute:raw,product:selectedProduct};
     }
     const [path,query='']=raw.replace(/^menu\//,'').replace(/^home$/,'start').split('?');

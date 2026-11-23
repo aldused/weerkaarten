@@ -85,12 +85,19 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   assert.match(await page.locator('#records-body tr').first().innerText(),/1963[\s\S]*56/);
   await page.selectOption('#sel-param-mobile','dagen_strenge_vorst');
   assert.equal(await page.inputValue('#sel-periode-mobile'),'alltime');
+  await page.goto(url+'?station=260&tab=records&param=dagen_ijs&periode=winterjaar');
+  await page.waitForFunction(()=>document.querySelector('#records-body tr')?.textContent.includes('1946/1947')&&huidigePeriode==='winterjaar',null,{timeout:90000});
+  assert.equal(await page.inputValue('#sel-param-mobile'),'dagen_ijs');
+  assert.match(await page.locator('#records-titel').innerText(),/Meeste ijsdagen per winterjaar/);
+  assert.match(await page.locator('#records-periode').innerText(),/TX < 0 °C/);
+  assert.match(await page.locator('#records-tabel thead').innerText(),/Laagste maximum/i);
+  assert.match(await page.locator('#records-body tr').first().innerText(),/1946\/1947[\s\S]*48[\s\S]*-7\.4/);
   await page.goto(url+'?station=alle&tab=records&param=dagen_matige_vorst&periode=winterjaar');
   await page.waitForFunction(()=>document.querySelector('#records-body tr')?.textContent.includes('Twenthe')&&huidigePeriode==='winterjaar',null,{timeout:120000});
   await page.selectOption('#sel-param-mobile','tx');
   assert.equal(await page.inputValue('#sel-periode-mobile'),'alltime');
   assert.equal(await page.locator('#sel-periode-mobile option[value="winterjaar"]').isDisabled(),true);
   assert.deepEqual(errors,[]);
-  console.log('PASS: De Bilt 56 calendar / 59 winter-year cold days, current winter label, global Twenthe 72-day station record, historical stations, month/season views, unchanged warm-day flow, mobile, all five Weerrecords frost categories and saved links, and no browser errors');
+  console.log('PASS: calendar and winter-year frost counts, historical stations, month/season views, warm-day flow, mobile, frost categories, De Bilt ice days with minimum TX, saved links, and no browser errors');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());
