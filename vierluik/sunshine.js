@@ -9,7 +9,7 @@ const localDay = new Intl.DateTimeFormat('nl-NL', {timeZone:'Europe/Amsterdam', 
 const localTime = new Intl.DateTimeFormat('nl-NL', {timeZone:'Europe/Amsterdam', hour:'2-digit', minute:'2-digit', hourCycle:'h23'});
 
 export const sunshineTotalLevels = [0,2,4,6,8,10,12,14,16,18];
-export const sunshineTotalColors = ['#697889','#8b9296','#aca59a','#c7b895','#ddc58a','#efcf81','#f8d372','#ffdb67','#ffe35f','#ffed53'];
+export const sunshineTotalColors = ['#697889','#989b89','#c8b875','#e0c468','#edce62','#f5d460','#fadb5d','#ffe15a','#ffe757','#ffed53'];
 
 export function sunshineWindow(end, comparisonStart) {
   if (!Number.isFinite(end)) return null;
