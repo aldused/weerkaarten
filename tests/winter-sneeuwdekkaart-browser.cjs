@@ -96,7 +96,7 @@ const server=http.createServer((req,res)=>{
   assert.match(await page.locator('#snowmap-unit').innerText(),/waargenomen sneeuwdagen/);
   assert.equal(await page.locator('#snowmap-cover-source').isVisible(),false);
   assert.match(await page.locator('#snowmap-fall-source').textContent(),/visuele naar automatische/);
-  assert.equal(await page.locator('#snowmap-scope option').count(),17);
+  assert.equal(await page.locator('#snowmap-scope option').count(),18);
   await page.selectOption('#snowmap-scope','month-11');
   await page.waitForFunction(()=>document.querySelector('#sneeuwdekkaart').dataset.state==='ready');
   assert.equal(await page.locator('#snowmap-value').innerText(),'2,5');
@@ -116,7 +116,7 @@ const server=http.createServer((req,res)=>{
   assert.equal(await page.locator('#snowmap-value').innerText(),'0,0');
   await page.selectOption('#snowmap-scope','year');
   assert.equal(await page.locator('#snowmap-value').innerText(),'18,5');
-  assert.equal(await page.locator('#snowmap-station option').count(),31);
+  assert.equal(await page.locator('#snowmap-station option').count(),32);
   assert.match(await page.locator('#snowmap-status').innerText(),/9 stations met een periodegemiddelde/);
   await page.selectOption('#snowmap-station','215');
   assert.equal(await page.locator('#snowmap-value').innerText(),'Geen periodegemiddelde');
@@ -142,6 +142,21 @@ const server=http.createServer((req,res)=>{
   await page.waitForFunction(()=>document.querySelector('#sneeuwdekkaart').dataset.state==='ready');
   assert.equal(await page.inputValue('#snowmap-period'),'1961-1990');assert.equal(await page.locator('#snowmap-value').innerText(),'2,5');
   assert.equal(await page.inputValue('#snowmap-scope'),'month-11');
+  await page.selectOption('#snowmap-scope','winter-halfyear');
+  await page.selectOption('#snowmap-station','national');
+  assert.equal(await page.locator('#snowmap-name').innerText(),'Ergens in het land');
+  assert.match(await page.locator('#snowmap-unit').innerText(),/sneeuwdagen per winterhalfjaar/);
+  assert.equal(await page.locator('#snowmap-years tr').first().locator('td').first().textContent(),'1960/61');
+  assert.equal(await page.locator('#snowmap-years tr').last().locator('td').first().textContent(),'1989/90');
+  assert.match(await page.locator('#snowmap-fall-source-period').textContent(),/1 oktober 1960 t\/m 31 maart 1990/);
+  assert.equal(await page.locator('#snowmap-svg [aria-pressed="true"]').count(),0);
+  await page.click('#snowmap-type-cover');
+  await page.waitForFunction(()=>document.querySelector('#sneeuwdekkaart').dataset.state==='ready');
+  assert.equal(await page.inputValue('#snowmap-station'),'national');
+  assert.match(await page.locator('#snowmap-unit').innerText(),/sneeuwdekdagen per winterhalfjaar/);
+  await page.selectOption('#snowmap-period','1991-2020');
+  await page.waitForFunction(()=>document.querySelector('#sneeuwdekkaart').dataset.state==='ready');
+  assert.equal(await page.locator('#snowmap-years tr').first().locator('td').first().textContent(),'1990/91');
   assert.deepEqual(errors,[]);
   console.log('PASS: snowfall and snow cover, both climate periods and direct historical link, measured normals, incomplete-series display, map selection and search, zoom, keyboard, CSV, desktop/mobile and no browser errors');
  }finally{await browser.close();}

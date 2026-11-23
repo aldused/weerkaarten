@@ -50,12 +50,14 @@ class SnowfallNormalsTest(unittest.TestCase):
                 text = '# 260 5.180 52.100 1.90 De Bilt\n# STN,YYYYMMDD,HH,WW,IX,S\n'
                 if month == 1:
                     text += '260,20200101,24,85,7,1\n260,20200201,1,85,7,1\n260,20210101,1,85,7,1\n'
+                    text += '280,20200101,24,85,7,1\n280,20200101,23,85,7,1\n'
                 (root / f'2020{month:02}.txt.gz').write_bytes(gzip.compress(text.encode()))
             monthly = {}
             result = module.read_year(root, 2020, {}, {}, monthly)
             self.assertEqual(result[260][2:], [1, 1, 1])
             self.assertEqual(monthly[2020][260][0], [1, 1, 1])
             self.assertEqual(monthly[2020][260][1], [0, 0, 0])
+            self.assertEqual(monthly[2020][module.NATIONAL][0], [1, 1, 2])
 
     def test_published_data_uses_both_real_thirty_year_periods(self):
         for start, end, expected in [(1961, 1990, 27.9667), (1991, 2020, 18.4667)]:

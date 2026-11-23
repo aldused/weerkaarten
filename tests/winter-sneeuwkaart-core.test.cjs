@@ -14,6 +14,14 @@ test('November counts November alone; winter means December, January and Februar
  assert.equal(core.aggregate(station,data,'month-11').expectedDays,900);
  assert.equal(core.aggregate(station,data,'month-2').expectedDays,848);
 });
+test('Winter halfyear uses the previous autumn and the end year’s leap day', () => {
+ const {data,station}=series();
+ station.previousAutumn = [[10,31],[11,30],[12,31]];
+ const result = core.aggregate(station, data, 'winter-halfyear');
+ assert.deepEqual(result.annual[0], [1991,39,182,0,39,182]);
+ assert.deepEqual(result.annual[1], [1992,39,183,0,39,183]);
+ assert.equal(result.mean, 39);
+});
 test('Missing summer measurements do not invalidate a complete November',()=>{
  const {data,station}=series();station.monthlyAnnual[0][1][6][1]--;
  assert.equal(core.aggregate(station,data,'year').mean,null);

@@ -3,6 +3,7 @@
   'use strict';
   const names=['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
   const scopes=[{key:'year',label:'Hele jaar (jan–dec)',months:[1,2,3,4,5,6,7,8,9,10,11,12],unit:'per kalenderjaar',breaks:[5,10,15,20,25,30]},
+    {key:'winter-halfyear',label:'Winterhalfjaar (okt–mrt)',months:[10,11,12,1,2,3],unit:'per winterhalfjaar',breaks:[5,10,15,20,25,30],crossesYear:true},
     ...names.map((label,index)=>({key:'month-'+(index+1),label,months:[index+1],unit:'in '+label.toLowerCase(),breaks:[.5,1,2,3,4,6]})),
     ...[['winter','Winter (dec–feb)',[12,1,2],'in de winter'],['spring','Lente (mrt–mei)',[3,4,5],'in de lente'],['summer','Zomer (jun–aug)',[6,7,8],'in de zomer'],['autumn','Herfst (sep–nov)',[9,10,11],'in de herfst']].map(([key,label,months,unit])=>({key:'season-'+key,label,months,unit,breaks:[2,5,10,15,20,25]}))];
   function scope(key){return scopes.find(s=>s.key===key)||scopes[0];}
@@ -12,11 +13,21 @@
       if(selected.key!=='year')throw Error('Maandgegevens ontbreken');
       return {...station,expectedDays:data.expectedDays,expectedHours:data.expectedHours};
     }
+    const monthsByYear = new Map(station.monthlyAnnual);
+    const firstYear = station.monthlyAnnual[0]?.[0];
     const annual=station.monthlyAnnual.map(([year,months])=>{
       let count=0,valid=0,hours=0,expected=0;
       for(const month of selected.months){
-        const row=months[month-1]||[0,0,0];count+=row[0];valid+=row[1];hours+=row[2]||0;
-        expected+=new Date(Date.UTC(year,month,0)).getUTCDate();
+        const previous = selected.crossesYear && month >= 10;
+        const monthYear = previous ? year - 1 : year;
+        const previousYear = monthsByYear.get(monthYear);
+        const row = previous
+          ? previousYear?.[month - 1] ?? (year === firstYear ? station.previousAutumn?.[month - 10] : undefined)
+          : months[month - 1];
+        count += row?.[0] ?? 0;
+        valid += row?.[1] ?? 0;
+        hours += row?.[2] ?? 0;
+        expected += new Date(Date.UTC(monthYear, month, 0)).getUTCDate();
       }
       const usable=valid===expected&&(!snowfall||hours>=expected*24*(data.minimumYearHourCoverage??.99));
       return [year,usable?count:null,valid,hours,count,expected];

@@ -46,7 +46,7 @@ def positions(path):
     return result
 
 
-def month_values(data, year):
+def month_values(data, year, national=None):
     """Station -> twaalf [waargenomen sneeuwdekdagen, geldige dagen]."""
     counts = defaultdict(lambda: [[0, 0] for _ in range(12)])
     for raw_day, observations in data['days'].items():
@@ -63,6 +63,10 @@ def month_values(data, year):
                 count = counts[station][day.month - 1]
                 count[1] += 1
                 count[0] += next(iter(codes)) > 0
+        if national is not None:
+            valid = [next(iter(codes)) for codes in values.values() if len(codes) == 1]
+            national[day.month - 1][0] += any(code > 0 for code in valid)
+            national[day.month - 1][1] += bool(valid)
     return dict(counts)
 
 
@@ -84,6 +88,15 @@ def build(cover, station_file, geometry_file, start=1991, end=2020):
     monthly = defaultdict(dict)
     names = {}
     sources = {}
+    autumn_months = [[0, 0] for _ in range(12)]
+    autumn_path = cover / f'{start - 1}.json.gz'
+    autumn = {}
+    autumn_hash = None
+    if autumn_path.is_file():
+        raw = autumn_path.read_bytes()
+        autumn_hash = hashlib.sha256(raw).hexdigest()
+        autumn = month_values(json.loads(gzip.decompress(raw)), start - 1, autumn_months)
+    national = []
     for year in range(start, end + 1):
         path = cover / f'{year}.json.gz'
         raw = path.read_bytes()
@@ -91,10 +104,12 @@ def build(cover, station_file, geometry_file, start=1991, end=2020):
         data = json.loads(gzip.decompress(raw))
         names.update({int(k): v for k, v in data['stations'].items()})
         expected = (date(year + 1, 1, 1) - date(year, 1, 1)).days
-        for sid, months in month_values(data, year).items():
+        national_months = [[0, 0] for _ in range(12)]
+        for sid, months in month_values(data, year, national_months).items():
             monthly[sid][year] = months
             snow, valid = map(sum, zip(*months))
             annual[sid][year] = [snow if valid == expected else None, valid]
+        national.append([year, national_months])
     stations = []
     for sid, years in sorted(annual.items()):
         series = [[year, *years.get(year, [None, 0])] for year in range(start, end + 1)]
@@ -105,6 +120,7 @@ def build(cover, station_file, geometry_file, start=1991, end=2020):
                    'mean': round(normal, 4) if normal is not None else None,
                    'years': len(complete), 'validDays': sum(item[2] for item in series),
                    'annual': series,
+                   'previousAutumn': autumn.get(sid, [[0, 0] for _ in range(12)])[9:],
                    'monthlyAnnual': [[y, monthly[sid].get(y, [[0, 0] for _ in range(12)])] for y in range(start, end + 1)]}
         stations.append(station)
     match = re.search(r'/\*GEO-START\*/const GEO=(.*?);/\*GEO-END\*/', geometry_file.read_text(), re.S)
@@ -115,7 +131,9 @@ def build(cover, station_file, geometry_file, start=1991, end=2020):
             'source': SOURCE, 'positionSource': POSITION_SOURCE,
             'method': 'Alleen 30 volledige kalenderjaren. SX > 0, inclusief gebroken sneeuwdek en sneeuwhopen. Ontbrekende, tegenstrijdige en bekende verdachte oude registraties zijn onbekend.',
             'monthlyAnnualFields': ['snowCoverDays', 'validDays'], 'inputSHA256': sources, 'positionSHA256': hashlib.sha256(station_file.read_bytes()).hexdigest(),
-            'geometry': json.loads(match[1]), 'stations': stations}
+            'previousAutumnSHA256': autumn_hash,
+            'geometry': json.loads(match[1]), 'stations': stations,
+            'national': {'previousAutumn': autumn_months[9:], 'monthlyAnnual': national}}
 
 
 def main():

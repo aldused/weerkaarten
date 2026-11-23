@@ -21,6 +21,7 @@ from bouw_winterdata import VISUAL_SNOW, snow_indicator
 ROOT = Path(__file__).resolve().parents[1]
 PERIODS = ((1961, 1990), (1991, 2020))
 FULL_DAY = (1 << 24) - 1
+NATIONAL = "national"
 STATION = re.compile(r'^#\s*(\d+):?\s+([-.\d]+)\s+([-.\d]+)\s+[-.\d]+\s+(.+?)\s*$')
 SOURCE = 'https://www.daggegevens.knmi.nl/klimatologie/uurgegevens'
 METHOD_SOURCE = 'https://www.knmi.nl/kennis-en-datacentrum/achtergrond/achtergrondinformatie-berekening-klimaatnormalen-1991-2020'
@@ -59,11 +60,11 @@ def summarize_year(days, year):
     return [year, snow_days if usable else None, valid_days, valid_hours, snow_days]
 
 
-def read_year(root, year, stations, hashes, monthly=None):
+def read_year(root, year, stations, hashes, monthly=None, months=range(1, 13)):
     daily = defaultdict(dict)
     start = date(year, 1, 1)
     allowed = {(start + timedelta(days=i)).strftime('%Y%m%d') for i in range((date(year + 1, 1, 1) - start).days)}
-    for month in range(1, 13):
+    for month in months:
         prefix = f'{year}{month:02}'
         path = root / f'{prefix}.txt.gz'
         hashes[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -93,6 +94,7 @@ def read_year(root, year, stations, hashes, monthly=None):
                 add_hour(masks, int(hour), snowfall(day, ww, ix, snow))
     if monthly is not None:
         monthly[year] = {}
+        national = defaultdict(lambda: [0, 0])
         for sid, days in daily.items():
             totals = [[0, 0, 0] for _ in range(12)]
             for day, (valid, snow, conflicts) in days.items():
@@ -100,12 +102,24 @@ def read_year(root, year, stations, hashes, monthly=None):
                 row[0] += bool(snow)
                 row[1] += bool(valid)
                 row[2] += valid.bit_count()
+                national[day][0] |= valid
+                national[day][1] |= snow
             monthly[year][sid] = totals
+        totals = [[0, 0, 0] for _ in range(12)]
+        for day, (valid, snow) in national.items():
+            row = totals[int(day[4:6]) - 1]
+            row[0] += bool(snow)
+            row[1] += bool(valid)
+            row[2] += valid.bit_count()
+        monthly[year][NATIONAL] = totals
     return {sid: summarize_year(days, year) for sid, days in daily.items()}
 
 
 def build_period(root, start, end, geometry):
     names, hashes, annual, monthly = {}, {}, defaultdict(dict), {}
+    autumn_hashes = {}
+    read_year(root, start - 1, names, autumn_hashes, monthly, months=range(10, 13))
+    autumn = monthly[start - 1]
     for year in range(start, end + 1):
         for sid, row in read_year(root, year, names, hashes, monthly).items():
             annual[sid][year] = row
@@ -120,12 +134,16 @@ def build_period(root, start, end, geometry):
                          'mean': round(sum(r[1] for r in usable) / len(usable), 4) if len(usable) >= 24 else None,
                          'years': len(usable), 'validDays': sum(r[2] for r in rows),
                          'validHours': sum(r[3] for r in rows), 'annual': rows,
+                         'previousAutumn': autumn.get(sid, [[0, 0, 0] for _ in range(12)])[9:],
                          'monthlyAnnual': [[y, monthly[y].get(sid, [[0, 0, 0] for _ in range(12)])] for y in range(start, end + 1)]})
     expected = (date(end + 1, 1, 1) - date(start, 1, 1)).days
     return {'kind': 'snowfall', 'period': [start, end], 'expectedDays': expected, 'expectedHours': expected * 24,
             'minimumYearHourCoverage': 0.99, 'minimumYears': 24, 'source': SOURCE, 'methodSource': METHOD_SOURCE,
             'method': 'Eigen telling van waargenomen sneeuwdagen per UTC-kalenderjaar. Ieder jaar vereist een geldige registratie op elke kalenderdag en minstens 99% geldige uurvakken. Minstens 24 van de 30 bruikbare jaren zijn vereist. Ontbrekende jaren worden niet als nul geteld. Ontbrekende of tegenstrijdige uren zijn onbekend. De reeks bevat de overgang van visuele naar automatische waarnemingen en is niet gehomogeniseerd.',
-            'monthlyAnnualFields': ['snowDays', 'validDays', 'validHours'], 'inputSHA256': hashes, 'geometry': geometry, 'stations': stations}
+            'monthlyAnnualFields': ['snowDays', 'validDays', 'validHours'], 'inputSHA256': hashes,
+            'previousAutumnSHA256': autumn_hashes, 'geometry': geometry, 'stations': stations,
+            'national': {'previousAutumn': autumn[NATIONAL][9:],
+                         'monthlyAnnual': [[y, monthly[y][NATIONAL]] for y in range(start, end + 1)]}}
 
 
 def main():

@@ -29,6 +29,10 @@ class SnowNormalMapTest(unittest.TestCase):
         self.assertEqual(result[2], [0, 366])
         self.assertEqual(result[3], [None, 365])
         self.assertEqual(result[4], [None, 365])
+        national = [[0, 0] for _ in range(12)]
+        days['2020-01-01'].append([2, 1])
+        module.month_values({'days': days}, 2020, national)
+        self.assertEqual(national[0], [2, 31])
 
     def test_thirty_complete_calendar_years_required(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -140,7 +140,7 @@ met gebruikte jaren en meetdekking.
 Beide generatoren nemen `monthlyAnnual` op: de ruwe aantallen waargenomen
 sneeuwdagen/sneeuwdekdagen en geldige metingen per kalendermaand per
 referentiejaar. `winter-sneeuwkaart-core.js` berekent daaruit de gewenste maand,
-het seizoen of het hele jaar en controleert de meetdekking van alleen die
+het seizoen, het winterhalfjaar of het hele jaar en controleert de meetdekking van alleen die
 maanden. Een gat in juli maakt een volledig gemeten november dus niet ongeldig.
 Sneeuwdek vereist alle 30 volledig gemeten referentieperioden; sneeuwval volgt
 de hierboven beschreven 24-jaar- en 99%-uurcriteria.
@@ -150,11 +150,19 @@ maart/april/mei, zomer juni/juli/augustus, herfst september/oktober/november.
 Voor de klimaatnormaal worden de maanden binnen de gekozen referentieperiode
 gegroepeerd. Een winterrij in de controletabel combineert januari, februari en
 december van hetzelfde referentiejaar; dit zijn geen opeenvolgende winterjaren.
+Het winterhalfjaar loopt van oktober t/m maart en wordt ingedeeld op eindjaar.
+`previousAutumn` bewaart oktober t/m december vóór het eerste referentiejaar.
 De jaargemiddelden worden onafhankelijk opgeteld, niet uit afgeronde
 maandnormalen samengesteld. De kleurgrenzen passen bij jaar, maand of seizoen
 en zijn voor beide klimaatperioden en kaartsoorten gelijk.
 
-De CSV-link exporteert de gekozen maand of het gekozen seizoen met de
+De keuze **Ergens in het land** telt per datum één sneeuwdag of sneeuwdekdag
+bij ten minste één geldige positieve registratie. Voor de landelijke
+meetdekking telt een dag of uur met een geldige registratie op minstens één
+station. De landelijke reeks staat in `national` en gebruikt dezelfde
+dekkingseisen per referentieperiode.
+
+De CSV-link exporteert het gekozen tijdvak met de
 bijbehorende gemiddelden en meetdekking. Een directe novemberlink gebruikt
 `winter.html?sneeuwkaart=sneeuwval&sneeuwperiode=1991-2020&sneeuwtijdvak=month-11#sneeuwdekkaart`.
 
