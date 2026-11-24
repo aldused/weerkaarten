@@ -36,9 +36,25 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.selectOption('#season-year','2026');await page.selectOption('#season-metric','snowfall');
   assert.equal(await page.locator('#season-history-details').isVisible(),true);
   assert.match(await page.locator('#season-first-snow').innerText(),/19 november/);
+  assert.equal(await page.locator('#season-first-snow-source').isVisible(),false);
   const snowNormals=page.locator('#season-snow-normals tr');
+  assert.deepEqual(await snowNormals.filter({hasText:'1951–1980'}).locator('td').allTextContents(),['1 november','1952–1980 (29 winters)','25 oktober']);
   assert.deepEqual(await snowNormals.filter({hasText:'1961–1990'}).locator('td').allTextContents(),['3 november','1961–1990 (30 winters)','1 november']);
   assert.deepEqual(await snowNormals.filter({hasText:'1991–2020'}).locator('td').allTextContents(),['10 november','1991–2020 (30 winters)','9 november']);
+  await page.selectOption('#season-year','1953');
+  assert.equal(await page.locator('#season-first-snow').innerText(),'19 september');
+  assert.equal(await page.locator('#season-first-snow-stations').innerText(),'Den Helder, Vlissingen');
+  assert.equal(await page.locator('#season-first-snow-source').isVisible(),true);
+  const months=await page.locator('#season-timeline .season-row').first().locator('.season-months span').allTextContents();
+  assert.equal(months[0],'aug');
+  assert.equal(months.at(-1),'jul');
+  const seasonDownload=page.waitForEvent('download');await page.click('#season-csv');
+  const seasonCsv=fs.readFileSync(await (await seasonDownload).path(),'utf8');
+  assert.match(seasonCsv,/1952\/53;Eerste sneeuwval in Nederland;235;"Den Helder";1952-09-19;;\d+;365;/);
+  await page.selectOption('#season-year','1955');
+  assert.equal(await page.locator('#season-first-snow').innerText(),'29 september');
+  assert.equal(await page.locator('#season-first-snow-stations').innerText(),'Eindhoven, Leeuwarden');
+  await page.selectOption('#season-year','2026');
   await page.locator('#season-station-details').evaluate(e=>{e.open=false;});
   await page.locator('#seizoenskalender').screenshot({path:'/private/tmp/eerste-landelijke-vorst-desktop.png'});
   for(const width of [320,390,768]){await page.setViewportSize({width,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)){console.log(await page.evaluate(()=>[...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.right>innerWidth+1&&!e.closest('.table-wrap,svg');}).map(e=>({tag:e.tagName,id:e.id,cls:e.className,width:e.getBoundingClientRect().width,right:e.getBoundingClientRect().right})).slice(0,12)));await page.locator('#seizoenskalender').screenshot({path:'/private/tmp/eerste-landelijke-vorst-mobile.png'});}assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`No overflow at ${width}`);}

@@ -11,8 +11,22 @@ from bouw_winterdata import snow_indicator
 
 # De dag- en uurselecties hebben soms een dubbele punt achter het stationnummer.
 STATION = re.compile(r"^#\s*(\d+):?\s+[-.\d]+\s+[-.\d]+\s+[-.\d]+\s+(.+?)\s*$")
-MONTHS = (7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6)
-SNOW_MONTHS = MONTHS[MONTHS.index(9):]
+SNOW_MONTHS = (8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7)
+# Historische sneeuwmeldingen waarbij WW de sneeuw niet afzonderlijk aanduidt.
+# https://www.weer.nl/nieuws/algemeen/2021/eerste-sneeuwvlokken-van-dit-winterseizoen-gezien
+HISTORICAL_SNOWFALL = {
+    1953: {
+        "19520919": {235: "Den Helder", 310: "Vlissingen"},
+        "19520920": {310: "Vlissingen"},
+    },
+    1955: {
+        "19540929": {270: "Leeuwarden", 370: "Eindhoven"},
+        "19540930": {280: "Eelde"},
+    },
+}
+# Op Volkel stond om 07 UTC 14,6 °C en was het dauwpunt 13,3 °C.
+# Ook in de uren ervoor bleef het ruim boven nul. WW 22 is hier verdacht.
+SUSPECT_SNOW_HOURS = {(375, "19510810", "7")}
 # Noordzeeplatforms en meetpunten op open water in het uurarchief.
 OFFSHORE = {201, 203, 204, 205, 206, 207, 208, 209, 211, 212, 213, 214, 216, 218,
             239, 252, 285, 312, 313, 316, 317, 320, 321}
@@ -35,9 +49,9 @@ def read_rows(path, station_names, *keys):
                 yield int(fields[0]), fields[1].strip(), tuple(fields[index].strip() for index in indices)
 
 
-def season_offsets(end):
-    start = date(end - 1, 7, 1)
-    days = (date(end, 7, 1) - start).days
+def season_offsets(end, start_month=7):
+    start = date(end - 1, start_month, 1)
+    days = (date(end, start_month, 1) - start).days
     return {(start + timedelta(days=i)).strftime("%Y%m%d"): i for i in range(days)}
 
 
@@ -55,7 +69,7 @@ def classify(value):
 
 
 def station_snow(path, station_names, offsets, observations, month):
-    for station, day, (ww, ix, snow) in read_rows(path, station_names, "WW", "IX", "S"):
+    for station, day, (hour, ww, ix, snow) in read_rows(path, station_names, "HH", "WW", "IX", "S"):
         if station in OFFSHORE or day not in offsets or not day.startswith(month):
             continue
         event = snow_indicator(day, ww, ix, snow)
@@ -64,7 +78,7 @@ def station_snow(path, station_names, offsets, observations, month):
         offset = offsets[day]
         days, positives = observations[station]
         days.add(offset)
-        if event:
+        if event and (station, day, hour) not in SUSPECT_SNOW_HOURS:
             positives.add(offset)
 
 
@@ -75,18 +89,31 @@ def snow_rows(observations):
     ]
 
 
-def snowfall_season(root, end, station_names, offsets):
+def snowfall_season(root, end, station_names):
     snow = defaultdict(lambda: (set(), set()))
-    snow_start = f"{end-1}{SNOW_MONTHS[0]:02}01"
-    snow_offsets = {day: offset for day, offset in offsets.items() if day >= snow_start}
+    offsets = season_offsets(end, SNOW_MONTHS[0])
     for month in SNOW_MONTHS:
-        prefix = f"{end - (month >= 7)}{month:02}"
-        station_snow(root / f"{prefix}.txt.gz", station_names, snow_offsets, snow, prefix)
+        prefix = f"{end - (month >= SNOW_MONTHS[0])}{month:02}"
+        station_snow(root / f"{prefix}.txt.gz", station_names, offsets, snow, prefix)
+    documented = HISTORICAL_SNOWFALL.get(end, {})
+    for day, stations in documented.items():
+        for station in stations:
+            days, positives = snow[station]
+            days.add(offsets[day])
+            positives.add(offsets[day])
     rows = snow_rows(snow)
     coverage = set().union(*(days for days, _ in snow.values()))
     first = min((row[2] for row in rows if row[2] is not None), default=len(offsets) - 1)
-    complete = all(offset in coverage for offset in snow_offsets.values() if offset <= first)
-    return {"val": rows, "valLength": len(snow_offsets), "valComplete": complete}
+    complete = all(offset in coverage for offset in range(first + 1))
+    first_by_station = {station: offset for station, _, offset in rows}
+    historical = {
+        station: name for day, stations in documented.items() for station, name in stations.items()
+        if first_by_station[station] == offsets[day]
+    }
+    result = {"val": rows, "valLength": len(offsets), "valComplete": complete}
+    if historical:
+        result["valHistorical"] = historical
+    return result
 
 
 def frost_rows(path, station_names, offsets):
@@ -145,8 +172,9 @@ def repeated_snow_code(day, station, code):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for key in ("daily", "hourly", "edr", "cover", "out"):
+    for key in ("daily", "hourly", "cover", "out"):
         parser.add_argument(f"--{key}", type=Path, required=True)
+    parser.add_argument("--edr", type=Path, help="Optionele KNMI EDR-cache vanaf winterjaar 2020/21")
     parser.add_argument("--eerste", type=int, default=1902)
     parser.add_argument("--laatste", type=int, default=2026)
     args = parser.parse_args()
@@ -160,8 +188,8 @@ def main():
             raise FileNotFoundError(path)
         season["vorst"] = frost_rows(path, stations["vorst"], offsets)
         if end >= 1951:
-            root = args.edr if end >= 2021 else args.hourly
-            season.update(snowfall_season(root, end, stations["val"], offsets))
+            root = args.edr if args.edr and end >= 2021 else args.hourly
+            season.update(snowfall_season(root, end, stations["val"]))
         if end >= 1956:
             cover = defaultdict(lambda: (set(), set()))
             for year in (end - 1, end):
@@ -170,7 +198,7 @@ def main():
         seasons[end] = season
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(
-        {"stations": stations, "seasons": seasons}, ensure_ascii=False, separators=(",", ":")
+        {"snowfallStart": "08-01", "stations": stations, "seasons": seasons}, ensure_ascii=False, separators=(",", ":")
     ) + "\n", encoding="utf-8")
     print(f"{len(seasons)} seizoenen, stations per bron: {', '.join(f'{k} {len(v)}' for k, v in stations.items())}")
 

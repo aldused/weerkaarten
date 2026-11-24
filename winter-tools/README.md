@@ -46,15 +46,14 @@ De afgeleide statistieken laten specifieke station/code-combinaties weg die in 1
 
 ## Seizoenskalender
 
-De seizoenskalender combineert TN uit de KNMI-dagselectie, sneeuwval uit de KNMI-uurselectie en sneeuwdekcode SX uit het sneeuwdekarchief. Voor de eerste sneeuwval zoekt hij vanaf 1 september in de uurgegevens van landstations. Vóór 1971 telt een expliciete visuele sneeuwcode in WW. Vanaf 1971 telt de sneeuwindicator S of W3. Het meetmoment volgt het UTC-uurvak. Sneeuwdek en vorst lopen van juli t/m juni.
+De seizoenskalender combineert TN uit de KNMI-dagselectie, sneeuwval uit de KNMI-uurselectie en sneeuwdekcode SX uit het sneeuwdekarchief. Voor eerste sneeuwval worden de landstations per winterjaar doorzocht, van 1 augustus tot en met 31 juli. Vóór 1971 tellen expliciete visuele sneeuwcodes uit WW plus de gedocumenteerde sneeuwmeldingen uit september 1952 en 1954. Een verdachte augustuscode is gecontroleerd tegen temperatuur en dauwpunt en uitgesloten. Vanaf 1971 telt de sneeuwindicator S (W3 bij gebruik van de optionele EDR-cache). De datum volgt het UTC-uurvak. De sneeuwdekgegevens lopen van juli tot en met juni. De pagina toont de landelijke vorstdata over augustus tot en met juli uit het afzonderlijke bestand `eerste-vorst.json`.
 
 ```sh
 python3 winter-tools/haal_knmi_dagminima.py /pad/naar/dagminimacache 1902 2026
-python3 winter-tools/haal_knmi_uren.py /pad/naar/uurcache 1951 2020 --hele-seizoen
-python3 winter-tools/haal_knmi_edr.py /pad/naar/edr-cache 2021 2026 --hele-seizoen
+python3 winter-tools/haal_knmi_uren.py /pad/naar/uurcache 1951 2026 --winterjaar
 python3 winter-tools/bouw_seizoenskalender.py \
   --daily /pad/naar/dagminimacache --hourly /pad/naar/uurcache \
-  --edr /pad/naar/edr-cache --cover sneeuwdek-data \
+  --cover sneeuwdek-data \
   --out winter-data/seizoenskalender.json
 ```
 

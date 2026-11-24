@@ -64,9 +64,12 @@ def main():
     p.add_argument("cache", type=Path)
     p.add_argument("eerste_eindjaar", type=int)
     p.add_argument("laatste_eindjaar", type=int)
-    p.add_argument("--hele-seizoen", action="store_true", help="Haal juli tot en met juni op.")
+    period = p.add_mutually_exclusive_group()
+    period.add_argument("--hele-seizoen", action="store_true", help="Haal juli tot en met juni op.")
+    period.add_argument("--winterjaar", action="store_true", help="Haal augustus tot en met juli op.")
     args = p.parse_args()
-    months = (7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6) if args.hele_seizoen else (10, 11, 12, 1, 2, 3)
+    start = 8 if args.winterjaar else 7
+    months = (*range(start, 13), *range(1, start)) if args.winterjaar or args.hele_seizoen else (10, 11, 12, 1, 2, 3)
     token = os.environ["KNMI_EDR_KEY"]
     features = request("/locations", token)["features"]
     names = {}
@@ -79,7 +82,7 @@ def main():
         names[key] = (id, props["name"], lon, lat)
     args.cache.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(max_workers=3) as pool:
-        tasks = [(args.cache, token, names, y - (m >= 7), m)
+        tasks = [(args.cache, token, names, y - (m >= start), m)
                  for y in reversed(range(args.eerste_eindjaar, args.laatste_eindjaar+1))
                  for m in months]
         for _ in pool.map(fetch, tasks):
