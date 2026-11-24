@@ -7,6 +7,7 @@ window.TemperaturePlace=(function(){
   const stampFmt=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
   const exportDate=new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',day:'numeric',month:'long',year:'numeric'});
   const periodFmt=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  const placeCountFmt=new Intl.NumberFormat('nl-NL');
   const fmt=v=>Number.isFinite(v)?v.toFixed(1).replace('.',',').replace('-','−'):'–';
   const dateOf=row=>new Date(row.key+'T12:00:00Z');
   const tag=(name,className,text)=>{const n=document.createElement(name);if(className)n.className=className;if(text!=null)n.textContent=text;return n;};
@@ -19,7 +20,7 @@ window.TemperaturePlace=(function(){
     config=options;
     root=tag('section','temperature-place');root.id='placeForecast';root.setAttribute('aria-labelledby','placeHeading');
     root.innerHTML=`<div class="place-top"><div class="place-intro"><p class="place-eyebrow">Jouw temperatuurverwachting</p><h2 id="placeHeading">Temperatuur voor <span id="placeName">de koudste plaats</span></h2><p class="place-lead">Maximum, nachtminimum en grasminimum in één overzicht.</p></div>
-      <form class="place-search" role="search" autocomplete="off"><label for="placeQuery">Zoek een plaats</label><div class="place-search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="placeQuery" type="search" placeholder="Bijv. Rotterdam of De Bilt" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="placeResults" spellcheck="false"><button type="submit">Toon</button></div><ul id="placeResults" role="listbox" aria-label="Gevonden plaatsen" hidden></ul><p class="place-search-status" id="placeSearchStatus" role="status" aria-live="polite">Zoeken in Nederlandse plaatsen</p></form></div>
+      <form class="place-search" role="search" autocomplete="off"><label for="placeQuery">Zoek een plaats</label><div class="place-search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="placeQuery" type="search" placeholder="Bijv. Wateringen of De Bilt" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="placeResults" spellcheck="false"><button type="submit">Toon</button></div><ul id="placeResults" role="listbox" aria-label="Gevonden plaatsen" hidden></ul><p class="place-search-status" id="placeSearchStatus" role="status" aria-live="polite">Zoeken in Nederlandse plaatsen</p></form></div>
       <div class="place-tools"><div><div class="place-extremes" role="group" aria-label="Plaats kiezen op temperatuur"><button type="button" id="placeCold" aria-pressed="true" disabled><i></i>Koudste plaats</button><button type="button" id="placeWarm" aria-pressed="false" disabled><i></i>Zachtste plaats</button></div><p class="place-mode" id="placeMode" aria-live="polite">Volgt de koudste plaats op de kaart</p></div><div class="place-toggles"><label><input type="checkbox" id="placeGrass" checked><span class="series-key grass"></span>Grasminimum</label><label><input type="checkbox" id="placeMargins">Foutmarges</label><button type="button" id="placeDownload" disabled>Download grafiek (PNG)</button></div></div>
       <div class="place-metrics" id="placeMetrics"></div>
       <div class="place-plot" id="placePlot"><div class="place-empty" role="status">De temperatuurverwachting wordt geladen…</div></div>
@@ -29,7 +30,11 @@ window.TemperaturePlace=(function(){
       <details class="place-data"><summary>Alle waarden en exacte periodes</summary><div class="place-table-wrap" tabindex="0" role="region" aria-label="Temperatuurwaarden per dag"><table><thead><tr><th scope="col">Dag</th><th scope="col">Maximum 2 m</th><th scope="col">Minimum 2 m</th><th scope="col">Grasminimum</th><th scope="col">Periodes en dekking</th></tr></thead><tbody id="placeTable"></tbody></table></div></details>`;
     document.querySelector('header').after(root);
     const input=$('placeQuery');
-    input.addEventListener('input',suggest);
+    input.addEventListener('input',()=>{
+      pendingRestore=null;
+      pendingWarm=false;
+      suggest();
+    });
     input.addEventListener('focus',()=>{if(input.value.length>=2)suggest();});
     input.addEventListener('keydown',e=>{
       if(e.key==='Escape'){closeResults();return;}
@@ -51,20 +56,36 @@ window.TemperaturePlace=(function(){
       pendingWarm=saved?.extreme==='warm';
       if(saved&&typeof saved.name==='string'&&Number.isFinite(saved.lat)&&Number.isFinite(saved.lon))pendingRestore=saved;
     }catch(e){}
-    fetch('temperature-places.json?v=20261124-1').then(r=>{if(!r.ok)throw new Error('plaatsenlijst');return r.json();}).then(j=>{places=Data.catalogue(j.places);$('placeSearchStatus').textContent='Meer dan 2.000 Nederlandse plaatsen';if(input.value)suggest();}).catch(()=>{catalogueError=true;$('placeSearchStatus').textContent='De plaatsenlijst kon niet laden. Vernieuw de pagina om opnieuw te proberen.';});
+    fetch('temperature-places.json?v=20261124-plaatsen').then(response=>{
+      if(!response.ok)throw new Error('plaatsenlijst');
+      return response.json();
+    }).then(data=>{
+      places=Data.catalogue(data.places);
+      if(input.value)suggest();
+      else $('placeSearchStatus').textContent=catalogueSummary();
+    }).catch(()=>{
+      catalogueError=true;
+      $('placeSearchStatus').textContent=catalogueSummary();
+    });
     let width=0;new ResizeObserver(entries=>{const next=entries[0].contentRect.width;if(Math.abs(next-width)>.5){width=next;if(rows.length)chart();}}).observe($('placePlot'));
     load(config.kind==='night'?'tx':'night');
+  }
+  function catalogueSummary(){
+    if(catalogueError)return 'De plaatsenlijst kon niet laden. Vernieuw de pagina om opnieuw te proberen.';
+    return places.length?'Zoek in '+placeCountFmt.format(places.length)+' Nederlandse plaatsen en locaties':'De plaatsenlijst wordt geladen…';
   }
   function suggest(){
     const q=$('placeQuery').value.trim();results=Data.search(places,q);active=-1;
     const list=$('placeResults');list.replaceChildren();
-    if(q.length<2){closeResults();$('placeSearchStatus').textContent='Typ minimaal twee letters';return;}
-    if(!places.length){$('placeSearchStatus').textContent=catalogueError?'De plaatsenlijst is niet beschikbaar.':'De plaatsenlijst wordt geladen…';closeResults();return;}
+    $('placeQuery').removeAttribute('aria-activedescendant');
+    if(q.length<2){closeResults();$('placeSearchStatus').textContent=q?'Typ minimaal twee letters':catalogueSummary();return;}
+    if(!places.length){$('placeSearchStatus').textContent=catalogueSummary();closeResults();return;}
     results.forEach((p,i)=>{const li=tag('li');li.id='placeOption'+i;li.setAttribute('role','option');li.setAttribute('aria-selected','false');
-      li.append(tag('span','place-result-name',p.name),tag('small','',p.lat.toFixed(2).replace('.',',')+'° N · '+p.lon.toFixed(2).replace('.',',')+'° O'));
+      const coordinates=p.lat.toFixed(2).replace('.',',')+'° N · '+p.lon.toFixed(2).replace('.',',')+'° O';
+      li.append(tag('span','place-result-name',p.name),tag('small','',p.area||coordinates));
       li.addEventListener('pointerdown',e=>e.preventDefault());li.addEventListener('click',()=>select(p));list.append(li);});
     list.hidden=!results.length;$('placeQuery').setAttribute('aria-expanded',String(!!results.length));
-    $('placeSearchStatus').textContent=results.length?results.length+' suggesties · kies met Enter of de pijltjestoetsen':'Geen plaats gevonden. Probeer een andere spelling.';
+    $('placeSearchStatus').textContent=results.length?results.length+(results.length===1?' suggestie':' suggesties')+' · kies met Enter of de pijltjestoetsen':'Geen plaats gevonden. Probeer een andere spelling.';
   }
   function highlight(){
     [...$('placeResults').children].forEach((li,i)=>li.setAttribute('aria-selected',String(i===active)));
@@ -81,7 +102,7 @@ window.TemperaturePlace=(function(){
     active=-1;
     closeResults();
     $('placeQuery').value='';
-    $('placeSearchStatus').textContent='Zoeken in Nederlandse plaatsen';
+    $('placeSearchStatus').textContent=catalogueSummary();
     config.onExtreme(direction);
   }
   function select(p){
@@ -89,7 +110,7 @@ window.TemperaturePlace=(function(){
     pendingWarm=false;
     point=p;choice=p;manual=true;selection=0;closeResults();results=[];active=-1;$('placeQuery').value=p.name;
     $('placeSearchStatus').textContent='Verwachting voor '+p.name;
-    try{sessionStorage.setItem('weerlab_temperature_place',JSON.stringify({name:p.name,lat:p.lat,lon:p.lon}));}catch(e){}
+    try{sessionStorage.setItem('weerlab_temperature_place',JSON.stringify({name:p.name,lat:p.lat,lon:p.lon,area:p.area}));}catch(e){}
     ignoreSync=true;try{config.onSelect(p);}finally{ignoreSync=false;}render();
   }
   function sync(p){
@@ -108,7 +129,7 @@ window.TemperaturePlace=(function(){
     try {
       if(p.extreme==='warm')sessionStorage.setItem('weerlab_temperature_place',JSON.stringify({extreme:'warm'}));
       else if(p.auto){if(!pendingWarm&&!pendingRestore)sessionStorage.removeItem('weerlab_temperature_place');}
-      else sessionStorage.setItem('weerlab_temperature_place',JSON.stringify({name:p.name,lat:p.lat,lon:p.lon}));
+      else sessionStorage.setItem('weerlab_temperature_place',JSON.stringify({name:p.name,lat:p.lat,lon:p.lon,area:p.area}));
     }catch(e){}
     render();
   }
@@ -134,7 +155,7 @@ window.TemperaturePlace=(function(){
   function render(){
     if(!root)return;
     $('placeName').textContent=point?.name||'de koudste plaats';
-    $('placeMode').textContent=manual?'Gekozen plaats · rooster circa 5 km':extremeDescription()||'Volgt de koudste plaats op de kaart';
+    $('placeMode').textContent=manual?['Gekozen plaats',point?.area,'rooster circa 5 km'].filter(Boolean).join(' · '):extremeDescription()||'Volgt de koudste plaats op de kaart';
     $('placeCold').disabled=!extremesAvailable;
     $('placeWarm').disabled=!extremesAvailable;
     $('placeCold').setAttribute('aria-pressed',String(!manual&&point?.extreme!=='warm'));

@@ -3,7 +3,7 @@
   'use strict';
   const localDay=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'});
   const dayKey=date=>localDay.format(new Date(date));
-  const normalise=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const normalise=s=>String(s).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   function decode(payload,count){
     if(!payload)return null;
     const bytes=Uint8Array.from(atob(payload),c=>c.charCodeAt(0));
@@ -48,12 +48,34 @@
     const today=dayKey(now);
     return {cells,rows:[...rows.values()].filter(r=>r.key>=today).sort((a,b)=>a.key.localeCompare(b.key)).slice(0,8)};
   }
-  function catalogue(rows){return rows.map((p,i)=>({...p,rank:p.rank??i,key:normalise(p.name+' '+(p.alias||''))}));}
+  function catalogue(rows){
+    return rows.map((p,i)=>{
+      const nameKey=normalise(p.name);
+      const aliasKey=normalise(p.alias||'');
+      const key=aliasKey?nameKey+' '+aliasKey:nameKey;
+      return {...p,rank:p.rank??i,nameKey,aliasKey,areaKey:normalise(p.area||''),key,words:key.split(' ')};
+    });
+  }
+  function matchScore(place,query){
+    const {nameKey,aliasKey,areaKey,key,words}=place;
+    if(nameKey===query)return 0;
+    if(aliasKey===query)return 1;
+    if(nameKey.startsWith(query))return 2;
+    if(query.startsWith(nameKey+' ')&&areaKey.includes(query.slice(nameKey.length+1)))return 2;
+    if(aliasKey.startsWith(query))return 3;
+    if(words.some(word=>word.startsWith(query)))return 4;
+    return key.includes(query)?5:Infinity;
+  }
   function search(places,query){
-    const q=normalise(query);if(q.length<2)return [];
-    return places.map(p=>{const name=normalise(p.name),alias=normalise(p.alias||'');
-      const score=name===q||alias===q?0:name.startsWith(q)?1:alias.startsWith(q)?2:p.key.split(' ').some(w=>w.startsWith(q))?3:p.key.includes(q)?4:99;
-      return {p,score};}).filter(r=>r.score<99).sort((a,b)=>a.score-b.score||a.p.rank-b.p.rank||a.p.name.localeCompare(b.p.name,'nl')).slice(0,8).map(r=>r.p);
+    const q=normalise(query);
+    if(q.length<2)return [];
+    const matches=[];
+    for(const place of places){
+      const score=matchScore(place,q);
+      if(Number.isFinite(score))matches.push({place,score});
+    }
+    return matches.sort((a,b)=>a.score-b.score||a.place.rank-b.place.rank||
+      a.place.name.localeCompare(b.place.name,'nl')).slice(0,8).map(match=>match.place);
   }
   function segments(rows,keys){
     const result=[];let run=[];

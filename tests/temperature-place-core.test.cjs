@@ -54,3 +54,16 @@ test('chart paths break at missing values and missing calendar days',()=>{
   const rows=[{key:'2026-11-24',min:2},{key:'2026-11-25',min:NaN},{key:'2026-11-26',min:4},{key:'2026-11-28',min:5}];
   assert.deepEqual(M.segments(rows,['min']).map(s=>s.map(p=>p.index)),[[0],[2],[3]]);
 });
+test('the expanded Dutch catalogue finds Wateringen, hamlets and qualified duplicate names',()=>{
+  const {places}=require('../temperature-places.json');
+  const catalogue=M.catalogue(places);
+  const wateringen=M.search(catalogue,'wateringen')[0];
+  assert.equal(wateringen.name,'Wateringen');
+  assert.equal(wateringen.area,'Westland, Zuid-Holland');
+  assert.equal(M.search(catalogue,'Achterbos')[0].name,'Achterbos');
+  const denHoorn=M.search(catalogue,'Den Hoorn').filter(place=>place.name==='Den Hoorn');
+  assert.ok(denHoorn.some(place=>place.area?.includes('Texel')));
+  assert.ok(denHoorn.some(place=>place.area?.includes('Midden-Delfland')));
+  assert.equal(M.search(catalogue,'Den Hoorn Texel')[0].area,'Texel, Noord-Holland');
+  assert.equal(M.search(catalogue,'Den Bosch')[0].name,"'s-Hertogenbosch");
+});
