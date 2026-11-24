@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Temperatuurrecords per kalenderdag · Weerlab</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=DM+Mono:wght@500&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="mosmix-mini.css?v=20260912-5">
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
@@ -27,6 +27,19 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 .mini-body .basemap { display:block; width:100%; height:auto; background:#b8d4e8; }
 .mini-body canvas,.mini-body .overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 .mosmix-mini-page .mini-body { cursor:default; }
+.mosmix-mini-page .mini-footer { flex-wrap:wrap; }
+.kaart-naam { min-width:0; overflow-wrap:anywhere; }
+.kaart-acties { display:flex; flex-wrap:wrap; gap:4px; margin-left:auto; }
+.mosmix-mini-page .mini-downloadknop { color:var(--mini-accent); }
+.kaart-downloadstatus { padding:0 13px 9px; font-size:12px; color:var(--mini-muted); }
+.kaart-downloadstatus:empty { display:none; }
+.status,.footer { text-align:center; padding:12px 16px; color:var(--mini-muted); font-size:12px; }
+.status:empty { display:none; }
+@media(max-width:1000px){ .mosmix-mini-page .kaarten-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:640px){ .mosmix-mini-page .kaarten-grid { grid-template-columns:1fr!important; max-width:480px; }
+  .kaarten-wrap,.legenda { padding-inline:14px; } }
+</style>
+<style id="record-kaart-svg-stijl">
 .basemap-land { fill:#f5efd9; fill-rule:evenodd; }
 .provinciegrens { fill:none; stroke:#fff; stroke-opacity:.82; stroke-width:2; stroke-linejoin:round; }
 .stationlabel { font-family:"DM Sans",system-ui,sans-serif; paint-order:stroke; stroke:#fff;
@@ -35,13 +48,6 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 .stationnaam { font-size:18px; font-weight:700; stroke-width:3.5px; }
 .stationjaar { font-size:17px; font-weight:600; stroke-width:3.5px; }
 .stationpunt[data-historisch] { stroke-dasharray:3 2; }
-.kaart-naam { min-width:0; overflow-wrap:anywhere; }
-.mini-tabelknop { margin-left:auto; }
-.status,.footer { text-align:center; padding:12px 16px; color:var(--mini-muted); font-size:12px; }
-.status:empty { display:none; }
-@media(max-width:1000px){ .mosmix-mini-page .kaarten-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media(max-width:640px){ .mosmix-mini-page .kaarten-grid { grid-template-columns:1fr!important; max-width:480px; }
-  .kaarten-wrap,.legenda { padding-inline:14px; } }
 </style>
 <link rel="stylesheet" href="klimaat.css?v=20260908-2">
 <script src="klimaat.js?v=20260914-1"></script>
@@ -85,6 +91,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 
 <script src="nl_grens_coords.js"></script>
 <script src="waarnemingen-kaartkleuren.js?v=20261124-topkaart"></script>
+<script src="weerlab-kaart-export.js?v=20261124-1"></script>
 <script>
 // ── Geo-projectie (zelfde als alle weerlab NL-kaarten) ───────────────────────
 const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
@@ -279,6 +286,54 @@ function node(tag,attrs,txt){
   return el;
 }
 
+async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kalenderdag){
+  // Teken de stationstekst op canvas zodat de export het geladen webfont gebruikt.
+  const exportOverlay=overlay.cloneNode(true);
+  exportOverlay.querySelectorAll(".stationlabel").forEach(label=>label.remove());
+  const labels=[...overlay.querySelectorAll(".stationlabel")].map(label=>{
+    const stijl=getComputedStyle(label);
+    return {
+      tekst:label.textContent,
+      x:Number(label.getAttribute("x")),y:Number(label.getAttribute("y")),
+      font:`${stijl.fontWeight} ${stijl.fontSize} ${stijl.fontFamily}`,
+      vulkleur:stijl.fill,randkleur:stijl.stroke,randbreedte:parseFloat(stijl.strokeWidth)
+    };
+  });
+  const svgStijl=document.getElementById("record-kaart-svg-stijl").textContent;
+  await document.fonts.ready;
+  const kaart=await maakWeerlabKaartCanvas({
+    basis,kleurlaag,overlay:exportOverlay,basisStijl:svgStijl,overlayStijl:svgStijl,
+    dagtekst,kaarttitel:titel,kopregel:"Dagrecords KNMI",bron:"KNMI · Klimaatarchief",
+    tekenLabels(ctx){
+      ctx.textAlign="center";
+      ctx.lineJoin="round";
+      for(const label of labels){
+        ctx.font=label.font;
+        ctx.strokeStyle=label.randkleur;
+        ctx.lineWidth=label.randbreedte;
+        const halveBreedte=(ctx.measureText(label.tekst).width+label.randbreedte)/2+3;
+        const x=Math.max(halveBreedte,Math.min(SVG_W-halveBreedte,label.x));
+        ctx.strokeText(label.tekst,x,label.y);
+        ctx.fillStyle=label.vulkleur;
+        ctx.fillText(label.tekst,x,label.y);
+      }
+    }
+  });
+  const png=await new Promise(resolve=>kaart.toBlob(resolve,"image/png"));
+  if(!png) throw new Error("PNG kon niet worden gemaakt");
+  const url=URL.createObjectURL(png);
+  const link=document.createElement("a");
+  link.href=url;
+  link.download=`weerlab-dagrecords-${titel.toLowerCase().replaceAll(" ","-")}-${kalenderdag.slice(5)}.png`;
+  document.body.append(link);
+  try{
+    link.click();
+  }finally{
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
+}
+
 function bouwKaart(stations,dag,config,ondergrond){
   const punten=Object.entries(dag.rec).filter(([naam])=>stations[naam]).map(([naam,rec])=>({
     naam,lon:stations[naam][0],lat:stations[naam][1],val:rec.t,
@@ -287,12 +342,14 @@ function bouwKaart(stations,dag,config,ondergrond){
   const extreem=punten.reduce((beste,p)=>
     !beste||config.richting*(p.val-beste.val)<0?p:beste,null);
   const datum=DAG_LABEL.format(dag.dt);
+  const kalenderdag=dag.dt.toISOString().slice(0,10);
 
   const kaart=document.createElement("article");
   kaart.className="mini-kaart";
   kaart.setAttribute("aria-label",config.titel+" op "+datum);
   kaart.innerHTML='<div class="mini-header"><span class="mini-dag-naam"></span><span class="mini-dag-datum"></span></div>'
-    +'<div class="mini-body"></div><div class="mini-footer"><span class="kaart-naam"></span></div>';
+    +'<div class="mini-body"></div><div class="mini-footer"><span class="kaart-naam"></span><div class="kaart-acties"></div></div>'
+    +'<p class="kaart-downloadstatus" role="status"></p>';
   kaart.querySelector(".mini-dag-naam").textContent=datum;
   kaart.querySelector(".mini-dag-datum").textContent=config.kaarttitel;
 
@@ -331,16 +388,36 @@ function bouwKaart(stations,dag,config,ondergrond){
     : "Geen gegevens";
   const knop=document.createElement("button");
   knop.type="button";
-  knop.className="mini-open mini-tabelknop";
+  knop.className="mini-open";
   knop.textContent="Ranglijst";
   knop.setAttribute("aria-label","Ranglijst voor "+datum);
   knop.addEventListener("click",()=>{
-    startInput.value=dag.dt.toISOString().slice(0,10);
+    startInput.value=kalenderdag;
     viewSelect.value="table";
     viewSelect.focus();
     updateRecordDays();
   });
-  kaart.querySelector(".mini-footer").append(knop);
+  const download=document.createElement("button");
+  download.type="button";
+  download.className="mini-open mini-downloadknop";
+  download.textContent="Download PNG";
+  download.setAttribute("aria-label","Download PNG voor "+datum);
+  download.disabled=!punten.length;
+  const melding=kaart.querySelector(".kaart-downloadstatus");
+  download.addEventListener("click",async()=>{
+    download.disabled=true;
+    melding.textContent="PNG maken…";
+    try{
+      await downloadDagrecordKaart(basis,canvas,overlay,datum,config.titel,kalenderdag);
+      melding.textContent="";
+    }catch(fout){
+      melding.textContent="De PNG kon niet worden gemaakt. Probeer opnieuw.";
+      console.error("Dagrecordkaart exporteren mislukt:",fout);
+    }finally{
+      download.disabled=false;
+    }
+  });
+  kaart.querySelector(".kaart-acties").append(knop,download);
   return kaart;
 }
 

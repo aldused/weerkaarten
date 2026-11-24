@@ -344,6 +344,7 @@ body {
 </div>
 
 <script src="waarnemingen-kaartkleuren.js?v=20261124-topkaart"></script>
+<script src="weerlab-kaart-export.js?v=20261124-1"></script>
 <script>
 const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
 const SVG_W=800, SVG_H=1100;
@@ -1091,54 +1092,24 @@ function update() {
 }
 
 async function maakExportCanvas(dag, param, datum) {
-  const baseSvg = document.getElementById("basemap-svg");
+  const basis = document.getElementById("basemap-svg");
   const overlay = document.getElementById("nl-kaart").cloneNode(false);
-  const heatmap = document.createElement("canvas");
-  tekenKaart(dag, param, overlay, heatmap);
-  const W = BASEMAP_W, H = BASEMAP_H;
-  const headerH = 130;
-  const footerH = 60;
-  const canvas = document.createElement("canvas");
-  canvas.width = W;
-  canvas.height = H + headerH + footerH;
-  const ctx = canvas.getContext("2d");
-  tekenHeader(ctx, W, headerH, dagLabel(new Date(datum + "T12:00:00")), kaartTitel(param));
-
-  const svgToImg = (svg, extraStyle) => new Promise((resolve, reject) => {
-    const clone = svg.cloneNode(true);
-    if(extraStyle){
-      const st = document.createElementNS("http://www.w3.org/2000/svg","style");
-      st.textContent = extraStyle;
-      clone.insertBefore(st, clone.firstChild);
-    }
-    clone.setAttribute("xmlns","http://www.w3.org/2000/svg");
-    clone.setAttribute("width", W);
-    clone.setAttribute("height", H);
-    const blob = new Blob([new XMLSerializer().serializeToString(clone)], {type:"image/svg+xml"});
-    const url = URL.createObjectURL(blob);
-    const im = new Image();
-    im.onload = () => { URL.revokeObjectURL(url); resolve(im); };
-    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Kaartlaag kon niet worden geladen")); };
-    im.src = url;
+  const kleurlaag = document.createElement("canvas");
+  tekenKaart(dag, param, overlay, kleurlaag);
+  return maakWeerlabKaartCanvas({
+    basis, kleurlaag, overlay, breedte: BASEMAP_W,
+    dagtekst: dagLabel(new Date(datum + "T12:00:00")),
+    kaarttitel: kaartTitel(param),
+    kopregel: "Waarnemingen KNMI",
+    bron: waarnemingsstand(dag) || "KNMI",
+    basisStijl: `
+      .basemap-land { fill: #f5efd9; }
+      .basemap-prov { fill: none; stroke: rgba(255,255,255,0.7); stroke-width: 0.6; }
+    `,
+    overlayStijl: `
+      .nl-buitengrens { fill: none; stroke: white; stroke-width: 2; stroke-linejoin: round; }
+    `
   });
-
-  const baseStyle = `
-    svg { background: #b8d4e8; }
-    .basemap-land { fill: #f5efd9; }
-    .basemap-prov { fill: none; stroke: rgba(255,255,255,0.7); stroke-width: 0.6; }
-  `;
-  const overlayStyle = `
-    .nl-buitengrens { fill: none; stroke: white; stroke-width: 2; stroke-linejoin: round; }
-  `;
-
-  const [baseImg, ovImg] = await Promise.all([svgToImg(baseSvg, baseStyle), svgToImg(overlay, overlayStyle)]);
-  ctx.fillStyle = "#b8d4e8";
-  ctx.fillRect(0, headerH, W, H);
-  ctx.drawImage(baseImg, 0, headerH, W, H);
-  if (heatmap.width > 1) ctx.drawImage(heatmap, 0, headerH, W, H);
-  ctx.drawImage(ovImg, 0, headerH, W, H);
-  tekenFooter(ctx, W, headerH + H, footerH, waarnemingsstand(dag) || "KNMI");
-  return canvas;
 }
 
 async function slaOp(params) {
@@ -1220,65 +1191,6 @@ function selecteerDag(key) {
   document.querySelectorAll(".btn-dag").forEach(b => b.classList.remove("actief"));
   document.getElementById("btn-archief").classList.add("actief");
   update();
-}
-
-function tekenHeader(ctx, breedte, hoogte, dagtekst, kaarttitel) {
-  ctx.fillStyle = "#1e293b";
-  ctx.fillRect(0, 0, breedte, hoogte);
-  ctx.fillStyle = "#2ec4e8";
-  ctx.fillRect(0, hoogte-6, breedte, 6);
-  const pad = 36;
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "800 46px 'DM Sans', Arial, sans-serif";
-  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-  ctx.fillText("Ed Aldus WM", pad, 58);
-  ctx.fillStyle = "#94a3b8";
-  ctx.font = "500 22px 'DM Mono', 'Courier New', monospace";
-  ctx.fillText("Waarnemingen KNMI", pad, 94);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "800 46px 'DM Sans', Arial, sans-serif";
-  ctx.textAlign = "right";
-  ctx.fillText(dagtekst, breedte-pad, 58);
-  ctx.fillStyle = "#cbd5e1";
-  ctx.font = "500 22px 'DM Sans', Arial, sans-serif";
-  ctx.fillText(kaarttitel, breedte-pad, 94);
-  ctx.textAlign = "left";
-}
-
-function tekenFooter(ctx, breedte, y, hoogte, bronTekst) {
-  ctx.fillStyle = "#0f172a";
-  ctx.fillRect(0, y, breedte, hoogte);
-  const pad = 36;
-  const midY = y + hoogte/2 + 7;
-  ctx.fillStyle = "#f1f5f9";
-  ctx.font = "700 22px 'DM Sans', Arial, sans-serif";
-  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-  ctx.fillText("weerlab.nl", pad, midY);
-  const merkW = ctx.measureText("weerlab.nl").width;
-  ctx.fillStyle = "#94a3b8";
-  ctx.font = "500 19px 'DM Sans', Arial, sans-serif";
-  ctx.fillText("·  Ed Aldus — weerdata & visualisaties", pad + merkW + 6, midY);
-  ctx.font = "500 18px 'DM Mono', 'Courier New', monospace";
-  ctx.textAlign = "right";
-  const bronW = ctx.measureText(bronTekst).width;
-  const pillH = 30, pillX = breedte - pad - bronW - 22, pillY = y + hoogte/2 - pillH/2;
-  ctx.fillStyle = "rgba(46,196,232,0.14)";
-  const r = pillH/2;
-  ctx.beginPath();
-  ctx.moveTo(pillX + r, pillY);
-  ctx.lineTo(pillX + bronW + 22 - r, pillY);
-  ctx.arcTo(pillX + bronW + 22, pillY, pillX + bronW + 22, pillY + r, r);
-  ctx.lineTo(pillX + bronW + 22, pillY + pillH - r);
-  ctx.arcTo(pillX + bronW + 22, pillY + pillH, pillX + bronW + 22 - r, pillY + pillH, r);
-  ctx.lineTo(pillX + r, pillY + pillH);
-  ctx.arcTo(pillX, pillY + pillH, pillX, pillY + pillH - r, r);
-  ctx.lineTo(pillX, pillY + r);
-  ctx.arcTo(pillX, pillY, pillX + r, pillY, r);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = "#7dd3fc";
-  ctx.fillText(bronTekst, breedte - pad - 11, midY);
-  ctx.textAlign = "left";
 }
 
 document.getElementById("param-btns").addEventListener("click", e => {
