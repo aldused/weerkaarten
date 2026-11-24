@@ -21,7 +21,7 @@ fi
 # Validate the complete archive before publishing any updated record source.
 for file in "$@"; do
   case "$(basename "$file")" in
-    records_*.json|dagrecords_nl.json)
+    records_*.json|dagrecords_nl.json|dagrecords_koude_nl.json)
       RECORDS_NODE="$(command -v node || true)"
       if [ -z "$RECORDS_NODE" ]; then RECORDS_NODE="/opt/homebrew/bin/node"; fi
       "$RECORDS_NODE" tests/historical-records.test.cjs

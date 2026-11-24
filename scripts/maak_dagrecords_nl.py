@@ -1,173 +1,191 @@
 #!/usr/bin/env python3
-"""
-maak_dagrecords_nl.py
+"""Bouw de landelijke temperatuurrecordkaarten uit de KNMI-stationreeksen."""
 
-Bouwt dagrecords_nl.json: per KNMI-station, per kalenderdag (MM-DD) de hoogste
-maximumtemperatuur ooit gemeten (tx_hoog[0]) + de datum waarop dat record viel.
-
-Bron: de per-station records_<nr>.json. Standaard van R2 (data.weerlab.nl) zodat de
-LOPENDE EDR-patch (elke ~10 min) meekomt — een vandaag verbroken record staat dan
-direct in tx_hoog[0]. Valt terug op lokale files als R2 onbereikbaar is.
-Output voedt dagrecords_6dagen.html (geinterpoleerde NL-kaartjes, 6 dagen).
-"""
-import os, json, glob, time
-from datetime import datetime, timezone
+import argparse
+import json
+import os
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 try:
     import requests
 except ImportError:
     requests = None
 
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-
+ROOT = Path(__file__).resolve().parents[1]
 R2_BASE = "https://data.weerlab.nl"
+MAX_MEETGAT = 2
+# Geulhaven (343) is tegenwoordig een windstation. De korte oude
+# temperatuurreeks hoort niet op de landelijke temperatuurkaarten.
+UITGESLOTEN_TEMPERATUURSTATIONS = {"Rotterdam Geulhaven"}
 
-def laad_records(nr):
-    """Lokale records eerst — de lopend-patcher (nl.edaldus.weerrecords-lopend,
-    elke ~10 min) houdt deze incl. lopende EDR vers. Snel + geen R2-egress
-    (records-files zijn ~9 MB elk). Fallback R2 als lokaal ontbreekt."""
-    pad = f"records_{nr}.json"
-    if os.path.exists(pad):
-        try:
-            with open(pad) as f:
-                return json.load(f), "lokaal"
-        except Exception:
-            pass
-    if requests is not None:
-        try:
-            r = requests.get(f"{R2_BASE}/records_{nr}.json", timeout=20)
-            if r.ok:
-                return r.json(), "r2"
-        except Exception:
-            pass
-    return None, None
 
-# One registry for present and former stations; activity never excludes a record.
-from pathlib import Path
-registry = json.loads(Path("record-stations.json").read_text())
-STATIONS = [(entry["source"], name) for name, entry in registry["stations"].items()
-            if entry["source"] != "nl_extreme"]
-COORDS = {name: entry["coordinates"] for name, entry in registry["stations"].items()}
-HISTORISCHE_COORDS = COORDS
-MAX_TX_GAP = 2
-VANDAAG = datetime.now().date()
+def laad_records(bronmap, nr):
+    pad = bronmap / f"records_{nr}.json"
+    try:
+        return json.loads(pad.read_text())
+    except (OSError, ValueError):
+        if requests is not None:
+            try:
+                reactie = requests.get(f"{R2_BASE}/{pad.name}", timeout=20)
+                reactie.raise_for_status()
+                return reactie.json()
+            except (requests.RequestException, ValueError):
+                pass
+    return None
 
-DIT_JAAR = datetime.now().year
 
-stations_out = {}
-dagrecords = {}   # "MM-DD" -> { naam: {"t":val,"d":"YYYY-MM-DD"[, "l":1]} }
-gemist = []
-historische_namen = set()
-lopend_data = []   # lopend-datum per station (EDR-tussenstand t/m)
+def bouw_dagrecords(bronmap, uitvoer, koude=False):
+    registry = json.loads((ROOT / "record-stations.json").read_text())
+    register = registry["stations"]
+    soorten = ("tx_laag", "tn_laag") if koude else ("tx_hoog",)
+    kaarten = {soort: {} for soort in soorten}
+    gemist = []
+    lopend_data = []
+    tx_correcties = {}
+    dit_jaar = date.today().year
 
-bronnen = {"r2": 0, "lokaal": 0}
-for nr, naam in STATIONS:
-    if not COORDS.get(naam):
-        gemist.append((nr, naam, "geen coords")); continue
-    rec, bron = laad_records(nr)
-    if rec is None:
-        gemist.append((nr, naam, "geen data")); continue
-    bronnen[bron] = bronnen.get(bron, 0) + 1
-    dag = rec.get("dag", {})
-    # Meet dit station nu nog temperatuur? Nieuwste TX-jaar over alle dagen.
-    tx_jaren = [int(v[1][:4]) for mn in dag.values() for vals in mn.values()
-                for v in vals.get("tx_hoog", [])]
-    nieuwste_tx = max(tx_jaren) if tx_jaren else 0
-    if nieuwste_tx < VANDAAG.year - MAX_TX_GAP:
-        historische_namen.add(naam)
-    lon, lat = COORDS[naam]
-    stations_out[naam] = [lon, lat]
-    if rec.get("lopend"):
-        lopend_data.append(rec["lopend"])
-    for m_str, dagen in dag.items():
-        m = int(m_str)
-        for d_str, vals in dagen.items():
-            d = int(d_str)
-            txh = vals.get("tx_hoog")
-            if not txh:
-                continue
-            top = txh[0]              # [value, "YYYY-MM-DD"] — bevat al lopende EDR
-            val, datum = top[0], top[1]
-            sleutel = f"{m:02d}-{d:02d}"
-            cel = {"t": round(val, 1), "d": datum}
-            if naam in historische_namen:
-                cel["h"] = 1
-            if datum[:4] == str(DIT_JAAR):     # record dit (lopende) seizoen gezet
-                cel["l"] = 1
-            dagrecords.setdefault(sleutel, {})[naam] = cel
+    def zet_record(soort, sleutel, naam, waarde, datum, historisch):
+        dag = kaarten[soort].setdefault(sleutel, {})
+        vorige = dag.get(naam)
+        temperatuur = round(waarde, 1)
+        if vorige is not None:
+            if (temperatuur >= vorige["t"] if koude else temperatuur <= vorige["t"]):
+                return
+        cel = {"t": temperatuur, "d": datum}
+        if historisch:
+            cel["h"] = 1
+        if not koude and datum[:4] == str(dit_jaar):
+            cel["l"] = 1
+        dag[naam] = cel
 
-# Voeg de gecureerde landelijke extremen toe. Deze bron bevat juist de oude
-# meetlocaties die geen doorlopende records_<nr>.json-reeks meer hebben. Per
-# locatie en kalenderdag wint de hoogste waarde van de reguliere en curated bron.
-extremen, extremen_bron = laad_records("nl_extreme")
-if extremen is not None:
-    bronnen[extremen_bron] = bronnen.get(extremen_bron, 0) + 1
-    for m_str, dagen in extremen.get("dag", {}).items():
-        for d_str, vals in dagen.items():
-            sleutel = f"{int(m_str):02d}-{int(d_str):02d}"
-            for top in vals.get("tx_hoog", []):
-                if len(top) < 3:
+    for naam, station in register.items():
+        nr = station["source"]
+        if nr == "nl_extreme" or naam in UITGESLOTEN_TEMPERATUURSTATIONS:
+            continue
+        if not station.get("coordinates"):
+            gemist.append((nr, naam, "geen coords"))
+            continue
+        record = laad_records(bronmap, nr)
+        if record is None:
+            gemist.append((nr, naam, "geen data"))
+            continue
+        lopend = record.get("lopend")
+        if lopend:
+            lopend_data.append(lopend)
+        if not koude:
+            tx_correcties[naam] = {
+                c["date"]: c["original"] for c in record.get("weerlab_corrections", [])
+                if c.get("parameter") == "TX"
+            }
+        dagen = [
+            (f"{int(maand):02d}-{int(dag):02d}", waarden)
+            for maand, maanddagen in record.get("dag", {}).items()
+            for dag, waarden in maanddagen.items()
+        ]
+        for soort in soorten:
+            # Een voorlopig etmaal kan vooral bij een laagste TX een schijnrecord geven.
+            voorlopig = lopend if koude else None
+            nieuwste_jaar = max((
+                int(r[1][:4]) for _, waarden in dagen for r in waarden.get(soort, [])
+                if r[1] != voorlopig
+            ), default=0)
+            historisch = nieuwste_jaar < dit_jaar - MAX_MEETGAT
+            for sleutel, waarden in dagen:
+                rij = next((r for r in waarden.get(soort, []) if r[1] != voorlopig), None)
+                if rij is not None:
+                    zet_record(soort, sleutel, naam, rij[0], rij[1], historisch)
+
+    # Losse historische extremen vullen stations aan zonder doorlopende reeks.
+    # De aanvullingen hebben kouderecords voor TN waar de bron die vermeldt.
+    extremen = laad_records(bronmap, "nl_extreme")
+    if extremen is None:
+        gemist.append(("nl_extreme", "Historische extremen NL", "geen data"))
+    else:
+        for maand, dagen in extremen.get("dag", {}).items():
+            for dag, waarden in dagen.items():
+                sleutel = f"{int(maand):02d}-{int(dag):02d}"
+                for soort in soorten:
+                    for rij in waarden.get(soort, []):
+                        if len(rij) < 3:
+                            continue
+                        waarde, datum, naam = rij[:3]
+                        if naam in UITGESLOTEN_TEMPERATUURSTATIONS:
+                            continue
+                        if naam not in register:
+                            gemist.append(("hist", naam, "niet in stationsregister"))
+                            continue
+                        zet_record(soort, sleutel, naam, waarde, datum, True)
+
+    if gemist:
+        raise RuntimeError(f"Onvolledige dagrecordbronnen: {gemist}")
+    for soort, dagen in kaarten.items():
+        if len(dagen) != 366:
+            raise RuntimeError(f"Niet alle 366 kalenderdagen aanwezig voor {soort}")
+
+    vorige = json.loads(uitvoer.read_text()) if uitvoer.exists() else {}
+    if not koude:
+        warmte = kaarten["tx_hoog"]
+        for dag, records in vorige.get("dagrecords", {}).items():
+            for naam, record in records.items():
+                if naam in UITGESLOTEN_TEMPERATUURSTATIONS:
                     continue
-                val, datum, naam = top[0], top[1], top[2]
-                coords = COORDS.get(naam) or HISTORISCHE_COORDS.get(naam)
-                if coords is None:
-                    gemist.append(("hist", naam, "geen coords"))
-                    continue
-                huidige = dagrecords.setdefault(sleutel, {}).get(naam)
-                if huidige is not None and huidige["t"] >= val:
-                    continue
-                historische_namen.add(naam)
-                stations_out[naam] = list(coords)
-                dagrecords[sleutel][naam] = {
-                    "t": round(val, 1), "d": datum, "h": 1,
-                }
-else:
-    gemist.append(("nl_extreme", "Historische extremen NL", "geen data"))
+                nieuw = warmte.get(dag, {}).get(naam)
+                gecorrigeerd = tx_correcties.get(naam, {}).get(record["d"]) == record["t"]
+                if nieuw is None or (nieuw["t"] < record["t"] and not gecorrigeerd):
+                    raise RuntimeError(f"Dagrecord verdwenen/verlaagd: {dag} {naam}")
+        for dag, waarde in [("09-29", 28), ("09-30", 26.7)]:
+            if warmte[dag].get("Winterswijk", {}).get("t", float("-inf")) < waarde:
+                raise RuntimeError(f"Historisch controlerecord ontbreekt: {dag} Winterswijk")
 
-# Stations zonder enig dagrecord (alle dagen te weinig sample) eruit
-gebruikt = {naam for dag in dagrecords.values() for naam in dag}
-stations_out = {n: c for n, c in stations_out.items() if n in gebruikt}
-historisch_gebruikt = gebruikt & historische_namen
+    locaties = set()
+    aantallen = {}
+    for soort, dagen in kaarten.items():
+        gebruikt = {naam for dag in dagen.values() for naam in dag}
+        historisch = {naam for dag in dagen.values() for naam, cel in dag.items() if cel.get("h")}
+        aantallen[soort] = {"totaal": len(gebruikt), "historisch": len(historisch)}
+        locaties.update(gebruikt)
+    stations = {
+        naam: station["coordinates"] for naam, station in register.items()
+        if naam in locaties and station["coordinates"]
+    }
 
-uit = {
-    "gegenereerd": datetime.now(timezone.utc).isoformat(timespec="minutes"),
-    "bron": "KNMI dagrecords — hoogste maximumtemperatuur ooit per kalenderdag",
-    "lopend": max(lopend_data) if lopend_data else None,   # incl. lopende EDR t/m
-    "station_aantallen": {
-        "totaal": len(stations_out),
-        "historisch": len(historisch_gebruikt),
-    },
-    "stations": stations_out,
-    "dagrecords": dagrecords,
-}
-# Never replace a valid feed with a partial build.
-if gemist:
-    raise RuntimeError(f"Onvolledige dagrecordbronnen: {gemist}")
-if len(dagrecords) != 366:
-    raise RuntimeError("Niet alle 366 kalenderdagen aanwezig")
-previous = Path("dagrecords_nl.json")
-if previous.exists():
-    old = json.loads(previous.read_text())
-    for day, records in old.get("dagrecords", {}).items():
-        for name, record in records.items():
-            new = dagrecords.get(day, {}).get(name)
-            if new is None or new["t"] < record["t"]:
-                raise RuntimeError(f"Dagrecord verdwenen/verlaagd: {day} {name}")
-for day, value, date in [("09-29", 28.0, "1934-09-29"), ("09-30", 26.7, "1895-09-30")]:
-    record = dagrecords.get(day, {}).get("Winterswijk")
-    if not record or record["t"] < value:
-        raise RuntimeError(f"Historisch controlerecord ontbreekt: {day} Winterswijk")
-with open("dagrecords_nl.json.tmp", "w") as f:
-    json.dump(uit, f, ensure_ascii=False, separators=(",", ":"))
-os.replace("dagrecords_nl.json.tmp", "dagrecords_nl.json")
+    uit = {
+        "gegenereerd": datetime.now(timezone.utc).isoformat(timespec="minutes"),
+        "stations": stations,
+    }
+    if koude:
+        uit.update(
+            bron="KNMI-dagwaarden en historische aanvullingen — afgeronde etmalen",
+            station_aantallen=aantallen,
+            dagrecords=kaarten,
+        )
+    else:
+        uit.update(
+            bron="KNMI dagrecords — hoogste maximumtemperatuur ooit per kalenderdag",
+            lopend=max(lopend_data, default=None),
+            station_aantallen=aantallen["tx_hoog"],
+            dagrecords=kaarten["tx_hoog"],
+        )
 
-print(f"Meetlocaties: {len(stations_out)} ({len(historisch_gebruikt)} historisch) | "
-      f"kalenderdagen: {len(dagrecords)} | bron: {bronnen}")
-if gemist:
-    print("Gemist:", gemist)
-# Snelcheck: vandaag
-vandaag = datetime.now().strftime("%m-%d")
-vd = dagrecords.get(vandaag, {})
-if vd:
-    top = max(vd.items(), key=lambda kv: kv[1]["t"])
-    print(f"Record {vandaag}: hoogste = {top[1]['t']}° ({top[0]}, {top[1]['d']})")
+    # Een identieke koudekaart hoeft tijdens de lopende metingen niet opnieuw naar R2.
+    if koude and uit == {**vorige, "gegenereerd": uit["gegenereerd"]}:
+        return
+    tijdelijk = uitvoer.with_suffix(".json.tmp")
+    tijdelijk.write_text(json.dumps(uit, ensure_ascii=False, separators=(",", ":")))
+    os.replace(tijdelijk, uitvoer)
+    for soort in soorten:
+        print(f"{soort}: {aantallen[soort]['totaal']} meetlocaties, {len(kaarten[soort])} kalenderdagen")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--koude", action="store_true", help="Bouw de laagste TX- en TN-records.")
+    parser.add_argument("--bronmap", type=Path, default=ROOT, help="Map met de records per station.")
+    opties = parser.parse_args()
+    bestand = "dagrecords_koude_nl.json" if opties.koude else "dagrecords_nl.json"
+    bouw_dagrecords(opties.bronmap, ROOT / bestand, opties.koude)
+
+
+if __name__ == "__main__":
+    main()
