@@ -247,13 +247,13 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 <link rel="stylesheet" href="temperature-overview.css?v=20261122-verfijning1">
 <script src="temperature-map-core.js?v=20261122-1"></script>
 <script src="temperature-map-ui.js?v=20261122-tx-png"></script>
-<link rel="stylesheet" href="temperature-place.css?v=20261124-1">
+<link rel="stylesheet" href="temperature-place.css?v=20261124-uitersten">
 <script src="temperature-place-core.js?v=20261124-1"></script>
-<script src="temperature-place.js?v=20261124-1"></script>
+<script src="temperature-place.js?v=20261124-uitersten"></script>
 </head>
 <body>
 <div class="wrap">
-  <a class="terug" id="terugLink" href="beta.html#tx">← Weerlab bèta</a>
+  <a class="terug" id="terugLink" href="index.html#speciale-mos-mix?tab=tx">← Speciale MOS/MIX</a>
   <header>
     <div>
       <h1>Maximumtemperatuur <span class="badge exp" style="vertical-align:middle">TX-MOS · experimenteel</span></h1>
@@ -435,7 +435,7 @@ $("regio").value = regio;
 pasRegioToe();
 $("regio").onchange = () => {
   regio = $("regio").value; regioCells = null; pasRegioToe();
-  staat.vast = null; staat.hov = null; staat.auto = true; $("tip").hidden = true; $("graf").innerHTML=""; $("grafTitel").textContent="Verloop";
+  staat.vast = null; staat.hov = null; staat.zacht = staat.auto && staat.zacht; staat.auto = true; $("tip").hidden = true; $("graf").innerHTML=""; $("grafTitel").textContent="Verloop";
   stRijen = null; plaatsCel = null;
   if (D) { bouwDagen(); stationsTabel(); teken(); kpis(); }
 };
@@ -458,7 +458,7 @@ function maakLut(stops, lo, hi, n = 512) {
 const LUT = {temp: maakLut(TEMP, -20, 45), kans: maakLut(KANS, 0, 100), sigma: maakLut(SIGMA, 0.3, 3.5)};
 
 let D = null, C = 0, NY = 0, NX = 0, NT = 0, cellVan = null, naast = null, ll = null;
-const staat = {auto: true, modellen: false, laag: "tx", di: 0, vast: null, hov: null};
+const staat = {auto: true, zacht: false, modellen: false, laag: "tx", di: 0, vast: null, hov: null};
 function dec(b64, T) { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new T(u.buffer); }
 const i2 = b => dec(b, Int16Array), u1 = b => dec(b, Uint8Array);
 const v16 = TemperatureMap.decode16;
@@ -712,29 +712,57 @@ svg.addEventListener("mousemove", e => { if (!D || staat.vast != null) return; c
 svg.addEventListener("mouseleave", () => { if (staat.vast == null) { $("tip").hidden = true; $("gFocus").innerHTML = ""; } });
 svg.addEventListener("click", e => {
   if (!D) return; const c = celOp(e);
-  if (c < 0 || c === staat.vast) { staat.vast = null; $("tip").hidden = true; $("tip").classList.remove("vast"); focus(null); staat.auto = true; werkGrafiek(); return; }
+  if (c < 0 || c === staat.vast) { staat.vast = null; $("tip").hidden = true; $("tip").classList.remove("vast"); focus(null); staat.auto = true; staat.zacht = false; werkGrafiek(); return; }
   staat.vast = c; staat.auto = false; plaatsTip(c, e); const t = $("tip"); t.classList.add("vast"); const b = t.querySelector(".sluit"); b.hidden = false;
-  b.onclick = ev => { ev.stopPropagation(); staat.vast = null; t.hidden = true; t.classList.remove("vast"); focus(null); staat.auto = true; werkGrafiek(); };
+  b.onclick = ev => { ev.stopPropagation(); staat.vast = null; t.hidden = true; t.classList.remove("vast"); focus(null); staat.auto = true; staat.zacht = false; werkGrafiek(); };
   werkGrafiek();
 });
 
 
+function grafiekTemperatuur() {
+  const dag = D.dagen[staat.di];
+  return {value:c=>v16(dag?.txmax[c]), label:'Dagmaximum 2 m',
+    date:dag?dag.label+'T12:00:00Z':null, format:dagFmt};
+}
+function volgTemperatuurUiterste(richting) {
+  if (!D) return;
+  staat.auto = true;
+  staat.zacht = richting === 'warm';
+  staat.vast = null;
+  staat.hov = null;
+  $('tip').hidden = true;
+  $('tip').classList.remove('vast');
+  focus(null);
+  werkGrafiek();
+}
 function werkGrafiek() {
   if (!D) return;
-  let c = staat.vast;
-  if (staat.auto || c == null) {
-    let low=Infinity; c=-1;
-    for (const cc of gebiedCellen()) { const v=v16(D.dagen[staat.di].txmax[cc]); if (Number.isFinite(v)&&v<low) {low=v;c=cc;} }
+  const basis = grafiekTemperatuur();
+  const uitersten = TemperatureMap.summary(gebiedCellen(),basis.value,c=>ll[2*c]);
+  const automatisch = staat.auto || staat.vast == null;
+  const richting = staat.zacht ? 'warm' : 'cold';
+  const c = automatisch ? (staat.zacht ? uitersten.maxCell : uitersten.minCell) : staat.vast;
+  $('autoKoud').setAttribute('aria-pressed',String(automatisch && !staat.zacht));
+  if (c < 0) {
+    $('graf').replaceChildren();
+    $('grafTitel').textContent = 'Geen geldig temperatuurverloop';
+    TemperaturePlace.sync(null);
+    return;
   }
-  $('autoKoud').setAttribute('aria-pressed',String(staat.auto));
-  if (c<0) { $('graf').replaceChildren(); return; }
   grafiek(c); lokaleKaart(c);
-  TemperaturePlace.sync({name:D.plaats[c],lat:ll[2*c],lon:ll[2*c+1],cell:c,kind:'tx',auto:staat.auto});
+  const reference = automatisch && basis.date ? {
+    key:TemperaturePlaceData.dayKey(basis.date), area:gebiedNaam(), label:basis.label,
+    period:basis.format.format(new Date(basis.date)), value:basis.value(c),
+  } : null;
+  TemperaturePlace.sync({
+    name:D.plaats[c],lat:ll[2*c],lon:ll[2*c+1],cell:c,kind:'tx',auto:automatisch,
+    extreme:automatisch ? richting : null,reference,extremesAvailable:uitersten.valid>0,
+  });
   $('graf').setAttribute('aria-label','Temperatuurverloop bij '+D.plaats[c]);
   const dag = D.dagen[staat.di];
   const bron = dag.gemeten?.[c] === 1 ? 'De stip markeert het geschatte maximum tot ' + uurFmt.format(new Date(dag.gemeten_tot_utc)) + ' uur. '
     : 'De stip markeert het maximum op de gekozen kaart. ';
-  $('grafSub').textContent=(staat.auto?'Laagste dagmaximum binnen '+gebiedNaam()+' op de gekozen dag. ':'Zelf gekozen plaats. ')+bron+'De lijn toont de uurverwachting.';
+  $('grafSub').textContent=(staat.auto?(staat.zacht?'Hoogste dagmaximum binnen ':'Laagste dagmaximum binnen ')+gebiedNaam()+' op de gekozen dag. ':'Zelf gekozen plaats. ')+bron+'De lijn toont de uurverwachting.';
 }
 
 function grafiek(c) {
@@ -847,7 +875,7 @@ $("isoChk").onchange = teken; $("waardenChk").onchange = teken; $("laagChk").onc
 $("uitlegBtn").onclick = () => $("uitleg").showModal(); $("uitlegSluit").onclick = () => $("uitleg").close();
 if (window.self !== window.top) $("terugLink").hidden = true;
 
-$('autoKoud').onclick = () => { staat.auto = true; staat.vast = null; staat.hov = null; $('tip').hidden = true; focus(null); werkGrafiek(); };
+$('autoKoud').onclick = () => volgTemperatuurUiterste('cold');
 $('toonModellen').onchange = e => { staat.modellen = e.target.checked; werkGrafiek(); };
 $('topLijst').addEventListener('keydown', e => { const li = e.target.closest('li[data-c]'); if (li && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); li.click(); } });
 
@@ -867,7 +895,7 @@ function lokaleKaart(c) {
   TemperatureMapUI.location({name:D.plaats[c],value:fmt(v)+' °C',kind:'Dagmaximum op 2 m · 00–24 UTC',
     interval:Number.isFinite(s)?'Modelmatig 80%-interval: '+fmt(v-1.28155*s)+' tot '+fmt(v+1.28155*s)+' °C':null,
     details:[['Kans op ≥ 25 °C',TemperatureMap.percent(d.p25[c])],['Bodem',soil],['Bodemvocht',D.vocht&&D.vocht[c]<=100?'index '+D.vocht[c]+'/100':'onbekend']],
-    note:(staat.auto?'Volgt de roostercel met het laagste dagmaximum. ':'Zelf gekozen roostercel. ')+
+    note:(staat.auto?(staat.zacht?'Volgt de roostercel met het hoogste dagmaximum. ':'Volgt de roostercel met het laagste dagmaximum. '):'Zelf gekozen roostercel. ')+
       (d.buiten_training?'Deze dag ligt buiten het toetsbereik; de verwachting en marge zijn indicatief. ':'De marge beschrijft de berekende spreiding van mogelijke uitkomsten. ')+
       (d.onvolledig?'De modelinvoer dekt dit etmaal niet volledig.':'Lokale verschillen binnen een cel van 5 km blijven mogelijk.')+gemeten});
 }
@@ -882,7 +910,7 @@ TemperaturePlace.mount({kind:'tx',dataBase:DATA_BASE,
     staat.auto=false;staat.vast=nearest.index;staat.hov=null;$('tip').hidden=true;
     focus(nearest.index);werkGrafiek();
   },
-  onReset:()=>$('autoKoud').click()
+  onExtreme:volgTemperatuurUiterste
 });
 laad();
 </script>

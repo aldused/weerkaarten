@@ -5,6 +5,7 @@ window.TemperaturePlace=(function(){
   const dayFmt=new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',weekday:'short',day:'numeric',month:'short'});
   const shortDay=new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',weekday:'short',day:'numeric'});
   const stampFmt=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  const exportDate=new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',day:'numeric',month:'long',year:'numeric'});
   const periodFmt=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
   const fmt=v=>Number.isFinite(v)?v.toFixed(1).replace('.',',').replace('-','−'):'–';
   const dateOf=row=>new Date(row.key+'T12:00:00Z');
@@ -12,18 +13,19 @@ window.TemperaturePlace=(function(){
   const svgNode=(tag,attrs,parent,text)=>{const n=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(text!=null)n.textContent=text;parent.append(n);return n;};
   let root,config,places=[],choice=null,point=null,rows=[],selection=0,results=[],active=-1,manual=false,pendingRestore=null;
   let grass=true,margins=false,ignoreSync=false,catalogueError=false,chartWidth=1120;
+  let exporting=false, pendingWarm=false, extremesAvailable=false, referenceChanged=false;
   const $=id=>root.querySelector('#'+id);
   function mount(options){
     config=options;
     root=tag('section','temperature-place');root.id='placeForecast';root.setAttribute('aria-labelledby','placeHeading');
     root.innerHTML=`<div class="place-top"><div class="place-intro"><p class="place-eyebrow">Jouw temperatuurverwachting</p><h2 id="placeHeading">Temperatuur voor <span id="placeName">de koudste plaats</span></h2><p class="place-lead">Maximum, nachtminimum en grasminimum in één overzicht.</p></div>
       <form class="place-search" role="search" autocomplete="off"><label for="placeQuery">Zoek een plaats</label><div class="place-search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="placeQuery" type="search" placeholder="Bijv. Rotterdam of De Bilt" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="placeResults" spellcheck="false"><button type="submit">Toon</button></div><ul id="placeResults" role="listbox" aria-label="Gevonden plaatsen" hidden></ul><p class="place-search-status" id="placeSearchStatus" role="status" aria-live="polite">Zoeken in Nederlandse plaatsen</p></form></div>
-      <div class="place-tools"><p class="place-mode" id="placeMode">Volgt de koudste plaats op de kaart</p><div class="place-toggles"><label><input type="checkbox" id="placeGrass" checked><span class="series-key grass"></span>Grasminimum</label><label><input type="checkbox" id="placeMargins">Foutmarges</label><button type="button" id="placeReset" hidden>Volg koudste plaats</button></div></div>
+      <div class="place-tools"><div><div class="place-extremes" role="group" aria-label="Plaats kiezen op temperatuur"><button type="button" id="placeCold" aria-pressed="true" disabled><i></i>Koudste plaats</button><button type="button" id="placeWarm" aria-pressed="false" disabled><i></i>Zachtste plaats</button></div><p class="place-mode" id="placeMode" aria-live="polite">Volgt de koudste plaats op de kaart</p></div><div class="place-toggles"><label><input type="checkbox" id="placeGrass" checked><span class="series-key grass"></span>Grasminimum</label><label><input type="checkbox" id="placeMargins">Foutmarges</label><button type="button" id="placeDownload" disabled>Download grafiek (PNG)</button></div></div>
       <div class="place-metrics" id="placeMetrics"></div>
       <div class="place-plot" id="placePlot"><div class="place-empty" role="status">De temperatuurverwachting wordt geladen…</div></div>
       <div class="place-chart-footer"><div class="place-legend"><span><i class="series-key max"></i>Maximum 2 m</span><span><i class="series-key min"></i>Minimum 2 m</span><span id="placeGrassLegend"><i class="series-key grass"></i>Minimum 10 cm boven gras</span></div><span id="placeHorizon"></span></div>
       <p class="place-explanation">Het minimum hoort bij de nacht vóór de aangegeven dag (18–09 uur Nederlandse tijd). Het maximum geldt voor 00–24 UTC. Grasminimum is de luchttemperatuur op 10 cm boven gras. Het vlak toont het min–maxbereik.</p>
-      <p class="place-sources" id="placeSources"></p><div class="place-errors" id="placeErrors" role="status" hidden></div>
+      <p class="place-sources" id="placeSources"></p><p class="place-export-status" id="placeExportStatus" role="status" hidden></p><div class="place-errors" id="placeErrors" role="status" hidden></div>
       <details class="place-data"><summary>Alle waarden en exacte periodes</summary><div class="place-table-wrap" tabindex="0" role="region" aria-label="Temperatuurwaarden per dag"><table><thead><tr><th scope="col">Dag</th><th scope="col">Maximum 2 m</th><th scope="col">Minimum 2 m</th><th scope="col">Grasminimum</th><th scope="col">Periodes en dekking</th></tr></thead><tbody id="placeTable"></tbody></table></div></details>`;
     document.querySelector('header').after(root);
     const input=$('placeQuery');
@@ -41,8 +43,14 @@ window.TemperaturePlace=(function(){
     input.addEventListener('blur',e=>{if(!root.querySelector('.place-search').contains(e.relatedTarget))closeResults();});
     $('placeGrass').onchange=e=>{grass=e.target.checked;render();};
     $('placeMargins').onchange=e=>{margins=e.target.checked;if(margins)for(const kind of ['night','tx'])if(sources[kind]&&!sources[kind].periods.some(p=>p.sigma))load(kind,true);render();};
-    $('placeReset').onclick=()=>{manual=false;choice=null;pendingRestore=null;input.value='';try{sessionStorage.removeItem('weerlab_temperature_place');}catch(e){}config.onReset();render();};
-    try{const saved=JSON.parse(sessionStorage.getItem('weerlab_temperature_place'));if(saved&&typeof saved.name==='string'&&Number.isFinite(saved.lat)&&Number.isFinite(saved.lon))pendingRestore=saved;}catch(e){}
+    $('placeCold').onclick=()=>chooseExtreme('cold');
+    $('placeWarm').onclick=()=>chooseExtreme('warm');
+    $('placeDownload').onclick=downloadChart;
+    try {
+      const saved=JSON.parse(sessionStorage.getItem('weerlab_temperature_place'));
+      pendingWarm=saved?.extreme==='warm';
+      if(saved&&typeof saved.name==='string'&&Number.isFinite(saved.lat)&&Number.isFinite(saved.lon))pendingRestore=saved;
+    }catch(e){}
     fetch('temperature-places.json?v=20261124-1').then(r=>{if(!r.ok)throw new Error('plaatsenlijst');return r.json();}).then(j=>{places=Data.catalogue(j.places);$('placeSearchStatus').textContent='Meer dan 2.000 Nederlandse plaatsen';if(input.value)suggest();}).catch(()=>{catalogueError=true;$('placeSearchStatus').textContent='De plaatsenlijst kon niet laden. Vernieuw de pagina om opnieuw te proberen.';});
     let width=0;new ResizeObserver(entries=>{const next=entries[0].contentRect.width;if(Math.abs(next-width)>.5){width=next;if(rows.length)chart();}}).observe($('placePlot'));
     load(config.kind==='night'?'tx':'night');
@@ -63,23 +71,53 @@ window.TemperaturePlace=(function(){
     $('placeQuery').setAttribute('aria-activedescendant','placeOption'+active);
   }
   function closeResults(){if(!root)return;$('placeResults').hidden=true;$('placeQuery').setAttribute('aria-expanded','false');$('placeQuery').removeAttribute('aria-activedescendant');}
+  function chooseExtreme(direction) {
+    manual=false;
+    choice=null;
+    referenceChanged=true;
+    pendingRestore=null;
+    pendingWarm=false;
+    results=[];
+    active=-1;
+    closeResults();
+    $('placeQuery').value='';
+    $('placeSearchStatus').textContent='Zoeken in Nederlandse plaatsen';
+    config.onExtreme(direction);
+  }
   function select(p){
+    pendingRestore=null;
+    pendingWarm=false;
     point=p;choice=p;manual=true;selection=0;closeResults();results=[];active=-1;$('placeQuery').value=p.name;
     $('placeSearchStatus').textContent='Verwachting voor '+p.name;
     try{sessionStorage.setItem('weerlab_temperature_place',JSON.stringify({name:p.name,lat:p.lat,lon:p.lon}));}catch(e){}
     ignoreSync=true;try{config.onSelect(p);}finally{ignoreSync=false;}render();
   }
   function sync(p){
+    if(!p){
+      extremesAvailable=false;
+      if(!manual)point=null;
+      render();
+      return;
+    }
+    extremesAvailable=p.extremesAvailable;
     if(ignoreSync)return;
     if(manual&&choice&&!p.auto){const cell=Data.nearest(sources[p.kind],choice);if(cell?.index===p.cell){render();return;}}
+    referenceChanged=p.auto&&(referenceChanged||p.reference?.key!==point?.reference?.key||p.extreme!==point?.extreme);
     point=p;choice=null;manual=!p.auto;
     if(document.activeElement!==$('placeQuery'))$('placeQuery').value=p.auto?'':p.name;
-    try{if(p.auto)sessionStorage.removeItem('weerlab_temperature_place');else sessionStorage.setItem('weerlab_temperature_place',JSON.stringify({name:p.name,lat:p.lat,lon:p.lon}));}catch(e){}
+    try {
+      if(p.extreme==='warm')sessionStorage.setItem('weerlab_temperature_place',JSON.stringify({extreme:'warm'}));
+      else if(p.auto){if(!pendingWarm&&!pendingRestore)sessionStorage.removeItem('weerlab_temperature_place');}
+      else sessionStorage.setItem('weerlab_temperature_place',JSON.stringify({name:p.name,lat:p.lat,lon:p.lon}));
+    }catch(e){}
     render();
   }
   function setSource(kind,j){
     try{sources[kind]=Data.source(kind,j);delete errors[kind];
-      if(kind===config.kind&&(pendingRestore||choice)){const p=pendingRestore||choice;pendingRestore=null;select(p);}
+      if(kind===config.kind){
+        if(pendingWarm)chooseExtreme('warm');
+        else if(pendingRestore||choice)select(pendingRestore||choice);
+      }
     }catch(e){errors[kind]='De '+(kind==='night'?'minimum-':'maximum-')+'gegevens hebben geen geldig formaat.';}
     render();
   }
@@ -96,19 +134,91 @@ window.TemperaturePlace=(function(){
   function render(){
     if(!root)return;
     $('placeName').textContent=point?.name||'de koudste plaats';
-    $('placeMode').textContent=manual?'Gekozen plaats · rooster circa 5 km':'Volgt de koudste plaats op de kaart';
-    $('placeReset').hidden=!manual;$('placeGrassLegend').hidden=!grass;
+    $('placeMode').textContent=manual?'Gekozen plaats · rooster circa 5 km':extremeDescription()||'Volgt de koudste plaats op de kaart';
+    $('placeCold').disabled=!extremesAvailable;
+    $('placeWarm').disabled=!extremesAvailable;
+    $('placeCold').setAttribute('aria-pressed',String(!manual&&point?.extreme!=='warm'));
+    $('placeWarm').setAttribute('aria-pressed',String(!manual&&point?.extreme==='warm'));
+    $('placeDownload').disabled=true;
+    $('placeGrassLegend').hidden=!grass;
     const messages=Object.values(errors),errorBox=$('placeErrors');errorBox.replaceChildren();errorBox.hidden=!messages.length;
     if(messages.length){errorBox.append(tag('span','',messages.join(' ')+' De beschikbare reeksen blijven zichtbaar.'));const b=tag('button','','Opnieuw laden');b.type='button';b.onclick=()=>Object.keys(errors).forEach(kind=>load(kind,margins));errorBox.append(b);}
     $('placeSources').textContent=['night','tx'].filter(k=>sources[k]).map(k=>(k==='night'?'Minima':'Maxima')+': '+stampFmt.format(new Date(sources[k].created))).join(' · ')+' · bijwerktijden Nederlandse tijd';
-    if(!point)return;
+    if(!point){
+      rows=[];
+      $('placeMetrics').replaceChildren();
+      $('placePlot').replaceChildren(tag('div','place-empty',sources[config.kind]?'Geen temperatuurwaarden voor deze kaartperiode.':'De temperatuurverwachting wordt geladen…'));
+      $('placeTable').replaceChildren();
+      $('placeHorizon').textContent='';
+      return;
+    }
     const result=Data.series(sources,point);rows=result.rows;
     if(!rows.some(r=>Number.isFinite(r.min)||Number.isFinite(r.max)||Number.isFinite(r.grass))){
       $('placeMetrics').replaceChildren();$('placePlot').replaceChildren(tag('div','place-empty',Object.keys(sources).length?'Voor deze plaats zijn nog geen geldige waarden beschikbaar binnen het Nederlandse rekenrooster.':'De temperatuurverwachting wordt geladen…'));$('placeTable').replaceChildren();return;
     }
+    if(!manual&&referenceChanged){
+      const selected=rows.findIndex(row=>row.key===point.reference?.key);
+      selection=selected<0?0:selected;
+    }
+    referenceChanged=false;
     selection=Math.min(selection,rows.length-1);metrics();chart();table();
+    $('placeDownload').disabled=exporting||!$('placePlot').querySelector('svg');
     const indicative=rows.find(r=>r.day?.buiten_training||r.night?.buiten_training);
     $('placeHorizon').textContent=indicative?'Vanaf '+shortDay.format(dateOf(indicative))+': indicatief':'';
+  }
+  function extremeDescription() {
+    const ref=point?.reference;
+    if(manual||!ref)return '';
+    const direction=point.extreme==='warm'?'Zachtste plaats':'Koudste plaats';
+    return [direction,ref.area,ref.label,ref.period,fmt(ref.value)+' °C'].join(' · ');
+  }
+  async function downloadChart() {
+    if(exporting||!$('placePlot').querySelector('svg'))return;
+    const button=$('placeDownload');
+    const status=$('placeExportStatus');
+    exporting=true;
+    button.disabled=true;
+    button.textContent='PNG maken…';
+    status.hidden=true;
+    try {
+      const {svgMapImage,saveMapPNG}=await import('./temperature-map-export.mjs?v=20261124-grafiek');
+      const svg=$('placePlot').querySelector('svg');
+      if(!svg||!point||!rows.length)throw new Error('Grafiek niet beschikbaar');
+      const first=rows[0];
+      const last=rows.at(-1);
+      const palette=getComputedStyle(root);
+      const series=[['max','Maximum op 2 m'],['min','Nachtminimum op 2 m']];
+      if(grass)series.push(['grass','Nachtminimum op 10 cm boven gras (stippellijn)']);
+      const legends=series.filter(([id])=>svg.querySelector('.place-dot.'+id)).map(([id,label])=>({
+        label,color:palette.getPropertyValue('--tp-'+id).trim(),
+      }));
+      if(svg.querySelector('.place-band'))legends.push({label:'Schaduw rond de lijnen: modelmatig 80%-interval voor beschikbare reeksen',color:'#c4cedd'});
+      const details={
+        title:'Temperatuurverwachting voor '+point.name,
+        time:exportDate.format(dateOf(first))+' t/m '+exportDate.format(dateOf(last)),
+        run:$('placeSources').textContent.replace(' · bijwerktijden Nederlandse tijd',''),
+        lead:[$('placeHorizon').textContent,extremeDescription()].filter(Boolean).join(' · '),
+        source:'weerlab.nl · Weerlab MOS · KNMI, DWD, ECMWF en NOAA',
+        mapAttribution:'Nachtminima op de einddatum van de nacht (18–09 uur lokaal) · Dagmaxima 00–24 UTC',
+        legends,
+      };
+      const slug=Data.normalise(point.name).replace(/ /g,'-')||'plaats';
+      const chartImage=await svgMapImage(svg,{
+        background:palette.getPropertyValue('--surface').trim(),
+        pixelWidth:2400,
+        omit:'.place-hit',
+      });
+      await saveMapPNG(chartImage,details,'weerlab-temperatuur-'+slug+'-'+first.key+'.png');
+      status.textContent='PNG gedownload.';
+    }catch(error){
+      status.textContent='De grafiek kon niet worden gedownload. Probeer het opnieuw.';
+      console.error(error);
+    }finally{
+      exporting=false;
+      button.textContent='Download grafiek (PNG)';
+      button.disabled=!$('placePlot').querySelector('svg');
+      status.hidden=false;
+    }
   }
   function metrics(){
     const row=rows[selection],container=$('placeMetrics');container.replaceChildren();

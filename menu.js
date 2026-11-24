@@ -39,6 +39,12 @@
     const id=state.product?.id||'';if(id===lastPersonalProduct)return;lastPersonalProduct=id;if(id)personal.visit(id);
   }
   const selfPage = site.selfPage || 'index.html';
+  const temperatureTabs = new Set(['grondtemp','tn','tx','rijnmond','mos','neerslag']);
+  function temperatureRoute(tab) {
+    return tab !== 'grondtemp' && temperatureTabs.has(tab)
+      ? 'speciale-mos-mix?tab=' + tab
+      : 'speciale-mos-mix';
+  }
   const storagePrefix = site.storagePrefix || 'weerlab-menu-v9';
   const products = MENU_PRODUCTS;
   const byId = new Map(products.map(p => [p.id, p]));
@@ -95,6 +101,14 @@
         }
       }catch{}
     }
+    if(state.product?.id==='speciale-mos-mix'){
+      try {
+        const frameURL=new URL($('#product-frame').contentWindow.location.href);
+        if(frameURL.origin===url.origin && /\/beta_temperaturen(?:\.html)?$/.test(frameURL.pathname)) {
+          url.hash=temperatureRoute(frameURL.hash.slice(1));
+        }
+      } catch {}
+    }
     const basic=!!state.product&&url.hash===new URL(state.product.href,location.href).hash;
     return {url:url.href,title,basic,id:state.product?.id};
   }
@@ -102,7 +116,7 @@
     if(restoringPageView)return;
     const page=currentPageLink();
     if(personal)$('#page-personal-back').hidden=!state.productRoute;
-    if(state.product?.id==='beta'&&location.hash!==new URL(page.url).hash){
+    if(['beta','speciale-mos-mix'].includes(state.product?.id)&&location.hash!==new URL(page.url).hash){
       history.replaceState(null,'',new URL(page.url).hash);$('#product-frame').dataset.route=location.hash.slice(1);state=readRoute();
     }
     $('#product-permalink').href=page.url;$('#product-permalink').title=page.url;
@@ -170,6 +184,20 @@
     const incoming=location.hash.slice(1) || site.defaultRoute || '';
     if(/^weerbewaking(?:-|$)/.test(incoming)){location.replace('https://meteobewaking.nl/cms/weerbewaking/weerbewaking.html');return {page:'start',type:'',filters:{},q:''};}
     let raw=site.routeAliases?.[incoming] ?? incoming;
+    const [oldRoute,oldQuery]=raw.split('?');
+    if (oldRoute==='beta' && byId.has('speciale-mos-mix')) {
+      const params=new URLSearchParams(oldQuery);
+      const tab=params.get('tab');
+      if (tab==='temperaturen'||temperatureTabs.has(tab)) {
+        let view=tab;
+        if(tab==='temperaturen' && params.has('view'))try {
+          const saved=new URL(params.get('view'),location.href);
+          if(saved.origin===location.origin && /\/beta_temperaturen(?:\.html)?$/.test(saved.pathname))view=saved.hash.slice(1);
+        }catch{}
+        raw=temperatureRoute(view);
+        history.replaceState(null,'','#'+raw);
+      }
+    }
     // De oude modelvergelijkers hebben één opvolger op de voormalige Weerkaart-plek.
     if(/^weerkaarten-(vierluik|hires4|hires6|global4)$/.test(raw.split('?')[0])){
       raw='weerkaart';history.replaceState(null,'','#weerkaart');
@@ -232,6 +260,13 @@
         else link.removeAttribute('aria-current');
       }
       dialogNav.insertBefore(winterNav.cloneNode(true),dialogNav.querySelector('[href="index.html#nieuws"]'));
+    }
+    const mosLink=$('.sidebar .sidebar-mos');
+    if(mosLink){
+      if(state.product?.id==='speciale-mos-mix')mosLink.setAttribute('aria-current','page');
+      else mosLink.removeAttribute('aria-current');
+      const mobileNav=$('#dialog-nav');
+      mobileNav.insertBefore(mosLink.cloneNode(true),mobileNav.querySelector('[href="index.html#nieuws"]'));
     }
   }
   function pin(p){const pinned=favorites.includes(p.id);return `<button class="pin-button" data-pin="${p.id}" ${personal&&!personal.ready()?'disabled':''} aria-pressed="${pinned}" aria-label="${escape(p.name)} ${pinned?'verwijderen uit':'toevoegen aan'} favorieten" title="${pinned?'Verwijderen uit':'Toevoegen aan'} favorieten">${icon('star')}</button>`;}
@@ -594,14 +629,15 @@
         for(const key of ['run','station','lat','lon'])if(params.has(key))url.searchParams.set(key,params.get(key));
         frame.src=url.href;
       }
+      if(state.product?.id==='speciale-mos-mix'){
+        const url=new URL(frame.src,location.href);
+        const tab=new URLSearchParams(route.split('?')[1]).get('tab');
+        if(temperatureTabs.has(tab))url.hash=tab;
+        frame.src=url.href;
+      }
       if(state.product?.id==='beta'){
         const betaURL=new URL(frame.src,location.href),params=new URLSearchParams(route.split('?')[1]||''),tab=params.get('tab');
         if(tab&&/^[a-z0-9_-]+$/i.test(tab))betaURL.hash=tab;
-        // Select a shared temperature view before the nested iframe loads.
-        if(tab==='temperaturen'&&params.get('view'))try{
-          const wanted=new URL(params.get('view'),location.href);
-          if(wanted.origin===location.origin&&wanted.pathname.replace(/\.html$/,'')==='/beta_temperaturen'&&['#grondtemp','#tn','#tx'].includes(wanted.hash))betaURL.hash=wanted.hash;
-        }catch{}
         frame.src=betaURL.href;
       }
       frame.addEventListener('load',()=>{if(state.product?.src)wireDirectProduct(frame);wirePageActions(frame);restoreBetaView(frame);refreshPageActions();});

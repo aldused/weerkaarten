@@ -6,11 +6,11 @@ const svgProperties = [
   'font-family', 'font-size', 'font-weight', 'text-anchor', 'visibility', 'vector-effect',
 ];
 
-export async function svgMapImage(svg) {
+export async function svgMapImage(svg, {background, pixelWidth=1600, omit='#gFocus'}={}) {
   const copy = svg.cloneNode(true);
   const {width, height} = svg.viewBox.baseVal;
   const canvas = document.createElement('canvas');
-  canvas.width = 1600;
+  canvas.width = pixelWidth;
   canvas.height = Math.round(canvas.width * height / width);
   copy.setAttribute('width', canvas.width);
   copy.setAttribute('height', canvas.height);
@@ -22,13 +22,13 @@ export async function svgMapImage(svg) {
       if (value) element.style.setProperty(property, value.replace(/url\(["']?[^#)]+#([^"')]+)["']?\)/g, 'url(#$1)'));
     }
   });
-  copy.querySelector('#gFocus')?.remove();
+  copy.querySelectorAll(omit).forEach(element => element.remove());
   const source = new XMLSerializer().serializeToString(copy);
   const image = new Image();
   image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(source);
   await image.decode();
   const context = canvas.getContext('2d');
-  context.fillStyle = getComputedStyle(svg).getPropertyValue('--sea').trim() || '#dfeaf5';
+  context.fillStyle = background || getComputedStyle(svg).getPropertyValue('--sea').trim() || '#dfeaf5';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.drawImage(image, 0, 0);
   return canvas;

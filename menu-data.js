@@ -1,5 +1,14 @@
 /* Weerlab productcatalogus. Kaartfilters en routes gecontroleerd tegen index.html; het modellenvierluik heeft één ingang. */
 const MENU_PRODUCTS = [
+  {
+    id:'speciale-mos-mix', name:'Speciale MOS/MIX',
+    description:'Temperatuurkaarten en grafieken per plaats voor dagmaximum, nachtminimum en grasminimum.',
+    category:'verwachting', type:'kaarten', section:'Temperatuur', icon:'temp',
+    href:'index.html#speciale-mos-mix', src:'beta_temperaturen.html?v=20261124-speciale-mos',
+    thumbnail:null, facets:{veld:['temperatuur'],gebied:['nl'],vorm:['kaart']},
+    keywords:'Weerlab MOS MIX MOSMIX temperatuur temperaturen maximum minimum grondtemperatuur grasminimum grondvorst grafiek plaats',
+    restricted:false,
+  },
   {id:'wegdek',name:'Wegdek en strooien',description:'Actuele wegdektemperatuur, Rijkswaterstaat-verwachting en strooiroutes.',category:'nu',type:'nu',section:'Metingen',icon:'map',href:'index.html#wegdek',src:'wegdek.html?v=1',thumbnail:null,facets:{grootheid:['temperatuur']},keywords:'wegdek gladheid strooizout strooiwagens strooikaart Rijkswaterstaat RWS vorst'},
   {id:'wintersport',name:'Wintersportweer',description:'Sneeuwhoogtes en sneeuwverwachtingen voor Europese skigebieden.',category:'verwachting',type:'kaarten',section:'Europa',icon:'map',href:'index.html#wintersport',src:'wintersport.html',thumbnail:null,facets:{},keywords:'wintersport ski sneeuw sneeuwhoogte sneeuwval alpen',restricted:false},
   {id:'stormen-windstoten',name:'Stormen en windstoten',description:'Zoek historische stormen en vergelijk de zwaarste windstoten.',category:'terugkijken',type:'terug',section:'Records & extremen',icon:'wind',href:'index.html#stormen-windstoten',src:'beta_stormdagen.html?v=20261024-live',thumbnail:null,facets:{},keywords:'storm stormen stormenarchief stormarchief stormdagen wind windstoten zware storm orkaan Beaufort KNMI historisch historische meten zoeken vergelijken',restricted:false},
@@ -1390,7 +1399,7 @@ const MENU_PRODUCTS = [
     "section": "Experimenten",
     "icon": "studio",
     "href": "index.html#beta",
-    "src": "beta.html?v=20261117-zonder-wegdek",
+    "src": "beta.html?v=20261124-speciale-mos",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",
