@@ -39,7 +39,12 @@
     const id=state.product?.id||'';if(id===lastPersonalProduct)return;lastPersonalProduct=id;if(id)personal.visit(id);
   }
   const selfPage = site.selfPage || 'index.html';
-  const temperatureTabs = new Set(['grondtemp','tn','tx','mos']);
+  const temperatureTabs = new Map([
+    ['grondtemp','Gras · 10 cm'],
+    ['tn','Minimum'],
+    ['tx','Maximum'],
+    ['mos','MOS & controle'],
+  ]);
   const movedTemperatureTabs = {"rijnmond":"temperatuur-rijnmond.html","neerslag":"neerslag-rijnmond.html"};
   function temperatureRoute(tab) {
     return tab !== 'grondtemp' && temperatureTabs.has(tab)
@@ -88,6 +93,38 @@
   pageActions.querySelector('.bookmark-help').after($('#product-expand'));
   document.querySelector('.product-heading').remove();
   main.before(pageActions);
+  const temperatureNav = document.createElement('nav');
+  temperatureNav.id = 'temperature-nav';
+  temperatureNav.setAttribute('aria-label','Temperatuur kiezen');
+  temperatureNav.hidden = true;
+  for (const [tab,label] of temperatureTabs) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.temperatureTab = tab;
+    button.textContent = label;
+    temperatureNav.append(button);
+  }
+  $('#product-frame').before(temperatureNav);
+  temperatureNav.addEventListener('click',event=>{
+    const tab = event.target.closest('button[data-temperature-tab]')?.dataset.temperatureTab;
+    if (!temperatureTabs.has(tab) || state.product?.id !== 'speciale-mos-mix') return;
+    const hash = '#'+temperatureRoute(tab);
+    if (hash === location.hash) return;
+    const frame = $('#product-frame');
+    try {
+      const url = new URL(frame.contentWindow.location.href);
+      if (url.origin === location.origin && /\/beta_temperaturen(?:\.html)?$/.test(url.pathname)) {
+        url.hash = tab === 'grondtemp' ? '' : tab;
+        frame.contentWindow.location.replace(url.href);
+        history.pushState(null,'',hash);
+        state = readRoute();
+        frame.dataset.route = state.productRoute;
+        refreshPageActions();
+        return;
+      }
+    } catch {}
+    navigate(hash);
+  });
   function favoriteCount(){return favorites.length+savedPages.length;}
   function currentPageLink(){
     const url=new URL(selfPage,location.href);url.hash=location.hash||'#menu/start';
@@ -103,12 +140,7 @@
       }catch{}
     }
     if(state.product?.id==='speciale-mos-mix'){
-      try {
-        const frameURL=new URL($('#product-frame').contentWindow.location.href);
-        if(frameURL.origin===url.origin && /\/beta_temperaturen(?:\.html)?$/.test(frameURL.pathname)) {
-          url.hash=temperatureRoute(frameURL.hash.slice(1));
-        }
-      } catch {}
+      url.hash = temperatureRoute(new URLSearchParams(state.productRoute.split('?')[1]).get('tab'));
     }
     const basic=!!state.product&&url.hash===new URL(state.product.href,location.href).hash;
     return {url:url.href,title,basic,id:state.product?.id};
@@ -119,6 +151,14 @@
     if(personal)$('#page-personal-back').hidden=!state.productRoute;
     if(['beta','speciale-mos-mix'].includes(state.product?.id)&&location.hash!==new URL(page.url).hash){
       history.replaceState(null,'',new URL(page.url).hash);$('#product-frame').dataset.route=location.hash.slice(1);state=readRoute();
+    }
+    temperatureNav.hidden = state.product?.id !== 'speciale-mos-mix';
+    if (!temperatureNav.hidden) {
+      const tab = new URLSearchParams(state.productRoute.split('?')[1]).get('tab');
+      const activeTab = temperatureTabs.has(tab) ? tab : 'grondtemp';
+      for (const button of temperatureNav.children) {
+        button.setAttribute('aria-pressed',String(button.dataset.temperatureTab === activeTab));
+      }
     }
     $('#product-permalink').href=page.url;$('#product-permalink').title=page.url;
     $('#page-copy').title='Kopieer de directe link naar '+page.title;
@@ -641,6 +681,7 @@
       }
       if(state.product?.id==='speciale-mos-mix'){
         const url=new URL(frame.src,location.href);
+        url.searchParams.set('embeddedMenu','1');
         const tab=new URLSearchParams(route.split('?')[1]).get('tab');
         if(temperatureTabs.has(tab))url.hash=tab;
         frame.src=url.href;
