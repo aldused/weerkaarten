@@ -283,6 +283,9 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 <link rel="stylesheet" href="temperature-overview.css?v=20261122-verfijning1">
 <script src="temperature-map-core.js?v=20261122-1"></script>
 <script src="temperature-map-ui.js?v=20261122-tx-png"></script>
+<link rel="stylesheet" href="temperature-place.css?v=20261124-1">
+<script src="temperature-place-core.js?v=20261124-1"></script>
+<script src="temperature-place.js?v=20261124-1"></script>
 </head>
 <body>
 <div class="wrap">
@@ -571,7 +574,9 @@ async function laad() {
     // start op het eerstvolgende hele uur ≥ nu
     const nu = Date.now(); const first = D.tijden.findIndex(t => t.getTime() >= nu - 30 * 60e3); staat.ti = first < 0 ? NT - 1 : first;
     bouwTijd(); statusEnMeldingen(); kpis(); runsLijst(); teken(); drieNachten();
+    TemperaturePlace.setSource('night',j); werkGrafiek();
   } catch (e) {
+    TemperaturePlace.sourceFailed('night');
     $("statusBadge").className = "badge oud"; $("statusBadge").innerHTML = "<i></i>Geen gegevens";
     toonMelding("De WGT-verwachting kon niet worden geladen (" + e.message + "). Er wordt bewust géén oude of geschatte kaart getoond.", true);
   }
@@ -1009,6 +1014,7 @@ function werkGrafiek() {
   $('autoKoud').setAttribute('aria-pressed', String(staat.auto));
   if (c < 0) { $('graf').replaceChildren(); $('grafTitel').textContent = 'Geen geldig temperatuurverloop'; return; }
   grafiek(c); lokaleKaart(c);
+  TemperaturePlace.sync({name:D.plaats[c],lat:ll[2*c],lon:ll[2*c+1],cell:c,kind:'night',auto:staat.auto});
   $('graf').setAttribute('aria-label', 'Temperatuurverloop bij '+D.plaats[c]);
   $('grafSub').textContent = (staat.auto ? 'Koudste plaats binnen '+gebiedNaam()+' bij de gekozen '+(['nmin','tn','kans','nsigma'].includes(staat.laag)?'nacht':'uurkaart')+'. ' : 'Zelf gekozen plaats. ')+'10 cm en 2 m per uur; stippen in het midden van elke nacht tonen het afzonderlijke nachtminimum. De foutmarge hoort bij 10 cm.';
 }
@@ -1139,6 +1145,16 @@ function lokaleKaart(c) {
 
 TemperatureMapUI.setup(teken);
 new ResizeObserver(()=>{if(D){laagste();waardenOpKaart();}}).observe(svg);
+TemperaturePlace.mount({kind:'night',dataBase:DATA_BASE,
+  onSelect:p=>{
+    if(!D)return;
+    const nearest=TemperaturePlace.cellFor('night',p);if(!nearest)return;
+    if(!inGebied(p.lat,p.lon)){$('regio').value='nl';$('regio').onchange();}
+    staat.auto=false;staat.vast=nearest.index;staat.hov=null;$('tip').hidden=true;
+    focus(nearest.index);werkGrafiek();
+  },
+  onReset:()=>$('autoKoud').click()
+});
 laad();
 </script>
 </body>

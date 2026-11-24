@@ -247,6 +247,9 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 <link rel="stylesheet" href="temperature-overview.css?v=20261122-verfijning1">
 <script src="temperature-map-core.js?v=20261122-1"></script>
 <script src="temperature-map-ui.js?v=20261122-tx-png"></script>
+<link rel="stylesheet" href="temperature-place.css?v=20261124-1">
+<script src="temperature-place-core.js?v=20261124-1"></script>
+<script src="temperature-place.js?v=20261124-1"></script>
 </head>
 <body>
 <div class="wrap">
@@ -491,7 +494,9 @@ async function laad() {
     const eerstvolgende = D.dagen.findIndex(dag => dag.label >= vandaag);
     staat.di = eerstvolgende < 0 ? D.dagen.length - 1 : eerstvolgende;
     bouwDagen(); statusEnMeldingen(); kpis(); runsLijst(); teken(); stationsTabel();
+    TemperaturePlace.setSource('tx',j); werkGrafiek();
   } catch (e) {
+    TemperaturePlace.sourceFailed('tx');
     $("statusBadge").className = "badge oud"; $("statusBadge").innerHTML = "<i></i>Geen gegevens";
     toonMelding("De TX-verwachting kon niet worden geladen (" + e.message + "). Er wordt bewust géén oude of geschatte kaart getoond.", true);
   }
@@ -724,6 +729,7 @@ function werkGrafiek() {
   $('autoKoud').setAttribute('aria-pressed',String(staat.auto));
   if (c<0) { $('graf').replaceChildren(); return; }
   grafiek(c); lokaleKaart(c);
+  TemperaturePlace.sync({name:D.plaats[c],lat:ll[2*c],lon:ll[2*c+1],cell:c,kind:'tx',auto:staat.auto});
   $('graf').setAttribute('aria-label','Temperatuurverloop bij '+D.plaats[c]);
   const dag = D.dagen[staat.di];
   const bron = dag.gemeten?.[c] === 1 ? 'De stip markeert het geschatte maximum tot ' + uurFmt.format(new Date(dag.gemeten_tot_utc)) + ' uur. '
@@ -868,6 +874,16 @@ function lokaleKaart(c) {
 
 TemperatureMapUI.setup(teken);
 new ResizeObserver(()=>{if(D){laagsteHoogste();waardenOpKaart();}}).observe(svg);
+TemperaturePlace.mount({kind:'tx',dataBase:DATA_BASE,
+  onSelect:p=>{
+    if(!D)return;
+    const nearest=TemperaturePlace.cellFor('tx',p);if(!nearest)return;
+    if(!inGebied(p.lat,p.lon)){$('regio').value='nl';$('regio').onchange();}
+    staat.auto=false;staat.vast=nearest.index;staat.hov=null;$('tip').hidden=true;
+    focus(nearest.index);werkGrafiek();
+  },
+  onReset:()=>$('autoKoud').click()
+});
 laad();
 </script>
 </body>
