@@ -399,7 +399,7 @@ const PM = { l: 80, r: 80, t: 92, b: 165 };
 const PLOT_W = PANEL_W - PM.l - PM.r;
 const PLOT_H = PANEL_H - PM.t - PM.b;
 
-function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p50, yMin, yMax, station, datumTxt, runLabel, footLeft, footRight, nDays, times, domainStart, domainEnd}) {
+function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p50, yMin, yMax, station, datumTxt, runLabel, footLeft, footRight, nDays, times, domainStart, domainEnd, shadeBelowFreezing}) {
   if (arguments[0].unavailableText) {
     const cx = ox + PANEL_W/2;
     const cy = oy + PANEL_H/2;
@@ -424,6 +424,12 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p50, yMin, yMax, st
     const x0 = Math.max(ox+PM.l, xToPx(a));
     const x1 = Math.min(ox+PM.l+PLOT_W, xToPx(b));
     if (x1>x0) s += `<rect x="${x0.toFixed(1)}" y="${oy+PM.t}" width="${(x1-x0).toFixed(1)}" height="${PLOT_H}" fill="${C_NACHT}"/>`;
+  }
+
+  if (shadeBelowFreezing && yMin < 0) {
+    const frostTop = yToPx(Math.min(0, yMax));
+    const frostHeight = oy + PM.t + PLOT_H - frostTop;
+    s += `<rect x="${ox+PM.l}" y="${frostTop.toFixed(1)}" width="${PLOT_W}" height="${frostHeight.toFixed(1)}" fill="#bedfff" fill-opacity="0.35"/>`;
   }
 
   for (let d=0; d<=nDays; d++) {
@@ -659,7 +665,7 @@ function buildModel(ens, hres) {
   if (tAxisMax <= tAxisMin) tAxisMax = tAxisMin+5;
 
   const panels = [
-    { title:"Temperatuur (°C)", times:useTimes, ensemble:temp.perturbed, ctrl:temp.control, hres:tempHres, p50:tempP50, yMin:tAxisMin, yMax:tAxisMax },
+    { title:"Temperatuur (°C)", shadeBelowFreezing:true, times:useTimes, ensemble:temp.perturbed, ctrl:temp.control, hres:tempHres, p50:tempP50, yMin:tAxisMin, yMax:tAxisMax },
     { title:"Windsnelheid (km/uur)", times:useTimes, ensemble:wind.perturbed, ctrl:wind.control, hres:windHres, p50:windP50, yMin:0, yMax:Math.max(5, Math.ceil(wMx/5)*5) },
     { title:"Neerslag (mm, voorafgaande 6 uur)", times:rrTimes6, ensemble:rrEns6, ctrl:rrCtrl6, hres:rrHres6, p50:rr6P50, yMin:0, yMax:Math.max(8, Math.ceil(rMx/2)*2) },
     { title:"Windstoten (km/uur)", times:useTimes, ensemble:gust.perturbed, ctrl:gust.control, hres:gustHres, p50:gustP50, yMin:0, yMax:Math.max(10, Math.ceil(gMx/10)*10) },

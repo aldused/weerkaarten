@@ -1005,6 +1005,12 @@
       }
     }
 
+    if (cfg.hourly === 'temperature_2m' && yMin < 0) {
+      const frostTop = yF(Math.min(0, yMax));
+      ctx.fillStyle = '#e8f4ff';
+      ctx.fillRect(x + m.left, frostTop, iw, y + m.top + ih - frostTop);
+    }
+
     ctx.strokeStyle = cfg.dayLineColor || 'rgba(0,0,0,0.12)';
     ctx.lineWidth = 1;
     for (let i = 1; i < ts.length; i++) {

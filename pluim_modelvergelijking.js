@@ -50,6 +50,10 @@ function panel(r,field,domain,scale,ox,oy,index){
  // this is a reading aid, not an astronomical sunrise/sunset calculation.
  const localHour=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',hourCycle:'h23'});
  for(let t=domain[0];t<domain[1];t+=HOUR){const hour=Number(localHour.format(new Date(t)));if(hour>=18||hour<6)s+=`<rect x="${x(t)}" y="${top}" width="${x(Math.min(t+HOUR,domain[1]))-x(t)+.05}" height="${ph}" fill="#f0f1f2"/>`;}
+ if(field==='temperature_2m' && scale[0]<0){
+  const frostTop=y(Math.min(0,scale[1]));
+  s+=`<rect x="${left}" y="${frostTop}" width="${pw}" height="${top+ph-frostTop}" fill="#bedfff" fill-opacity="0.35"/>`;
+ }
  const tickStep=field==='wind_speed_10m'?1:field==='temperature_2m'?5:field==='wind_gusts_10m'?20:([1,2,5,10,20,50,100,200].find(n=>n>=scale[1]/5)||Math.ceil(scale[1]/5));
  const ticks=Math.max(1,Math.round((scale[1]-scale[0])/tickStep));
  const tickValues=field==='wind_speed_10m'?Array.from({length:13},(_,i)=>({v:bftSpeed(i),label:i})).filter(t=>t.v<=scale[1]):Array.from({length:ticks+1},(_,j)=>({v:scale[0]+j/ticks*(scale[1]-scale[0]),label:Number((scale[0]+j/ticks*(scale[1]-scale[0])).toFixed(1))}));

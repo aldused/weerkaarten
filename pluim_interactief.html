@@ -411,7 +411,7 @@ select, input[type=date], input[type=text] {
 <link rel="stylesheet" href="pluim-workstation.css?v=20261021-1">
 <script src="harmoneps-data.js?v=20260910" defer></script>
 <script src="pluim-workstation-data.js?v=20261027-native-only" defer></script>
-<script src="pluim-workstation.js?v=20261027-native-only" defer></script>
+<script src="pluim-workstation.js?v=20261124-vorst" defer></script>
 </head>
 <body>
 
@@ -728,6 +728,21 @@ const nachtPlugin = {
   }
 };
 Chart.register(nachtPlugin);
+
+const frostBackground = {
+  id: 'frostBackground',
+  beforeDraw({ctx, chartArea, scales}) {
+    const axis = scales.y;
+    if (!chartArea || !axis || axis.min >= 0) return;
+    const zero = axis.getPixelForValue(0);
+    const top = Math.max(chartArea.top, Math.min(chartArea.bottom, zero));
+    ctx.save();
+    ctx.fillStyle = 'rgba(190, 223, 255, 0.35)';
+    ctx.fillRect(chartArea.left, top, chartArea.right - chartArea.left, chartArea.bottom - top);
+    ctx.restore();
+  }
+};
+
 
 // Chart.js' category-as verdeelt punten standaard gelijkmatig. ECMWF ENS gaat
 // echter later van 3- naar 6-uursstappen. Deze plugin laat de bestaande labels,
@@ -2443,6 +2458,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   crosshairData['canvas-temp']={tA:tStatsA, tMed, tP10, tP25, tP75, tP90, hTemp:hTempMapped, mosTxData, mosTnData, mode:'temp'};
   setTimeout(initCrosshair, 100);
   actieveCharts.temp=new Chart(document.getElementById('canvas-temp'),{
+    plugins:[frostBackground],
     data:{labels:lab,datasets:[
       ...ensDatasets(tA,'rgba(22,110,30,0.55)'),
       {type:'line',data:tP10,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'51,170,51',0.06,0.10),fill:'+1',pointRadius:0,tension:0,order:10,_isBand:true,hidden:!window._toonBanden},
@@ -3234,6 +3250,7 @@ async function laadHoogte(lat,lon,naam,dagen,van,tot){
   ]);
   chartTimestamps['canvas-hoogte']=ts;
   actieveCharts.hoogte=new Chart(document.getElementById('canvas-hoogte'),{
+    plugins:[frostBackground],
     data:{labels:lab,datasets:[
       ...ensDatasets(t850A,'rgba(200,60,30,0.22)').map(d=>({...d,yAxisID:'y1'})),
       {type:'line',data:t850P25,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'200,60,30',0.18,0.30),fill:'+1',pointRadius:0,tension:0,order:9,yAxisID:'y1',_isBand:true,hidden:!window._toonBanden},
@@ -3358,6 +3375,7 @@ async function laadAifs(lat,lon,naam,dagen,van,tot){
   ]);
   chartTimestamps['canvas-aifs']=ts;
   actieveCharts.aifs=new Chart(document.getElementById('canvas-aifs'),{
+    plugins:[frostBackground],
     data:{labels:lab,datasets:[
       ...ensDatasets(tA,'rgba(20,120,20,0.65)'),
       {type:'line',data:tP25,borderColor:'transparent',backgroundColor:'rgba(51,187,51,0.12)',fill:'+1',pointRadius:0,tension:0,order:9},
@@ -3454,6 +3472,7 @@ async function laadIcon(lat,lon,naam,dagen,van,tot){
   ]);
   chartTimestamps['canvas-icon']=ts;
   actieveCharts.icon=new Chart(document.getElementById('canvas-icon'),{
+    plugins:[frostBackground],
     data:{labels:lab,datasets:[
       ...ensDatasets(tA,'rgba(20,120,20,0.60)'),
       {type:'line',data:tP25,borderColor:'transparent',backgroundColor:'rgba(51,187,51,0.12)',fill:'+1',pointRadius:0,tension:0,order:9},
@@ -4942,6 +4961,7 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot,runContex
   }
   chartTimestamps[`verg-canvas-${idx}`]=apiTimes;
   vergCharts[idx]=new Chart(document.getElementById(`verg-canvas-${idx}`),{
+    plugins:type==='temp'?[frostBackground]:[],
     data:{labels:labArr,datasets},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,...tooltipCb}},
@@ -5052,6 +5072,7 @@ async function laadVergelijkingModel(lat,lon,naam,dagen,van,tot,vsModel){
   if(actieveCharts.vergelijking) actieveCharts.vergelijking.destroy();
   chartTimestamps['canvas-vergelijking']=tempTimes;
   actieveCharts.vergelijking=new Chart(document.getElementById('canvas-vergelijking'),{
+    plugins:[frostBackground],
     data:{labels:lab,datasets:[
       {type:'line',data:eP25T,borderColor:'transparent',backgroundColor:'rgba(20,130,20,0.40)',fill:'+1',pointRadius:0,tension:0,order:9},
       {type:'line',data:eP75T,borderColor:'transparent',fill:false,pointRadius:0,tension:0,order:9},
@@ -5197,6 +5218,7 @@ async function laadHres(lat,lon,naam,dagen,van,tot){
   if(actieveCharts.hres)actieveCharts.hres.destroy();
   chartTimestamps['canvas-hres']=ts;
   actieveCharts.hres=new Chart(document.getElementById('canvas-hres'),{
+    plugins:[frostBackground],
     data:{labels:lab,datasets:[
       {type:'line',data:hTemp,borderColor:'#ee3333',borderWidth:2.5,pointRadius:0,fill:false,tension:0,order:1},
       ...(pTemp&&pTemp.some(v=>v!==null)?[{type:'line',data:pTemp,borderColor:'rgba(238,120,120,0.7)',borderWidth:1.5,borderDash:[3,2],pointRadius:0,fill:false,tension:0,order:2,spanGaps:true}]:[]),
@@ -5376,6 +5398,7 @@ async function laadRunHistorie(lat,lon,naam,dagen,van,tot){
     ? Math.ceil(Math.max(20,...huidig.filter(Number.isFinite),...prevDays.filter(Array.isArray).flat().filter(Number.isFinite))*1.1/5)*5
     : null;
   actieveCharts.runhistorie=new Chart(document.getElementById('canvas-runhistorie'),{
+    plugins:param==='temp'?[frostBackground]:[],
     data:{labels:lab,datasets},
     options:{...cfgBase,
       plugins:{legend:{display:false},dagGrens:{enabled:true},tooltip:{...ttCfg,
@@ -5591,6 +5614,7 @@ async function laadVergHres(idx,lat,lon,naam,type,dagen,van,tot,runContext=null)
   }
   chartTimestamps[`verg-canvas-${idx}`]=ts;
   vergCharts[idx]=new Chart(document.getElementById(`verg-canvas-${idx}`),{
+    plugins:type==='temp'?[frostBackground]:[],
     data:{labels:maakLabelsCompact(ts),datasets},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,...tooltipCb}},

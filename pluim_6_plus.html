@@ -627,7 +627,7 @@ function axisTimeTicks(start,end,plotW) {
   return ticks;
 }
 
-function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble, ctrl, hres, p10, p25, p50, p75, p90, hres2, p502, yMin2, yMax2, fanColor, xMode, yMin, yMax, station, datumTxt, runLabel, footLeft, footRight, nDays, times, valueFmt, stacked, unavailable, panelIndex}) {
+function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble, ctrl, hres, p10, p25, p50, p75, p90, hres2, p502, yMin2, yMax2, fanColor, xMode, yMin, yMax, station, datumTxt, runLabel, footLeft, footRight, nDays, times, valueFmt, stacked, unavailable, panelIndex, shadeBelowFreezing}) {
   const plotW = panelW - PM.l - PM.r;
   const plotH = panelH - PM.t - PM.b;
   const timeMs = times.map(time => time.getTime());
@@ -664,6 +664,12 @@ function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble,
     const x0=timeToPx(band.start),x1=timeToPx(band.end);
     s += `<rect x="${x0.toFixed(1)}" y="${oy+PM.t}" width="${(x1-x0).toFixed(1)}" height="${plotH}" fill="${C_NACHT}"/>`;
   }
+  if (shadeBelowFreezing && yMin < 0) {
+    const frostTop = yToPx(Math.min(0, yMax));
+    const frostHeight = oy + PM.t + plotH - frostTop;
+    s += `<rect x="${ox+PM.l}" y="${frostTop.toFixed(1)}" width="${plotW}" height="${frostHeight.toFixed(1)}" fill="#bedfff" fill-opacity="0.35"/>`;
+  }
+
   for (const tick of timeTicks) {
     const px=timeToPx(tick.time),midnight=tick.local.hour===0;
     s += `<line x1="${px.toFixed(1)}" y1="${oy+PM.t}" x2="${px.toFixed(1)}" y2="${oy+PM.t+plotH}" stroke="${midnight?'#64748b':'#dddddd'}" stroke-width="${midnight?1.4:0.6}"/>`;
@@ -1296,13 +1302,13 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
   }
   if (t850P) {
     const [t850Mn, t850Mx] = pad(...rangeOf([t850P.p10, t850P.p90], t850Hres), 0.08);
-    panels.push(nativeFanPanel({ title:"Temperatuur 850 hPa (°C)", ...t850P, hres:t850Hres, fanColor:'#cc0033', xMode:'model', yMin:Math.floor(t850Mn/2)*2, yMax:Math.ceil(t850Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" }));
+    panels.push(nativeFanPanel({ title:"Temperatuur 850 hPa (°C)", shadeBelowFreezing:true, ...t850P, hres:t850Hres, fanColor:'#cc0033', xMode:'model', yMin:Math.floor(t850Mn/2)*2, yMax:Math.ceil(t850Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" }));
   } else {
     panels.push({title:'Temperatuur 850 hPa (°C)',unavailable:'850 hPa ontbreekt voor deze run. Kies in de runbalk een run met alle panelen.',yMin:-10,yMax:20});
   }
   if (t500P) {
     const [t500Mn, t500Mx] = pad(...rangeOf([t500P.p10, t500P.p90], t500Hres), 0.08);
-    panels.push(nativeFanPanel({ title:"Temperatuur 500 hPa (°C)", ...t500P, hres:t500Hres, fanColor:'#5566cc', xMode:'model', yMin:Math.floor(t500Mn/2)*2, yMax:Math.ceil(t500Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" }));
+    panels.push(nativeFanPanel({ title:"Temperatuur 500 hPa (°C)", shadeBelowFreezing:true, ...t500P, hres:t500Hres, fanColor:'#5566cc', xMode:'model', yMin:Math.floor(t500Mn/2)*2, yMax:Math.ceil(t500Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" }));
   } else {
     panels.push({title:'Temperatuur 500 hPa (°C)',unavailable:'500 hPa ontbreekt voor deze run. Kies in de runbalk een run met alle panelen.',yMin:-40,yMax:0});
   }
