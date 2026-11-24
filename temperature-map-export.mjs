@@ -1,4 +1,4 @@
-import {composePNG} from './ecmwf_weerradar/png-export.mjs';
+import {composePNG} from './ecmwf_weerradar/png-export.mjs?v=20261124-mos-label';
 
 const svgProperties = [
   'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity',

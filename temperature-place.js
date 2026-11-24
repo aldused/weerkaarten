@@ -181,7 +181,7 @@ window.TemperaturePlace=(function(){
     button.textContent='PNG maken…';
     status.hidden=true;
     try {
-      const {svgMapImage,saveMapPNG}=await import('./temperature-map-export.mjs?v=20261124-grafiek');
+      const {svgMapImage,saveMapPNG}=await import('./temperature-map-export.mjs?v=20261124-mos-label');
       const svg=$('placePlot').querySelector('svg');
       if(!svg||!point||!rows.length)throw new Error('Grafiek niet beschikbaar');
       const first=rows[0];
@@ -195,6 +195,7 @@ window.TemperaturePlace=(function(){
       if(svg.querySelector('.place-band'))legends.push({label:'Schaduw rond de lijnen: modelmatig 80%-interval voor beschikbare reeksen',color:'#c4cedd'});
       const details={
         title:'Temperatuurverwachting voor '+point.name,
+        headerLabel:'Experimenteel BETA MOS/MIX Weerlab',
         time:exportDate.format(dateOf(first))+' t/m '+exportDate.format(dateOf(last)),
         run:$('placeSources').textContent.replace(' · bijwerktijden Nederlandse tijd',''),
         lead:[$('placeHorizon').textContent,extremeDescription()].filter(Boolean).join(' · '),

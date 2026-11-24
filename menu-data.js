@@ -4,7 +4,7 @@ const MENU_PRODUCTS = [
     id:'speciale-mos-mix', name:'Speciale MOS/MIX',
     description:'Temperatuurkaarten en grafieken per plaats voor dagmaximum, nachtminimum en grasminimum.',
     category:'verwachting', type:'kaarten', section:'Temperatuur', icon:'temp',
-    href:'index.html#speciale-mos-mix', src:'beta_temperaturen.html?v=20261124-speciale-mos',
+    href:'index.html#speciale-mos-mix', src:'beta_temperaturen.html?v=20261124-rijnmond-verplaatst',
     thumbnail:null, facets:{veld:['temperatuur'],gebied:['nl'],vorm:['kaart']},
     keywords:'Weerlab MOS MIX MOSMIX temperatuur temperaturen maximum minimum grondtemperatuur grasminimum grondvorst grafiek plaats',
     restricted:false,

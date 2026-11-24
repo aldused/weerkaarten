@@ -66,20 +66,34 @@ export function captureMap(mapElement,places,rectSelection=null,{scale=2}={}){
   ctx.getImageData(0,0,1,1); // Fail explicitly if a source blocks CORS export.
   return cropMapCanvas(canvas,rectSelection?Object.fromEntries(Object.entries(rectSelection).map(([key,value])=>[key,Math.round(value*scale)])):null);
 }
-export function composePNG(mapImage,{title,time,run,lead,source,opacity,legends,mapAttribution='Kaart © Esri, Maxar, Earthstar Geographics · Natural Earth · Plaatsnamen: GeoNames'}){
+export function composePNG(mapImage,{title,time,run,lead,source,opacity,legends,headerLabel,mapAttribution='Kaart © Esri, Maxar, Earthstar Geographics · Natural Earth · Plaatsnamen: GeoNames'}){
   const width=Math.max(640,Math.min(1920,mapImage.width/2)),pad=28,inner=width-pad*2,scale=2;
   const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+  ctx.font='16px system-ui';
+  const labelFont='600 15px system-ui';
+  ctx.font=labelFont;
+  const labelWidth=headerLabel?Math.min(ctx.measureText(headerLabel).width+24,inner):0;
+  const labelAbove=Boolean(headerLabel)&&width<840;
+  const titleY=labelAbove?72:40,timeY=titleY+30;
+  const titleWidth=labelWidth&&!labelAbove?inner-labelWidth-20:inner;
   ctx.font='16px system-ui';
   const lines=text=>wrapText(text,inner,t=>ctx.measureText(t).width);
   const timeLines=lines(time),runLines=lines([run,lead].filter(Boolean).join(' · '));
   const sourceLines=lines([source&&`Bron: ${source}`,mapAttribution].filter(Boolean).join(' · '));
-  const header=88+timeLines.length*23,mapHeight=Math.round(mapImage.height*width/mapImage.width);
+  const header=timeY+18+timeLines.length*23,mapHeight=Math.round(mapImage.height*width/mapImage.width);
   const footer=108+(runLines.length+sourceLines.length)*22+legends.reduce((n,l)=>n+(l.stops?78:30),0);
   canvas.width=width*scale;canvas.height=(header+mapHeight+footer)*scale;ctx.scale(scale,scale);
   ctx.fillStyle='#fff';ctx.fillRect(0,0,width,canvas.height);
   ctx.fillStyle='#00205b';ctx.fillRect(0,0,width,header);
-  ctx.fillStyle='#fff';ctx.font='bold 25px system-ui';ctx.fillText(title,pad,40,inner);
-  ctx.font='16px system-ui';timeLines.forEach((line,i)=>ctx.fillText(line,pad,70+i*23));
+  if(headerLabel){
+    ctx.fillStyle='#123668';
+    ctx.fillRect(width-pad-labelWidth,18,labelWidth,32);
+    ctx.fillStyle='#ddf6ff';ctx.font=labelFont;ctx.textAlign='right';
+    ctx.fillText(headerLabel,width-pad-12,39,labelWidth-24);
+    ctx.textAlign='left';
+  }
+  ctx.fillStyle='#fff';ctx.font='bold 25px system-ui';ctx.fillText(title,pad,titleY,titleWidth);
+  ctx.font='16px system-ui';timeLines.forEach((line,i)=>ctx.fillText(line,pad,timeY+i*23));
   ctx.fillStyle='#2ec4e8';ctx.fillRect(0,header-5,width,5);
   ctx.drawImage(mapImage,0,header,width,mapHeight);
   let y=header+mapHeight+30;

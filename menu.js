@@ -39,7 +39,8 @@
     const id=state.product?.id||'';if(id===lastPersonalProduct)return;lastPersonalProduct=id;if(id)personal.visit(id);
   }
   const selfPage = site.selfPage || 'index.html';
-  const temperatureTabs = new Set(['grondtemp','tn','tx','rijnmond','mos','neerslag']);
+  const temperatureTabs = new Set(['grondtemp','tn','tx','mos']);
+  const movedTemperatureTabs = {"rijnmond":"temperatuur-rijnmond.html","neerslag":"neerslag-rijnmond.html"};
   function temperatureRoute(tab) {
     return tab !== 'grondtemp' && temperatureTabs.has(tab)
       ? 'speciale-mos-mix?tab=' + tab
@@ -185,15 +186,24 @@
     if(/^weerbewaking(?:-|$)/.test(incoming)){location.replace('https://meteobewaking.nl/cms/weerbewaking/weerbewaking.html');return {page:'start',type:'',filters:{},q:''};}
     let raw=site.routeAliases?.[incoming] ?? incoming;
     const [oldRoute,oldQuery]=raw.split('?');
+    function redirectMovedTemperature(tab) {
+      if (!Object.hasOwn(movedTemperatureTabs,tab)) return false;
+      location.replace('https://meteobewaking.nl/cms/weerbewaking/'+movedTemperatureTabs[tab]);
+      return true;
+    }
+    const start={page:'start',type:'',filters:{},q:''};
+    if (oldRoute==='speciale-mos-mix' && redirectMovedTemperature(new URLSearchParams(oldQuery).get('tab'))) return start;
     if (oldRoute==='beta' && byId.has('speciale-mos-mix')) {
       const params=new URLSearchParams(oldQuery);
       const tab=params.get('tab');
+      if (redirectMovedTemperature(tab)) return start;
       if (tab==='temperaturen'||temperatureTabs.has(tab)) {
         let view=tab;
         if(tab==='temperaturen' && params.has('view'))try {
           const saved=new URL(params.get('view'),location.href);
           if(saved.origin===location.origin && /\/beta_temperaturen(?:\.html)?$/.test(saved.pathname))view=saved.hash.slice(1);
         }catch{}
+        if (redirectMovedTemperature(view)) return start;
         raw=temperatureRoute(view);
         history.replaceState(null,'','#'+raw);
       }
