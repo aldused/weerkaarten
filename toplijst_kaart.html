@@ -98,6 +98,14 @@ body {
 .btn-dag.actief { background: #00205b; color: white; border-color: #00205b; }
 .btn-opslaan { padding: 7px 12px; border-radius: 6px; border: none; background: #00205b; color: white; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: auto; font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; }
 .btn-opslaan:hover { background: #003689; }
+.btn-opslaan:disabled { opacity: 0.5; cursor: default; }
+.export-duo { margin-top: 10px; }
+.export-duo summary { color: #334155; cursor: pointer; font-size: 12px; font-weight: 700; }
+.export-duo form { display: grid; gap: 8px; margin-top: 8px; }
+.export-duo label { display: grid; gap: 4px; color: #334155; font-size: 12px; font-weight: 600; }
+.export-duo select { width: 100%; min-width: 0; min-height: 34px; padding: 5px 8px; border: 1px solid #c5d3e3; border-radius: 6px; background: #fff; color: inherit; font: inherit; }
+.export-status { margin-top: 8px; color: #475569; font-size: 12px; }
+.export-status:empty { display: none; }
 .kaart-wrap {
   flex: 1 1 auto;
   min-width: 0;
@@ -168,6 +176,10 @@ body {
 [data-theme="dark"] .btn-dag.actief { background: #2ec4e8 !important; color: #0b1220 !important; border-color: #2ec4e8 !important; }
 [data-theme="dark"] .btn-opslaan { background: #2ec4e8 !important; color: #0b1220 !important; }
 [data-theme="dark"] .btn-opslaan:hover { background: #7dd3fc !important; }
+[data-theme="dark"] .export-duo summary,
+[data-theme="dark"] .export-duo label,
+[data-theme="dark"] .export-status { color: #cbd5e1; }
+[data-theme="dark"] .export-duo select { color-scheme: dark; background: #0e1629; border-color: #30415a; }
 [data-theme="dark"] .legenda-item { color: #94a3b8 !important; }
 [data-theme="dark"] .status { color: #94a3b8 !important; }
 [data-theme="dark"] .zoom-hint { color: #64748b !important; }
@@ -306,7 +318,16 @@ body {
 
     <div class="control-card">
       <div class="control-title">Export</div>
-      <button class="btn-opslaan" onclick="slaOp()">⬇ Opslaan PNG</button>
+      <button class="btn-opslaan" type="button" id="export-enkel" disabled>⬇ Opslaan PNG</button>
+      <details class="export-duo">
+        <summary>Twee kaarten naast elkaar</summary>
+        <form id="export-duo">
+          <label>Linkerkaart <select id="export-links"></select></label>
+          <label>Rechterkaart <select id="export-rechts"></select></label>
+          <button class="btn-opslaan" id="export-dubbel" type="submit" disabled>Download twee kaarten (PNG)</button>
+        </form>
+      </details>
+      <p class="export-status" id="export-status" role="status"></p>
     </div>
 
     <div class="control-card">
@@ -379,7 +400,6 @@ const CONTOUR_PARAMS_TOP = {
   fx:   { step: 10, major: 20, unit: " km/h", factor: 3.6 },
 };
 let landMask = null;
-let laatsteVeld = null;
 let provincies = null;
 
 function bouwBasemap(svg){
@@ -544,13 +564,13 @@ function _blurVeld(veld){
   return out;
 }
 
-function tekenHeatmap(ddata, param){
-  const hc = document.getElementById("heatmap");
+function tekenHeatmap(ddata, param, hc){
   const p = PARAMS[param];
-  laatsteVeld = null;
-  if(!p || !HEATMAP_PARAMS_TOP.has(param)){ hc.width=1; hc.height=1; return; }
+  hc.width = 1;
+  hc.height = 1;
+  if(!p || !HEATMAP_PARAMS_TOP.has(param)) return;
   if(!landMask) maakLandMask();
-  if(!landMask){ hc.width=1; hc.height=1; return; }
+  if(!landMask) return;
 
   const w = landMask.w, h = landMask.h;
   const rijen = ddata[param] || [];
@@ -567,7 +587,6 @@ function tekenHeatmap(ddata, param){
   let veld = _shepardVeld(punten);
   if(!veld) return;
   veld = _blurVeld(veld);
-  laatsteVeld = {w, h, veld};
 
   hc.width = BASEMAP_W; hc.height = BASEMAP_H;
   const ctx = hc.getContext("2d");
@@ -592,6 +611,7 @@ function tekenHeatmap(ddata, param){
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(tmpC, 0, 0, hc.width, hc.height);
+  return {w, h, veld};
 }
 
 // ── Contouren (marching squares op het geïnterpoleerde veld) ───────────────
@@ -644,11 +664,11 @@ function _polylineLength(pl){
   return L;
 }
 
-function tekenContouren(svg, param){
-  if(!laatsteVeld || !landMask) return;
+function tekenContouren(svg, param, raster){
+  if(!raster || !landMask) return;
   const conf = CONTOUR_PARAMS_TOP[param];
   if(!conf) return;
-  const {w, h, veld} = laatsteVeld;
+  const {w, h, veld} = raster;
   const mask = landMask.data;
   const factor = conf.factor || 1;
   let vmin = Infinity, vmax = -Infinity;
@@ -846,15 +866,14 @@ function tekenHeatmapStation(svg, naam, val, idx, tijdstip, param){
   svg.appendChild(g);
 }
 
-function tekenKaart(dagData, param) {
-  const svg = document.getElementById("nl-kaart");
-  svg.innerHTML = "";
+function tekenKaart(dagData, param, svg, heatmap) {
+  svg.replaceChildren();
   const p = PARAMS[param];
   const rijen = dagData[param] || [];
 
   tekenBuitengrens(svg);
-  tekenHeatmap(dagData, param);
-  tekenContouren(svg, param);
+  const raster = tekenHeatmap(dagData, param, heatmap);
+  tekenContouren(svg, param, raster);
 
   const isHeatmap = HEATMAP_PARAMS_TOP.has(param);
 
@@ -1023,30 +1042,59 @@ function waarnemingsstand(dag) {
 
 const LIVE_REFRESH_MS = 2 * 60 * 1000;
 let dagData = {}, huidigParam = "max", huidigDag = "vandaag", ladenBezig = false;
+let exportBezig = false;
+
+const exportEnkel = document.getElementById("export-enkel");
+const exportDubbel = document.getElementById("export-dubbel");
+const exportStatus = document.getElementById("export-status");
+const exportLinks = document.getElementById("export-links");
+const exportRechts = document.getElementById("export-rechts");
+for (const [param, {label}] of Object.entries(PARAMS)) {
+  exportLinks.add(new Option(label, param));
+  exportRechts.add(new Option(label, param));
+}
+exportLinks.value = "max";
+exportRechts.value = "min";
+exportEnkel.addEventListener("click", () => slaOp([huidigParam]));
+document.getElementById("export-duo").addEventListener("submit", event => {
+  event.preventDefault();
+  slaOp([exportLinks.value, exportRechts.value]);
+});
+
+function werkExportKnoppenBij() {
+  const uitgeschakeld = exportBezig || !dagData[huidigDag];
+  exportEnkel.disabled = uitgeschakeld;
+  exportDubbel.disabled = uitgeschakeld;
+}
+
+function kaartTitel(param) {
+  return param === "rr" ? "Neerslagsom per UTC-dag (mm)" : PARAMS[param].label;
+}
 
 function update() {
   const key = huidigDag;
   const d = new Date(key + "T12:00:00");
   const dd = dagData[key];
+  werkExportKnoppenBij();
   if (!dd) { document.getElementById("status").textContent = `Geen data voor ${key}`; return; }
   document.getElementById("status").textContent = "";
   const lbl = dagLabel(d);
   document.getElementById("hdr-datum").textContent = lbl;
   document.getElementById("hdr-update").textContent = dd.update ? "Bijgewerkt: " + dd.update : "";
   document.getElementById("kaart-dag-label").textContent = lbl;
-  document.getElementById("kaart-subtitel").textContent = huidigParam === "rr"
-    ? "Neerslagsom per UTC-dag (mm)" : PARAMS[huidigParam].label;
+  document.getElementById("kaart-subtitel").textContent = kaartTitel(huidigParam);
   const standEl = document.getElementById("kaart-foot-stand");
   standEl.textContent = waarnemingsstand(dd);
   standEl.style.display = standEl.textContent ? "" : "none";
-  tekenKaart(dd, huidigParam);
+  tekenKaart(dd, huidigParam, document.getElementById("nl-kaart"), document.getElementById("heatmap"));
   maakLegenda(huidigParam);
 }
 
-function _exportCanvas(callback){
+async function maakExportCanvas(dag, param, datum) {
   const baseSvg = document.getElementById("basemap-svg");
-  const overlay = document.getElementById("nl-kaart");
-  const header = document.getElementById("kaart-header");
+  const overlay = document.getElementById("nl-kaart").cloneNode(false);
+  const heatmap = document.createElement("canvas");
+  tekenKaart(dag, param, overlay, heatmap);
   const W = BASEMAP_W, H = BASEMAP_H;
   const headerH = 130;
   const footerH = 60;
@@ -1054,9 +1102,9 @@ function _exportCanvas(callback){
   canvas.width = W;
   canvas.height = H + headerH + footerH;
   const ctx = canvas.getContext("2d");
-  tekenHeader(ctx, W, headerH);
+  tekenHeader(ctx, W, headerH, dagLabel(new Date(datum + "T12:00:00")), kaartTitel(param));
 
-  const svgToImg = (svg, extraStyle) => new Promise(res => {
+  const svgToImg = (svg, extraStyle) => new Promise((resolve, reject) => {
     const clone = svg.cloneNode(true);
     if(extraStyle){
       const st = document.createElementNS("http://www.w3.org/2000/svg","style");
@@ -1069,7 +1117,8 @@ function _exportCanvas(callback){
     const blob = new Blob([new XMLSerializer().serializeToString(clone)], {type:"image/svg+xml"});
     const url = URL.createObjectURL(blob);
     const im = new Image();
-    im.onload = () => { URL.revokeObjectURL(url); res(im); };
+    im.onload = () => { URL.revokeObjectURL(url); resolve(im); };
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Kaartlaag kon niet worden geladen")); };
     im.src = url;
   });
 
@@ -1082,32 +1131,73 @@ function _exportCanvas(callback){
     .nl-buitengrens { fill: none; stroke: white; stroke-width: 2; stroke-linejoin: round; }
   `;
 
-  Promise.all([svgToImg(baseSvg, baseStyle), svgToImg(overlay, overlayStyle)]).then(([baseImg, ovImg]) => {
-    ctx.fillStyle = "#b8d4e8";
-    ctx.fillRect(0, headerH, W, H);
-    ctx.drawImage(baseImg, 0, headerH, W, H);
-    const hc = document.getElementById("heatmap");
-    if(hc.width > 1) ctx.drawImage(hc, 0, headerH, W, H);
-    ctx.drawImage(ovImg, 0, headerH, W, H);
-    tekenFooter(ctx, W, headerH + H, footerH);
-    callback(canvas);
-  });
+  const [baseImg, ovImg] = await Promise.all([svgToImg(baseSvg, baseStyle), svgToImg(overlay, overlayStyle)]);
+  ctx.fillStyle = "#b8d4e8";
+  ctx.fillRect(0, headerH, W, H);
+  ctx.drawImage(baseImg, 0, headerH, W, H);
+  if (heatmap.width > 1) ctx.drawImage(heatmap, 0, headerH, W, H);
+  ctx.drawImage(ovImg, 0, headerH, W, H);
+  tekenFooter(ctx, W, headerH + H, footerH, waarnemingsstand(dag) || "KNMI");
+  return canvas;
 }
 
-function slaOp(){
-  _exportCanvas(canvas => {
+async function slaOp(params) {
+  const datum = huidigDag;
+  const dag = dagData[datum];
+  if (!dag || exportBezig) return;
+  if (params.length === 2) {
+    const leeg = params.find(param => !dag[param]?.length);
+    if (leeg) {
+      exportStatus.textContent = `Geen metingen voor ${kaartTitel(leeg).toLowerCase()} op deze dag.`;
+      return;
+    }
+  }
+
+  exportBezig = true;
+  werkExportKnoppenBij();
+  exportStatus.textContent = "PNG maken…";
+  try {
+    const kaarten = await Promise.all(params.map(param => maakExportCanvas(dag, param, datum)));
+    let canvas = kaarten[0];
+    if (kaarten.length === 2) {
+      const [links, rechts] = kaarten;
+      canvas = document.createElement("canvas");
+      canvas.width = links.width + rechts.width;
+      canvas.height = links.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(links, 0, 0);
+      ctx.drawImage(rechts, links.width, 0);
+    }
+    const png = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+    if (!png) throw new Error("PNG kon niet worden gemaakt");
     const a = document.createElement("a");
-    a.href = canvas.toDataURL("image/png");
-    a.download = `edaldus_topkaart_${huidigParam}_${huidigDag}.png`;
+    const url = URL.createObjectURL(png);
+    a.href = url;
+    a.download = `edaldus_topkaart_${params.join("_")}_${datum}.png`;
     a.click();
-  });
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    exportStatus.textContent = "";
+  } catch (error) {
+    console.error("Topkaart exporteren mislukt:", error);
+    exportStatus.textContent = "De PNG kon niet worden gemaakt. Probeer opnieuw.";
+  } finally {
+    exportBezig = false;
+    werkExportKnoppenBij();
+  }
 }
 
-function openZoom(){
-  _exportCanvas(canvas => {
+async function openZoom() {
+  const datum = huidigDag;
+  const dag = dagData[datum];
+  if (!dag) return;
+  try {
+    const canvas = await maakExportCanvas(dag, huidigParam, datum);
     document.getElementById("lightbox-img").src = canvas.toDataURL("image/png");
     document.getElementById("lightbox").classList.add("actief");
-  });
+  } catch (error) {
+    console.error("Topkaart vergroten mislukt:", error);
+    exportStatus.textContent = "De vergroting kon niet worden geladen.";
+  }
 }
 function sluitZoom() { document.getElementById("lightbox").classList.remove("actief"); }
 document.addEventListener("keydown", e => { if(e.key==="Escape") sluitZoom(); });
@@ -1132,7 +1222,7 @@ function selecteerDag(key) {
   update();
 }
 
-function tekenHeader(ctx, breedte, hoogte) {
+function tekenHeader(ctx, breedte, hoogte, dagtekst, kaarttitel) {
   ctx.fillStyle = "#1e293b";
   ctx.fillRect(0, 0, breedte, hoogte);
   ctx.fillStyle = "#2ec4e8";
@@ -1148,14 +1238,14 @@ function tekenHeader(ctx, breedte, hoogte) {
   ctx.fillStyle = "#ffffff";
   ctx.font = "800 46px 'DM Sans', Arial, sans-serif";
   ctx.textAlign = "right";
-  ctx.fillText(document.getElementById("kaart-dag-label").textContent, breedte-pad, 58);
+  ctx.fillText(dagtekst, breedte-pad, 58);
   ctx.fillStyle = "#cbd5e1";
   ctx.font = "500 22px 'DM Sans', Arial, sans-serif";
-  ctx.fillText(document.getElementById("kaart-subtitel").textContent, breedte-pad, 94);
+  ctx.fillText(kaarttitel, breedte-pad, 94);
   ctx.textAlign = "left";
 }
 
-function tekenFooter(ctx, breedte, y, hoogte) {
+function tekenFooter(ctx, breedte, y, hoogte, bronTekst) {
   ctx.fillStyle = "#0f172a";
   ctx.fillRect(0, y, breedte, hoogte);
   const pad = 36;
@@ -1168,7 +1258,6 @@ function tekenFooter(ctx, breedte, y, hoogte) {
   ctx.fillStyle = "#94a3b8";
   ctx.font = "500 19px 'DM Sans', Arial, sans-serif";
   ctx.fillText("·  Ed Aldus — weerdata & visualisaties", pad + merkW + 6, midY);
-  const bronTekst = waarnemingsstand(dagData[huidigDag]) || "KNMI";
   ctx.font = "500 18px 'DM Mono', 'Courier New', monospace";
   ctx.textAlign = "right";
   const bronW = ctx.measureText(bronTekst).width;
