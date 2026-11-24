@@ -680,8 +680,14 @@ function arrows(ctx,fields){
   ctx.lineWidth=(composite?1.15:1.4)*markerScale;ctx.strokeStyle='#183858';ctx.stroke();
   ctx.lineCap='butt';
 }
-// Fixed anchors support model comparison; visibility minima take priority over them.
-const valueAnchors=['Groningen','Leeuwarden','Den Helder','Assen','Alkmaar','Zwolle','Enschede','Lelystad','Amsterdam','Utrecht','Rotterdam','Arnhem','Middelburg','Breda','Eindhoven','Antwerpen','Gent','Brugge','Brussel','Maastricht','Luik','Charleroi','Namen','Luxemburg','Trier','Duinkerken'].map(name=>geo.places.find(p=>p.naam===name)).filter(Boolean);
+// Shared across models and layers. Visibility minima still take precedence.
+const valueAnchors=[
+  {lon:5.08,lat:53.44}, // Noordzee ten noorden van Vlieland
+  {lon:4.31,lat:51.91}, // Rotterdamse haven
+  {lon:5.73,lat:51.48}, // Tussen Helmond en Deurne
+  ...['Groningen','Leeuwarden','Den Helder','Assen','Alkmaar','Zwolle','Enschede','Lelystad','Amsterdam','Utrecht','Rotterdam','Arnhem','Middelburg','Breda','Eindhoven','Antwerpen','Gent','Brugge','Brussel','Maastricht','Luik','Charleroi','Namen','Luxemburg','Trier','Duinkerken']
+    .map(name=>geo.places.find(p=>p.naam===name)).filter(Boolean)
+];
 function mapHeightLabels(ctx,fields){
  const freezing=state.layer==='frz';
  const heightReference=freezing?'boven zeeniveau':'boven de grond';
@@ -724,6 +730,9 @@ function cityLabels(ctx,fields){
   const font=Math.round(clamp(16+(width-420)/140,16,26));
   const marked=[], spoken=[];
   const visibility=state.layer==='vis';
+  const extraSpacing=visibility||state.layer==='sunTotal';
+  const minX=visibility?0:font*3.5;
+  const minY=font*(composite?2.5:extraSpacing?2:1.8);
   const anchors=visibility?valueAnchors.map(p=>({...p,value:layerValue(fields,'vis',...gridPoint(p.lon,p.lat))})).sort((a,b)=>a.value-b.value):valueAnchors;
   const candidates=visibility?[...visibilityMinima(fields.vis,grid,xy,{width,height,font}),...anchors]:anchors;
   const budget=visibility?Math.max(12,Math.min(80,Math.floor(width*height/(font*font*24)))):Infinity;
@@ -731,8 +740,6 @@ function cityLabels(ctx,fields){
     if(spoken.length>=budget)break;
     const [x,y]=xy(p.lon,p.lat),[i,j]=gridPoint(p.lon,p.lat);
     if(x<32||x>width-32||y<48||y>height-24||i<0||j<0||i>grid.w-1||j>grid.h-1)continue;
-    // Other layers keep identical anchor spacing; visibility is ordered from lowest to highest.
-    if(!visibility&&marked.some(([a,b])=>Math.abs(x-a)<font*3.5&&Math.abs(y-b)<font*(composite?2.5:1.8)))continue;
     const value=visibility&&Number.isFinite(p.value)?p.value:composite?bilinear(fields.t2m,i,j):state.layer==='rate'?fields.rate[index(i,j)]:layerValue(fields,state.layer,i,j);
     if(!Number.isFinite(value))continue;
     const text=composite||temperatureLayers.includes(state.layer)?num(value,1)+'°':
@@ -742,10 +749,11 @@ function cityLabels(ctx,fields){
     const label=state.layer==='sunTotal'?num(value,1)+' u':text;
     ctx.font='750 '+font+'px system-ui';
     const half=ctx.measureText(label).width/2+6;
-    if((visibility||state.layer==='sunTotal')&&(x<half||x>width-half||marked.some(([a,b,h])=>Math.abs(x-a)<half+h+8&&Math.abs(y-b)<font*2)))continue;
+    if(x<half||x>width-half||marked.some(([a,b,h])=>
+      Math.abs(x-a)<Math.max(minX,half+h+(extraSpacing?8:0))&&Math.abs(y-b)<minY))continue;
     marked.push([x,y,half]);
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
-    ctx.font='750 '+font+'px system-ui';ctx.strokeStyle='#fffffff2';ctx.lineWidth=4;
+    ctx.strokeStyle='#fffffff2';ctx.lineWidth=4;
     ctx.strokeText(label,x,y);ctx.fillStyle='#142d43';ctx.fillText(label,x,y);
     const rate=fields.rate?.[index(i,j)];
     if(composite&&Number.isFinite(rate)){
