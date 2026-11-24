@@ -629,7 +629,7 @@
       restoringPageView=false;
       const frame=previousFrame.cloneNode(false);
       frame.hidden=false;frame.dataset.route=route;frame.title=title;
-      frame.src=state.product?.src || 'product-host.html?v=20261123-topkaart-kleur'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
+      frame.src=state.product?.src || 'product-host.html?v=20261124-dagrecords-png'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
       if(state.product?.id==='weerkaart-europa'){
         const url=new URL(frame.src,location.href),tab=new URLSearchParams(route.split('?')[1]||'').get('tab');
         if(tab==='overzicht')url.hash='overzicht';frame.src=url.href;
