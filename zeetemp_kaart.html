@@ -82,7 +82,7 @@ canvas{display:block}
 <div class="header">
   <div>
     <h1>Zeewatertemperatuur Europa</h1>
-    <p>NOAA OISST v2.1 &middot; Dagelijkse zeewateranalyse · rooster 0,25°</p>
+    <p>Dagelijkse zeewateranalyse · kaartrooster 0,25°</p>
   </div>
   <div class="header-acties">
     <span id="klok" style="font-size:.75rem;color:#8aaccc"></span>
@@ -103,7 +103,7 @@ canvas{display:block}
   <span>0 °C</span>
   <canvas class="legenda-gradient" id="legenda" width="200" height="12"></canvas>
   <span>28 °C</span>
-  <span style="margin-left:16px;color:#667788">© Ed Aldus WM | weerlab.nl | Data: NOAA NCEI OISST v2.1 · nabijgelegen zeeroosterpunt (max. 56 km), geen strandmeting</span>
+  <span style="margin-left:16px;color:#667788">© Ed Aldus WM | weerlab.nl | <span id="kaart-bron"></span>nabijgelegen zeeroosterpunt (max. 56 km), geen strandmeting</span>
 </div>
 
 <div id="tooltip">
@@ -480,29 +480,65 @@ function roundRect(ctx, x, y, w, h, r){
 }
 
 // ── Data ophalen ────────────────────────────────────────────────────────────
+const ZEETEMP_FEED='zeetemp_noaa.json';
+const VERTRAAGD_NA=5*86400000;
+let laatsteAnalyse;
+
+async function leesZeewater(url){
+  const response=await fetch(url,{cache:'no-cache',signal:AbortSignal.timeout(8000)});
+  if(!response.ok) throw Error('Bronbestand niet beschikbaar');
+  const data=await response.json(),tijd=Date.parse(data.valid);
+  if(typeof data.source!=='string'||!Array.isArray(data.points)||data.points.length<1000||
+     !Number.isFinite(tijd)||tijd>Date.now()+86400000) throw Error('Ongeldig bronbestand');
+  const points=data.points.filter(p=>Array.isArray(p)&&p.length===3&&p.every(Number.isFinite));
+  if(points.length<1000) throw Error('Onvoldoende geldige zeepunten');
+  return {...data,points,tijd};
+}
+
+async function haalZeewater(){
+  const lokaal=['localhost','127.0.0.1','[::1]'].includes(location.hostname);
+  const urls=lokaal?[ZEETEMP_FEED]:['https://data.weerlab.nl/'+ZEETEMP_FEED,ZEETEMP_FEED];
+  let beste=laatsteAnalyse;
+  for(const url of urls){
+    try {
+      const analyse=await leesZeewater(url);
+      if(!beste||analyse.tijd>=beste.tijd) beste=analyse;
+      if(analyse===beste&&Date.now()-analyse.tijd<=VERTRAAGD_NA) break;
+    }catch{
+      // Het meegeleverde bestand en de laatst getoonde analyse zijn reserves.
+    }
+  }
+  if(!beste) throw Error('Bronbestand niet beschikbaar');
+  return beste;
+}
+
 async function laadData(){
-  const btn=document.getElementById('btn-laden');btn.disabled=true;btn.textContent='Ophalen…';
-  setStatus('NOAA-zeewatertemperaturen ophalen…');
+  const btn=document.getElementById('btn-laden');
+  if(btn.disabled) return;
+  btn.disabled=true;
+  btn.textContent='Ophalen…';
+  setStatus('Zeewateranalyse ophalen…');
   try {
-    const response=await fetch('zeetemp_noaa.json?v='+Math.floor(Date.now()/3600000),{cache:'no-cache'});
-    if(!response.ok)throw Error('Bronbestand niet beschikbaar');
-    const d=await response.json(),valid=new Date(d.valid);
-    if(!Array.isArray(d.points)||!Number.isFinite(valid.getTime()))throw Error('Ongeldig bronbestand');
-    stationData=STATIONS.flatMap(([naam,lat,lon])=>{
+    const d=await haalZeewater();
+    const stations=STATIONS.flatMap(([naam,lat,lon])=>{
       let best=null,distance=Infinity;
-      for(const p of d.points){if(!p.every(Number.isFinite))continue;const dist=(p[0]-lat)**2+((p[1]-lon)*Math.cos(lat*Math.PI/180))**2;if(dist<distance){distance=dist;best=p}}
+      const cos=Math.cos(lat*Math.PI/180);
+      for(const p of d.points){const dist=(p[0]-lat)**2+((p[1]-lon)*cos)**2;if(dist<distance){distance=dist;best=p}}
       return best&&distance<0.5**2?[{naam,lat,lon,t:best[2],gridLat:best[0],gridLon:best[1],x:0,y:0}]:[];
     });
-    if(!stationData.length)throw Error('Geen geldige zeepunten');
-    const stamp=valid.toLocaleDateString('nl-NL',{timeZone:'UTC',day:'numeric',month:'long',year:'numeric'});
-    const old=(Date.now()-valid.getTime())/86400000>5;
-    setStatus(`${old?'Let op: oudere analyse · ':''}${stationData.length} kustlocaties · NOAA OISST · daganalyse ${stamp}${d.preliminary?' (voorlopig)':''} · geen live kustmetingen`);
+    if(!stations.length) throw Error('Geen geldige zeepunten');
+    stationData=stations;
+    laatsteAnalyse=d;
+    const stamp=new Date(d.tijd).toLocaleDateString('nl-NL',{timeZone:'UTC',day:'numeric',month:'long',year:'numeric'});
+    const old=Date.now()-d.tijd>VERTRAAGD_NA;
+    setStatus(`${old?'Let op: oudere analyse · ':''}${stationData.length} kustlocaties · ${d.source} · daganalyse ${stamp}${d.preliminary?' (voorlopig)':''}`);
+    document.getElementById('kaart-bron').textContent=d.source+' · ';
     document.getElementById('kaart').dataset.valid=d.valid;
-  }catch(e){stationData=[];setStatus('Zeewatertemperatuur niet beschikbaar: '+e.message)}
+  }catch(e){setStatus('Zeewateranalyse kon niet worden geladen: '+e.message)}
   finally{btn.disabled=false;btn.textContent='↻ Vernieuwen';teken()}
 }
 
-function setStatus(html){document.getElementById('status-tekst').innerHTML=html;}
+function setStatus(tekst){document.getElementById('status-tekst').textContent=tekst;}
 
 // ── Kustbericht ─────────────────────────────────────────────────────────────
 // Per kustregio: bijbehorende meetpunten (voor zeewatertemperatuur), een

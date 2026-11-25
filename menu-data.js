@@ -198,7 +198,7 @@ const MENU_PRODUCTS = [
     "section": "Water & kust",
     "icon": "water",
     "href": "index.html#zeetemp",
-    "src": "zeetemp_kaart.html?v=20261031-noaa",
+    "src": "zeetemp_kaart.html?v=20261125-actualisatie",
     "thumbnail": "thumbs/zeetemp.webp",
     "facets": {},
     "keywords": "Zeewatertemperatuur Europa Noordzee golven Hollandse kust ",
