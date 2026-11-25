@@ -40,7 +40,7 @@
     <label for="parameter-keuze">Toon op kaart</label>
     <select id="parameter-keuze" aria-label="Kies een waarnemingsparameter">
       <option value="ta">Temperatuur</option>
-      <option value="wbgt">WBGT-temperatuur</option>
+      <option value="jag">Gevoelstemperatuur (JAG/TI)</option>
       <option value="hk">Hittekracht</option>
       <option value="td">Dauwpunt</option>
       <option value="ff">Wind</option>
@@ -144,10 +144,18 @@ const BFT=[0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
 function msToBft(ms){if(!ms&&ms!==0)return 0;let b=0;for(let i=0;i<BFT.length;i++){if(ms>=BFT[i])b=i+1;else break;}return b;}
 function windpijl(dd){if(dd==null)return "";const p=["↓","↙","←","↖","↑","↗","→","↘"];return p[Math.round(dd/45)%8];}
 
+function gevoelstemperatuur(temperatuur, windMs) {
+  if (!Number.isFinite(temperatuur) || temperatuur < -46 || temperatuur > 10 ||
+      !Number.isFinite(windMs) || windMs < 0 || windMs > 49) return null;
+  // Bij minder dan 1,3 m/s benadert de luchttemperatuur de gevoelstemperatuur.
+  if (windMs < 1.3) return temperatuur;
+  const windfactor = Math.pow(windMs * 3.6, 0.16);
+  return 13.12 + 0.6215 * temperatuur - 11.37 * windfactor + 0.3965 * temperatuur * windfactor;
+}
+
 const PARAMS = {
   ta:  {label:"Temperatuur (°C)",         eenheid:"°",     decimalen:1, temperatuur:true},
-  wbgt:{label:"WBGT-temperatuur (°C)",    eenheid:"°",     decimalen:1,
-        kleuren:[["#4472c4",14],["#70ad47",19],["#ffd700",23],["#ff9f2f",28],["#ff4500",32],["#8b0000",36]],schaal:[14,36]},
+  jag: {label:"Gevoelstemperatuur (JAG/TI, °C)", eenheid:"°", decimalen:1, temperatuur:true},
   hk:  {label:"Hittekracht (0–10)",       eenheid:"",      decimalen:0,
         kleuren:[["#52d88d",0],["#8bd65f",2],["#f4d33b",4],["#ff9f2f",6],["#ff3b30",8],["#7f1d1d",10]],schaal:[0,10]},
   td:  {label:"Dauwpunt (°C)",            eenheid:"°",     decimalen:1,
@@ -165,7 +173,7 @@ const PARAMS = {
         kleuren:[["#4a0080","≤990"],["#2171b5","1000"],["#6baed6","1010"],["#c6dbef","1020"],["#f7fbff","1030+"]],schaal:[990,1030]}
 };
 
-const GEDEELDE_KAARTPARAMS = new Set(["ta", "tg", "ff", "fx"]);
+const GEDEELDE_KAARTPARAMS = new Set(["ta", "jag", "tg", "ff", "fx"]);
 let stationData = {}, huidigParam = "ta";
 let meetTijdLokaal = null;
 
@@ -297,9 +305,10 @@ const SHEPARD_POWER = 2.5;
 const SHEPARD_KNN = 8;
 const BLUR_SIGMA = 2;
 const HEATMAP_ALPHA = 0.55;
-const HEATMAP_PARAMS = new Set(["ta","wbgt","td","tg","ff","fx","rh"]);
+const HEATMAP_PARAMS = new Set(["ta","jag","td","tg","ff","fx","rh"]);
 const CONTOUR_PARAMS = {
   ta: { step: 1,  major: 5,  unit: "°",    factor: 1 },
+  jag:{ step: 1,  major: 5,  unit: "°",    factor: 1 },
   td: { step: 1,  major: 5,  unit: "°",    factor: 1 },
   tg: { step: 1,  major: 5,  unit: "°",    factor: 1 },
   fx: { step: 10, major: 20, unit: " km/h", factor: 3.6 },
@@ -492,7 +501,7 @@ function tekenHeatmap(){
     punten.push({x: lonToX(st.lon)/SVG_W*w, y: latToY(st.lat)/SVG_H*h, val});
   });
   let veld = _shepardVeld(punten);
-  if(!veld) return;
+  if(!veld){ hc.width=1; hc.height=1; return; }
   veld = _blurVeld(veld);
   // Cache voor contour-rendering (waarden in param-eigen eenheid,
   // dus voor ff in m/s en voor fx in m/s — pas contourdrempels aan waar nodig)
@@ -812,7 +821,7 @@ function formatKaart(st, param) {
   if (param === "n") return Math.round(raw) + "/8";
   if (param === "p0") return raw.toFixed(0);
   if (param === "rh") return Math.round(raw) + "%";
-  return raw.toFixed(PARAMS[param].decimalen) + (["ta","wbgt","td","tg"].includes(param) ? "°" : "");
+  return raw.toFixed(PARAMS[param].decimalen) + (PARAMS[param].eenheid === "°" ? "°" : "");
 }
 
 function tekenKaart() {
@@ -900,7 +909,7 @@ function tekenLijst() {
   let KOLOMMEN = [
     { key: "naam", lbl: "Station",   eenheid: "" },
     { key: "ta",   lbl: "T",         eenheid: "°C" },
-    { key: "wbgt", lbl: "WBGT",      eenheid: "°C" },
+    { key: "jag",  lbl: "Gevoel",    eenheid: "°C" },
     { key: "hk",   lbl: "Hitte",     eenheid: "0–10" },
     { key: "td",   lbl: "Td",        eenheid: "°C" },
     { key: "ff",   lbl: "Wind",      eenheid: "Bft" },
@@ -918,7 +927,7 @@ function tekenLijst() {
   function fmt(st, key) {
     const v = key === "tg" ? (st.tg ?? st.tgn) : st[key];
     if (v == null) return "–";
-    if (key === "ta" || key === "wbgt" || key === "td" || key === "tg") return v.toFixed(1);
+    if (PARAMS[key].eenheid === "°") return v.toFixed(1);
     if (key === "hk") return Math.round(v);
     if (key === "ff") return msToBft(v);
     if (key === "fx") return Math.round(v * 3.6);
@@ -961,14 +970,17 @@ function tekenLijst() {
 function tekenLegenda() {
   const p = PARAMS[huidigParam];
   const legenda = document.getElementById("legenda");
-  document.getElementById("map-note").textContent = huidigParam === "ff"
-    ? "Kleuren tonen de windsnelheid in m/s · getallen zijn stationsmetingen in Bft."
-    : "Kleuren tonen het ruimtelijke verloop · getallen zijn stationsmetingen.";
+  const kaartNotities = {
+    ff: "Kleuren tonen de windsnelheid in m/s · getallen zijn stationsmetingen in Bft.",
+    jag: "JAG/TI gebruikt temperatuur en gemiddelde wind. Boven 10 °C is er geen waarde. Bij minder dan 1,3 m/s geldt de luchttemperatuur als benadering.",
+  };
+  document.getElementById("map-note").textContent = kaartNotities[huidigParam] ||
+    "Kleuren tonen het ruimtelijke verloop · getallen zijn stationsmetingen.";
   if (GEDEELDE_KAARTPARAMS.has(huidigParam)) {
     legenda.innerHTML = kaartLegendaItems(p);
     return;
   }
-  const suffix = {wbgt:"°",td:"°",n:"/8",rh:"%",vv:" m",p0:" hPa",hk:""}[huidigParam] || "";
+  const suffix = {td:"°",n:"/8",rh:"%",vv:" m",p0:" hPa",hk:""}[huidigParam] || "";
   legenda.innerHTML = p.kleuren.map(([k,l],i,arr)=>{
     const label=typeof l==='number'?(i===0?`≤${l}${suffix}`:i===arr.length-1?`${l}${suffix}+`:`${l}${suffix}`):l;
     return `<div class="legenda-item"><div class="legenda-blok" style="background:${k}"></div>${label}</div>`;
@@ -1026,6 +1038,9 @@ function laadActueel() {
     .then(([json, geo]) => {
       if (!json.stations || !Object.keys(json.stations).length) throw new Error("Geen stations beschikbaar");
       stationData = json.stations;
+      for (const station of Object.values(stationData)) {
+        if (station) station.jag = gevoelstemperatuur(station.ta, station.ff);
+      }
       document.getElementById("data-status").hidden = true;
       const bw = json.bijgewerkt || "";
       meetTijdLokaal = laatsteMeetTijd(stationData);
@@ -1187,13 +1202,13 @@ function downloadKaart() {
 function downloadCSV() {
   const items = Object.values(stationData).filter(st => st && st.lon != null);
   const stand = document.getElementById("klok-stand").textContent;
-  let csv = "Station;Temp (°C);WBGT (°C);Hittekracht (0-10);Dauwpunt (°C);Wind (m/s);Bft;Richting (°);Stoot (km/h);Bewolking;Vochtigheid (%);Zicht (m);Gras (°C);Luchtdruk (hPa)\n";
+  let csv = "Station;Temp (°C);Gevoelstemperatuur JAG/TI (°C);Hittekracht (0-10);Dauwpunt (°C);Wind (m/s);Bft;Richting (°);Stoot (km/h);Bewolking;Vochtigheid (%);Zicht (m);Gras (°C);Luchtdruk (hPa)\n";
   items.sort((a, b) => a.naam.localeCompare(b.naam));
   items.forEach(st => {
     csv += [
       st.naam,
       st.ta != null ? st.ta.toFixed(1) : "",
-      st.wbgt != null ? st.wbgt.toFixed(1) : "",
+      st.jag != null ? st.jag.toFixed(1) : "",
       st.hk != null ? Math.round(st.hk) : "",
       st.td != null ? st.td.toFixed(1) : "",
       st.ff != null ? st.ff.toFixed(1) : "",
