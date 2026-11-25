@@ -1216,12 +1216,12 @@ const MENU_PRODUCTS = [
   {
     "id": "weerkaart",
     "name": "Modellen 4-luik",
-    "description": "Vier modelkaarten naast elkaar op dezelfde tijd · HARMONIE 43/46, ICON-D2, ECMWF, AROME en UKV",
+    "description": "Vier modelkaarten naast elkaar op dezelfde tijd · HARMONIE 43/46, ICON-D2, ECMWF, AROME, UKV, GFS en ICON-EU",
     "category": "verwachting", "type": "kaarten", "section": "",
     "icon": "vierluik", "href": "index.html#weerkaart",
-    "src": "vierluik/index.html?v=20261124-kaartlabels", "thumbnail": null,
-    "facets": {"veld":["significant","temp","neerslag","wind","bewolking","zon","hoogte"],"model":["harmonie","harmonie46","icond2","ecmwf","arome","ukv"],"gebied":["nl"],"weergave":["4"]},
-    "keywords": "vierluik 4-luik vier modellen vergelijken Benelux HARMONIE 43 HARMONIE 46 ICON-D2 ECMWF IFS AROME HD UKMO UKV significant weer dauwpunt gevoelstemperatuur zicht wolkenbasis bewolking wolkenlagen RGB neerslag windstoten zonduur zonuren dagsom",
+    "src": "vierluik/index.html?v=20261125-gfs-iconeu", "thumbnail": null,
+    "facets": {"veld":["significant","temp","neerslag","wind","bewolking","zon","hoogte"],"model":["harmonie","harmonie46","icond2","ecmwf","arome","ukv","gfs","iconeu"],"gebied":["nl"],"weergave":["4"]},
+    "keywords": "vierluik 4-luik vier modellen vergelijken Benelux HARMONIE 43 HARMONIE 46 ICON-D2 ECMWF IFS AROME HD UKMO UKV GFS NOAA ICON-EU DWD significant weer dauwpunt gevoelstemperatuur zicht wolkenbasis bewolking wolkenlagen RGB neerslag windstoten zonduur zonuren dagsom",
     "restricted": false
   },
   {
@@ -1446,6 +1446,7 @@ const MENU_LABELS = {
     "ukv": "UKMO UKV 2 km",
     "ecmwf": "ECMWF HRES",
     "gfs": "GFS",
+    "iconeu": "ICON-EU",
     "eps": "ECMWF ENS"
   },
   "gebied": {

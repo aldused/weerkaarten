@@ -1,4 +1,6 @@
 const CLOUD_SOURCES={
+ gfs:{meta:'gfs_native_canvas_meta.json',file:/^gfs-native\/\d{10}\/gfs_native_data_bewolking\.bin$/,liveRegional:true},
+ iconeu:{meta:'icon_eu_native_canvas_meta.json',file:/^icon-eu-native\/\d{10}\/icon_eu_native_data_bewolking\.bin$/,liveRegional:true},
  harmonie:{meta:'harmonie_canvas_meta.json',file:/^harmonie_data_bewolking\.bin$/},
  harmonie46:{meta:'harmonie46_canvas_meta.json',file:/^harmonie46_data_bewolking\.bin$/},
  icond2:{meta:'icond2_canvas_meta.json',file:/^icond2_data_bewolking\.bin$/},
@@ -7,6 +9,7 @@ const CLOUD_SOURCES={
  ukv:{meta:'ukv_native_canvas_meta.json',file:/^ukv-native\/\d{10}\/ukv_native_data_bewolking\.bin$/}
 };
 const CLOUD_BASE_FILES={
+ iconeu:/^icon-eu-native\/\d{10}\/icon_eu_native_data_wolkenbasis\.bin$/,
  harmonie:/^harmonie_data_wolkenbasis\.bin$/,
  harmonie46:/^harmonie46_data_wolkenbasis\.bin$/,
  icond2:/^icond2_data_wolkenbasis(?:_\d{10}_[a-f0-9]{12})?\.bin$/,
@@ -25,18 +28,20 @@ export function cloudTime(value){
  for(let i=0;i<3;i++){const p=Object.fromEntries(fmt.formatToParts(new Date(utc)).map(p=>[p.type,p.value]));const local=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const correction=desired-local;if(!correction)return utc;utc+=correction;}
  throw Error('Lokale wolkentijd bestaat niet');
 }
-export async function cloudCatalog(key,field='bewolking'){
+export async function cloudCatalog(key,field='bewolking',signal){
  const config=CLOUD_SOURCES[key],base=field==='wolkenbasis';if(!config||!['bewolking','wolkenbasis'].includes(field))throw Error('Onbekend wolkenmodel of veld');
- const read=async()=>{const r=await fetch('https://harmonie-data.weerlab.nl/'+config.meta,{headers:{Accept:'application/json'},cache:'no-store'});if(!r.ok)throw Error('Wolkenindex niet beschikbaar');return r.json();};
+ const read=async()=>{const r=await fetch('https://harmonie-data.weerlab.nl/'+config.meta,{headers:{Accept:'application/json'},cache:'no-store',signal});if(!r.ok)throw Error('Wolkenindex niet beschikbaar');return r.json();};
  const meta=await read(),parentRun=Date.parse(meta.run_utc),g=meta.grid,info=meta.parameters?.[field];
  const run=base&&info?.source_run_utc?Date.parse(info.source_run_utc):parentRun;
  if(!Number.isFinite(run)||!Number.isFinite(parentRun)||!g||g.n_lat<2||g.n_lon<2||g.n_lat*g.n_lon>1000000||!Array.isArray(meta.tijden)||!meta.tijden.length||meta.tijden.length>400)throw Error('Ongeldige wolkenbron');
+ const age=Date.now()-parentRun;
+ if(config.liveRegional&&(age< -3600000||age>24*3600000))throw Error('Modelrun is verouderd');
  if((!info&&!base)||(info&&(info.components!==(base?1:3)||!(base?CLOUD_BASE_FILES[key]?.test(info.file):config.file.test(info.file)))))throw Error('Ongeldig wolkenbestand');
  const id=new Date(run).toISOString().replace(/[-:T]/g,'').slice(0,10),parentId=new Date(parentRun).toISOString().replace(/[-:T]/g,'').slice(0,10);
  if(info?.file.includes('/')&&!info.file.includes('/'+parentId+'/'))throw Error('Wolkenbestand hoort bij andere run');
  let etag;
  if(info&&!info.file.includes('/')){
-  const header=await fetch('https://harmonie-data.weerlab.nl/'+info.file,{method:'HEAD',cache:'no-store'});
+  const header=await fetch('https://harmonie-data.weerlab.nl/'+info.file,{method:'HEAD',cache:'no-store',signal});
   if(!header.ok){await header.body?.cancel();throw Error('Wolkenbestand niet beschikbaar');}
   etag=header.headers.get('ETag')?.replace(/^W\//,'');if(!etag)throw Error('Wolkenbron mist versie');
   const after=await read();if(JSON.stringify(after)!==JSON.stringify(meta))throw Error('Wolkenrun wijzigt tijdens het ophalen');

@@ -40,16 +40,16 @@ function wetBulb(t,dew){
 }
 export async function loadNativeFrame(step,run,target){
  if(!run.native.cloudWhole)wholeFiles.clear();
- const names=run.native.cloudOnly?[run.native.cloudParameter||'bewolking']:['temp','dauwpunt','wind','windstoten','bewolking','neerslag','cumul','druk','zicht'];
+ const names=run.native.cloudOnly?[run.native.cloudParameter||'bewolking']:['temp','dauwpunt','wind','windstoten','bewolking','neerslag','cumul','druk','zicht','cloud_total','sneeuwhoogte'];
  const values=await Promise.all(names.map(name=>field(name,step,run,target,name==='windstoten'))),raw=Object.fromEntries(names.map((name,i)=>[name,values[i]]));
- const f={nativeSource:true,regional:true,gustPeriod:1};
- for(const [source,dest] of [['temp','t2m'],['dauwpunt','td2m'],['neerslag','rain'],['cumul','ptot'],['zicht','vis']])if(raw[source])f[dest]=raw[source][0];
+ const f={nativeSource:true,regional:true,gustPeriod:step.gustPeriod};
+ for(const [source,dest] of [['temp','t2m'],['dauwpunt','td2m'],['neerslag','rain'],['cumul','ptot'],['zicht','vis'],['cloud_total','tcc'],['sneeuwhoogte','sdep']])if(raw[source])f[dest]=raw[source][0];
  if(raw.wolkenbasis){const info=run.native.meta.parameters.wolkenbasis,data=cloudBaseData(raw.wolkenbasis[0],info);f.cloudBase=data.values;f.cloudBaseStatus=data.status;f.cloudBaseKind=info.kind;}
  if(raw.wind){[f.u,f.v]=raw.wind;f.ws=Float32Array.from(f.u,(u,i)=>Math.hypot(u,f.v[i])*3.6);}
  if(raw.windstoten)f.gust=Float32Array.from(raw.windstoten[0],v=>v*3.6);
  if(raw.druk)f.msl=Float32Array.from(raw.druk[0],p=>p/100);
  if(raw.bewolking){[f.cloudHigh,f.cloudMiddle,f.cloudLow]=raw.bewolking.map(layer=>Float32Array.from(layer,v=>Number.isFinite(v)&&v>=0&&v<=1?100*v:NaN));f.clouds=f.cloudHigh;}
- if(raw.bewolking)f.tcc=Float32Array.from(raw.bewolking[0],(_,i)=>100*(1-raw.bewolking.reduce((v,layer)=>v*(1-fraction(layer[i])),1)));
+ if(raw.bewolking&&!f.tcc)f.tcc=Float32Array.from(raw.bewolking[0],(_,i)=>100*(1-raw.bewolking.reduce((v,layer)=>v*(1-fraction(layer[i])),1)));
  if(f.rain){
   const n=f.rain.length;f.rate=Float32Array.from(f.rain,v=>Math.max(0,v));f.precipKind=new Uint8Array(n);f.strength=new Uint8Array(n);
   for(let i=0;i<n;i++)if(f.rate[i]>=.045){const tw=f.t2m&&f.td2m?wetBulb(f.t2m[i],f.td2m[i]):NaN;f.precipKind[i]=!Number.isFinite(tw)?8:tw<=.6?2:tw<=1.4?3:1;f.strength[i]=Math.max(0,[.05,.2,.5,1,2,5,10].findLastIndex(v=>f.rate[i]>=v));}

@@ -4,8 +4,11 @@ const source=fs.readFileSync('menu.js','utf8');
 const products=vm.runInNewContext(fs.readFileSync('menu-data.js','utf8')+';MENU_PRODUCTS');
 const routeSource=source.slice(source.indexOf('  function readRoute(){'),source.indexOf('  function navigate('));
 function route(hash){const location={hash,href:'https://weerlab.nl/'+hash},history={replaceState(_a,_b,hash){location.hash=hash}};const context={site:{},location,history,products,URL,URLSearchParams,window:{},categories:{},filterSets:{},MENU_LABELS:{}};return {state:vm.runInNewContext(routeSource+';readRoute()',context),location};}
-for(const old of ['vierluik','hires4','hires6','global4']){const r=route('#weerkaarten-'+old+'?laag=wind');assert.equal(r.location.hash,'#weerkaart');assert.equal(r.state.product.src,'vierluik/index.html?v=20261122-bereik');}
-assert.equal(route('#weerkaart').state.product.name,'Modellen 4-luik');
+for(const old of ['vierluik','hires4','hires6','global4']){const r=route('#weerkaarten-'+old+'?laag=wind');assert.equal(r.location.hash,'#weerkaart');assert.match(r.state.product.src,/^vierluik\/index\.html\?v=\d{8}-[a-z0-9-]+$/);}
+const weerkaart=route('#weerkaart').state.product;
+assert.equal(weerkaart.name,'Modellen 4-luik');
+assert.ok(weerkaart.facets.model.includes('gfs'));
+assert.ok(weerkaart.facets.model.includes('iconeu'));
 assert.equal(route('#weerkaart-europa?tab=overzicht').state.product.name,'ECMWF Europa');
 assert.equal(route('#weerkaart-europa').state.product.src,'ecmwf-europa.html?v=20261122-tabs');
 assert.equal(products.filter(p=>p.id==='hires4').length,0);
