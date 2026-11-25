@@ -60,6 +60,16 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.selectOption('#sel-station','alle');
   await page.waitForFunction(()=>Array.isArray(multiData)&&multiData.length>40,null,{timeout:120000});
   await page.locator('.archive-secondary').getByRole('button',{name:'Vorstdagen',exact:true}).click();
+  assert.equal(await page.inputValue('#sel-param-mobile'),'dagen_vorst');
+  assert.match(await page.locator('#records-periode').innerText(),/TN < 0 °C/);
+  await page.selectOption('#sel-periode-mobile','maand');
+  await page.selectOption('#sel-maand','11');
+  assert.match(await page.locator('#records-titel').innerText(),/Meeste vorstdagen in november/);
+  assert.match(await page.locator('#records-body tr').first().innerText(),/1921[\s\S]*Maastricht[\s\S]*24/);
+  const winterswijk1921=page.locator('#records-body tr').filter({hasText:/1921[\s\S]*Winterswijk/});
+  assert.equal(await winterswijk1921.locator('td').nth(3).innerText(),'22');
+  await page.selectOption('#sel-param-mobile','dagen_matige_vorst');
+  await page.selectOption('#sel-periode-mobile','winterjaar');
   await page.waitForFunction(()=>document.querySelector('#records-body tr')?.textContent.includes('Twenthe')&&document.querySelector('#records-body tr')?.textContent.includes('72'),null,{timeout:120000});
   assert.equal(await page.inputValue('#sel-periode-mobile'),'winterjaar');
   assert.match(await page.locator('#records-body tr').first().innerText(),/1962\/1963[\s\S]*Twenthe[\s\S]*72/);
@@ -75,7 +85,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.selectOption('#sel-param-mobile','dagen_matige_vorst');
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:'/private/tmp/weerrecords-vorst-desktop.png',fullPage:true});
-  for(const key of ['lichte_vorst','strenge_vorst','zeer_strenge_vorst','extreem_koud']) {
+  for(const key of ['vorst','strenge_vorst','zeer_strenge_vorst','extreem_koud']) {
    await page.selectOption('#sel-param-mobile','dagen_'+key);
    assert.equal(await page.locator('#records-tabel').isVisible(),true);
    assert.equal(await page.inputValue('#sel-periode-mobile'),'winterjaar');
@@ -88,6 +98,10 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   assert.equal(await page.locator('#sel-param-mobile').isVisible(),true);
   await page.screenshot({path:'/private/tmp/weerrecords-vorst-mobile.png',fullPage:true});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Frost records fit on mobile');
+  await page.goto(url+'?station=380&tab=records&param=dagen_lichte_vorst&periode=maand&sel-maand=11');
+  await page.waitForFunction(()=>document.querySelector('#records-body tr')?.textContent.includes('24')&&huidigePeriode==='maand',null,{timeout:90000});
+  assert.equal(await page.inputValue('#sel-param-mobile'),'dagen_vorst');
+  assert.match(await page.locator('#records-body tr').first().innerText(),/1921[\s\S]*24/);
   await page.goto(url+'?station=260&tab=records&param=dagen_matige_vorst&periode=alltime');
   await page.waitForFunction(()=>document.querySelector('#records-body tr')?.textContent.includes('56')&&huidigePeriode==='alltime',null,{timeout:90000});
   assert.match(await page.locator('#records-body tr').first().innerText(),/1963[\s\S]*56/);

@@ -556,7 +556,7 @@
 <script defer src="records-ui.js?v=20261121-vorst-records"></script>
 <script src="record-stations.js?v=20261103-year-records"></script>
 <link rel="stylesheet" href="records-archive.css?v=20261007-2">
-<script defer src="records-archive.js?v=20261123-ijsdagen-winterjaar"></script>
+<script defer src="records-archive.js?v=20261125-vorstdagen"></script>
 <link rel="stylesheet" href="records-menu.css?v=20261121-vorst-records">
 <script src="records-cold-core.js?v=20261121-vorst-records"></script>
 <script src="records-cold-days.js?v=20261121"></script>
@@ -849,7 +849,7 @@
         <option value="dagen_tropisch">Aantal tropische dagen (TX ≥30°C)</option>
         <option value="dagen_extreem">Aantal extreem warme dagen (TX ≥35°C)</option>
         <option value="dagen_ijs">Aantal ijsdagen (TX &lt; 0 °C)</option>
-        <option value="dagen_lichte_vorst">Aantal dagen met lichte vorst (−5,0 °C ≤ TN < 0 °C)</option>
+        <option value="dagen_vorst">Aantal vorstdagen (TN &lt; 0 °C)</option>
         <option value="dagen_matige_vorst">Aantal dagen met matige vorst of kouder (TN < −5 °C)</option>
         <option value="dagen_strenge_vorst">Aantal dagen met strenge vorst of kouder (TN < −10 °C)</option>
         <option value="dagen_zeer_strenge_vorst">Aantal dagen met zeer strenge vorst (TN < −15 °C)</option>
@@ -872,7 +872,7 @@
     <div class="param-tab" onclick="wisselParam('dagen_tropisch')">🌡️ Aantal tropische dagen</div>
     <div class="param-tab" onclick="wisselParam('dagen_extreem')">♨️ Aantal ≥35°C-dagen</div>
     <div class="param-tab" onclick="wisselParam('dagen_ijs')">❄️ IJsdagen</div>
-    <div class="param-tab" onclick="wisselParam('dagen_lichte_vorst')">❄️ Lichte vorst</div>
+    <div class="param-tab" onclick="wisselParam('dagen_vorst')">❄️ Vorstdagen</div>
     <div class="param-tab" onclick="wisselParam('dagen_matige_vorst')">❄️ Matige vorst of kouder</div>
     <div class="param-tab" onclick="wisselParam('dagen_strenge_vorst')">❄️ Strenge vorst of kouder</div>
     <div class="param-tab" onclick="wisselParam('dagen_zeer_strenge_vorst')">❄️ Zeer strenge vorst</div>
@@ -1540,7 +1540,7 @@ const KLIMAATDAG_RECORDS = {
   dagen_tropisch: { label:"tropische dagen",     kort:"Tropische dagen",     key:"tx", drempel:30, kleur:"#f97316" },
   dagen_extreem:  { label:"extreem warme dagen", kort:"Extreem warme dagen", key:"tx", drempel:35, kleur:"#ef4444" },
   dagen_ijs: {...ColdDays.categories[1], label:ColdDays.categories[1].noun, kort:"IJsdagen", key:"tx", coldCategory:1, kleur:ColdDays.categories[1].color},
-  dagen_lichte_vorst: {...ColdDays.categories[2], label:ColdDays.categories[2].noun, kort:ColdDays.categories[2].label, key:"tn", coldCategory:2, kleur:ColdDays.categories[2].color},
+  dagen_vorst: {...ColdDays.categories[0], label:ColdDays.categories[0].noun, kort:"Vorstdagen", key:"tn", coldCategory:0, kleur:ColdDays.categories[0].color},
   dagen_matige_vorst: {...ColdDays.categories[3], label:ColdDays.categories[3].noun, kort:ColdDays.categories[3].label, key:"tn", coldCategory:3, kleur:ColdDays.categories[3].color},
   dagen_strenge_vorst: {...ColdDays.categories[4], label:ColdDays.categories[4].noun, kort:ColdDays.categories[4].label, key:"tn", coldCategory:4, kleur:ColdDays.categories[4].color},
   dagen_zeer_strenge_vorst: {...ColdDays.categories[5], label:ColdDays.categories[5].noun, kort:ColdDays.categories[5].label, key:"tn", coldCategory:5, kleur:ColdDays.categories[5].color},
@@ -4013,15 +4013,16 @@ function klimaatdagRecordRijen(cfg) {
     return {rijen, bronnen, isMulti};
   }
 
+  const vandaag = koud ? Date.parse(kdToday()+"T00:00:00Z") : null;
   for (const ds of bronnen) {
     const groepen = new Map(), gezien = new Set();
     for (const [jaarTekst, maanden] of Object.entries(ds.maanddetail)) {
       for (const [maandTekst, maand] of Object.entries(maanden)) {
         for (const dag of (maand.dagen || [])) {
-          const datum = koud ? ColdDays.dateKey(Number(jaarTekst), Number(maandTekst), Number(dag.dag)) : null;
-          if (koud && (datum === null || datum >= Date.parse(kdToday()+"T00:00:00Z") || gezien.has(datum))) continue;
           const selectie = klimaatdagPeriodeSelectie(jaarTekst, maandTekst, dag.dag);
           if (!selectie) continue;
+          const datum = koud ? ColdDays.dateKey(Number(jaarTekst), Number(maandTekst), Number(dag.dag)) : null;
+          if (koud && (datum === null || datum >= vandaag || gezien.has(datum))) continue;
           const waarde = dag[cfg.key];
           if (waarde === null || waarde === undefined || !Number.isFinite(Number(waarde)) || waarde === -9999 || waarde === -999.9) continue;
           gezien.add(datum);
