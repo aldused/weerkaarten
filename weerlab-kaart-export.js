@@ -128,7 +128,7 @@ async function rasteriseerWeerlabKaartlaag(svg, breedte, hoogte, stijl) {
 async function maakWeerlabKaartCanvas({
   basis, kleurlaag, overlay, basisStijl, overlayStijl,
   breedte = 1600, dagtekst, kaarttitel, kopregel, bron, tekenLabels,
-  legenda, historischeLocaties = false
+  legenda, historischeLocaties = false, zijpaneel
 }) {
   const kaart = basis.viewBox.baseVal;
   const hoogte = Math.round(breedte * kaart.height / kaart.width);
@@ -137,15 +137,19 @@ async function maakWeerlabKaartCanvas({
   const bijschrift = legenda
     ? tekenWeerlabKaartBijschrift(breedte,legenda,historischeLocaties)
     : null;
-  const voetY = kopHoogte + hoogte + (bijschrift?.height || 0);
-  canvas.width = breedte;
+  const uitvoerBreedte = breedte + (zijpaneel?.width || 0);
+  const kaartHoogte = hoogte + (bijschrift?.height || 0);
+  const voetY = kopHoogte + Math.max(kaartHoogte, zijpaneel?.height || 0);
+  canvas.width = uitvoerBreedte;
   canvas.height = voetY + voetHoogte;
   const ctx = canvas.getContext("2d");
   const [land, bovenlaag] = await Promise.all([
     rasteriseerWeerlabKaartlaag(basis, breedte, hoogte, basisStijl),
     rasteriseerWeerlabKaartlaag(overlay, breedte, hoogte, overlayStijl)
   ]);
-  tekenWeerlabKaartKop(ctx, breedte, kopHoogte, dagtekst, kaarttitel, kopregel);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  tekenWeerlabKaartKop(ctx, uitvoerBreedte, kopHoogte, dagtekst, kaarttitel, kopregel);
   ctx.fillStyle = "#b8d4e8";
   ctx.fillRect(0, kopHoogte, breedte, hoogte);
   ctx.drawImage(land, 0, kopHoogte);
@@ -159,6 +163,7 @@ async function maakWeerlabKaartCanvas({
     ctx.restore();
   }
   if (bijschrift) ctx.drawImage(bijschrift,0,kopHoogte+hoogte);
-  tekenWeerlabKaartVoet(ctx, breedte, voetY, voetHoogte, bron);
+  if (zijpaneel) ctx.drawImage(zijpaneel,breedte,kopHoogte);
+  tekenWeerlabKaartVoet(ctx, uitvoerBreedte, voetY, voetHoogte, bron);
   return canvas;
 }

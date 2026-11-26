@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -63,17 +64,56 @@ def bouw_dagrecords(bronmap, uitvoer, koude=False):
             cel["l"] = 1
         dag[naam] = cel
 
+    def zet_vorig(soort, sleutel, naam, waarde, datum, lopend):
+        huidig = kaarten[soort].get(sleutel, {}).get(naam)
+        if huidig is None or datum >= huidig["d"] or datum == lopend:
+            return
+        vorig = huidig.get("vorig")
+        temperatuur = round(waarde, 1)
+        if vorig is not None:
+            verschil = temperatuur - vorig["t"]
+            if verschil == 0 and datum >= vorig["d"]:
+                return
+            if verschil * (1 if koude else -1) > 0:
+                return
+        huidig["vorig"] = {"t": temperatuur, "d": datum}
+
+    # Groepeer aanvullingen zodat ook bij een historisch record de vorige stand
+    # uit de stationsreeks kan worden bepaald.
+    aanvullingen = defaultdict(list)
+    extremen = laad_records(bronmap, "nl_extreme")
+    if extremen is None:
+        gemist.append(("nl_extreme", "Historische extremen NL", "geen data"))
+    else:
+        for maand, dagen in extremen.get("dag", {}).items():
+            for dag, waarden in dagen.items():
+                sleutel = f"{int(maand):02d}-{int(dag):02d}"
+                for soort in soorten:
+                    for rij in waarden.get(soort, []):
+                        if len(rij) < 3:
+                            continue
+                        waarde, datum, naam = rij[:3]
+                        if naam in UITGESLOTEN_TEMPERATUURSTATIONS:
+                            continue
+                        if naam not in register:
+                            gemist.append(("hist", naam, "niet in stationsregister"))
+                            continue
+                        aanvullingen[naam].append((soort, sleutel, waarde, datum))
+
     for naam, station in register.items():
         nr = station["source"]
-        if nr == "nl_extreme" or naam in UITGESLOTEN_TEMPERATUURSTATIONS:
+        if naam in UITGESLOTEN_TEMPERATUURSTATIONS:
             continue
-        if not station.get("coordinates"):
-            gemist.append((nr, naam, "geen coords"))
-            continue
-        record = laad_records(bronmap, nr)
-        if record is None:
-            gemist.append((nr, naam, "geen data"))
-            continue
+        if nr == "nl_extreme":
+            record = {}
+        else:
+            if not station.get("coordinates"):
+                gemist.append((nr, naam, "geen coords"))
+                continue
+            record = laad_records(bronmap, nr)
+            if record is None:
+                gemist.append((nr, naam, "geen data"))
+                continue
         lopend = record.get("lopend")
         if lopend:
             lopend_data.append(lopend)
@@ -105,26 +145,24 @@ def bouw_dagrecords(bronmap, uitvoer, koude=False):
                 if rij is not None:
                     zet_record(soort, sleutel, naam, rij[0], rij[1], historisch)
 
-    # Losse historische extremen vullen stations aan zonder doorlopende reeks.
-    # De aanvullingen hebben kouderecords voor TN waar de bron die vermeldt.
-    extremen = laad_records(bronmap, "nl_extreme")
-    if extremen is None:
-        gemist.append(("nl_extreme", "Historische extremen NL", "geen data"))
-    else:
-        for maand, dagen in extremen.get("dag", {}).items():
-            for dag, waarden in dagen.items():
-                sleutel = f"{int(maand):02d}-{int(dag):02d}"
-                for soort in soorten:
-                    for rij in waarden.get(soort, []):
-                        if len(rij) < 3:
-                            continue
-                        waarde, datum, naam = rij[:3]
-                        if naam in UITGESLOTEN_TEMPERATUURSTATIONS:
-                            continue
-                        if naam not in register:
-                            gemist.append(("hist", naam, "niet in stationsregister"))
-                            continue
-                        zet_record(soort, sleutel, naam, waarde, datum, True)
+        for soort, sleutel, waarde, datum in aanvullingen[naam]:
+            zet_record(soort, sleutel, naam, waarde, datum, True)
+        for soort, sleutel, waarde, datum in aanvullingen[naam]:
+            zet_vorig(soort, sleutel, naam, waarde, datum, lopend)
+        for soort in soorten:
+            for sleutel, waarden in dagen:
+                for waarde, datum, *_ in waarden.get(soort, []):
+                    zet_vorig(soort, sleutel, naam, waarde, datum, lopend)
+
+        velden = [(soort, soort[:2]) for soort in soorten]
+        for jaar, maanden in record.get("maanddetail", {}).items():
+            for maand, maanddata in maanden.items():
+                for rij in maanddata.get("dagen", []):
+                    sleutel = f"{int(maand):02d}-{int(rij['dag']):02d}"
+                    datum = f"{int(jaar):04d}-{sleutel}"
+                    for soort, veld in velden:
+                        if rij.get(veld) is not None:
+                            zet_vorig(soort, sleutel, naam, rij[veld], datum, lopend)
 
     if gemist:
         raise RuntimeError(f"Onvolledige dagrecordbronnen: {gemist}")

@@ -273,7 +273,7 @@
     const rankingPages=['records_debilt.html','dagrecords_jaar.html','dagrecords_6dagen.html','extremen.html','neerslag_records.html','p13_records.html'];
     const scan=()=>{
       for(const id of ['sel-station','station','stationSelect','station-select','sel-grafiek-station','sel-verg-station','ss']){const select=$(id);if(select?.tagName==='SELECT')stationSearch(select);}
-      if(rankingPages.includes(page))document.querySelectorAll('table').forEach(enhanceTable);
+      if(rankingPages.includes(page))document.querySelectorAll('table:not([data-record-table-static])').forEach(enhanceTable);
     };
     scan();let queued=false;
     new MutationObserver(()=>{if(!queued){queued=true;requestAnimationFrame(()=>{queued=false;scan();});}}).observe(document.body,{childList:true,subtree:true});

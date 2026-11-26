@@ -35,6 +35,10 @@ class HistoricalMap(unittest.TestCase):
    self.assertNotIn('Rotterdam Geulhaven',data['stations'])
    de_bilt=fixtures['260']
    de_bilt['lopend']='2026-01-27'
+   de_bilt['maanddetail']={
+    '1930':{'1':{'dagen':[{'dag':27,'tx':-4.6,'tn':-24.6}]}},
+    '1950':{'1':{'dagen':[{'dag':27,'tx':-4.7,'tn':-24.7}]}},
+   }
    for soort in ('tx_laag','tn_laag'):
     de_bilt['dag']['1']['27'][soort].insert(0,[-40,'2026-01-27'])
    (root/'records_260.json').write_text(json.dumps(de_bilt))
@@ -48,6 +52,8 @@ class HistoricalMap(unittest.TestCase):
     self.assertEqual(len(days),366)
     self.assertEqual(days['01-27']['De Bilt']['t'],waarde)
     self.assertEqual(days['01-27']['De Bilt']['d'],'1942-01-27')
+    self.assertEqual(days['01-27']['De Bilt']['vorig'],
+                     {'t':round(waarde+0.2,1),'d':'1930-01-27'})
    self.assertEqual(cold['dagrecords']['tn_laag']['01-27']['Warnsveld'],
                     {'t':-25.4,'d':'1942-01-27','h':1})
    vandaag=datetime.now(ZoneInfo('Europe/Amsterdam')).date()
