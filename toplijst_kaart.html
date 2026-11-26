@@ -143,8 +143,9 @@ body {
 .kaart-footer-band .merk { color: #f1f5f9; font-weight: 700; }
 .kaart-footer-band .src { color: #94a3b8; font-family: "DM Mono", ui-monospace, monospace; font-weight: 500; letter-spacing: 0.04em; }
 .kaart-footer-band .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: rgba(46,196,232,0.14); color: #7dd3fc; font-family: "DM Mono", ui-monospace, monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; }
-.legenda { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 16px; justify-content: center; }
-.topkaart-controls .legenda { padding: 0; justify-content: flex-start; }
+.legenda { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 16px; justify-content: center; }
+.kaart-shell > .legenda { background: #fff; border: 1px solid #dbe4ef; border-top: 0; }
+[data-theme="dark"] .kaart-shell > .legenda { background: #111a2e; border-color: rgba(255,255,255,.08); }
 .legenda-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #5a7090; }
 .legenda-blok { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc; }
 .status { text-align: center; padding: 12px; font-size: 12px; color: #888; }
@@ -153,6 +154,7 @@ body {
   text-align: left;
   min-height: 18px;
 }
+.topkaart-controls .control-card:has(> .status:empty) { display: none; }
 .zoom-hint { text-align:center; font-size:11px; color:#888; padding:4px 0 0; cursor:pointer; }
 #lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:1000; justify-content:center; align-items:center; }
 #lightbox.actief { display:flex; }
@@ -282,6 +284,7 @@ body {
         <canvas id="heatmap"></canvas>
         <svg class="overlay" id="nl-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
+      <div class="legenda" id="legenda" role="group" aria-label="Kleurenschaal"></div>
       <div class="kaart-footer-band">
         <span class="merk">weerlab.nl</span>
         <span class="pill" id="kaart-foot-stand" style="display:none"></span>
@@ -331,8 +334,6 @@ body {
     </div>
 
     <div class="control-card">
-      <div class="control-title">Legenda</div>
-      <div class="legenda" id="legenda"></div>
       <div class="status" id="status">Laden...</div>
     </div>
   </aside>
@@ -344,7 +345,7 @@ body {
 </div>
 
 <script src="waarnemingen-kaartkleuren.js?v=20261124-topkaart"></script>
-<script src="weerlab-kaart-export.js?v=20261124-1"></script>
+<script src="weerlab-kaart-export.js?v=20261126-legenda"></script>
 <script>
 const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
 const SVG_W=800, SVG_H=1100;
@@ -1021,7 +1022,6 @@ function tekenKaart(dagData, param, svg, heatmap) {
     svg.appendChild(wrd);
   });
 
-  tekenKaartLegenda(svg, p, paneel_x, paneel_y + paneel_h + 12);
 }
 
 function maakLegenda(param) {
@@ -1098,6 +1098,7 @@ async function maakExportCanvas(dag, param, datum) {
   tekenKaart(dag, param, overlay, kleurlaag);
   return maakWeerlabKaartCanvas({
     basis, kleurlaag, overlay, breedte: BASEMAP_W,
+    legenda: kaartLegendaSchaal(PARAMS[param]),
     dagtekst: dagLabel(new Date(datum + "T12:00:00")),
     kaarttitel: kaartTitel(param),
     kopregel: "Waarnemingen KNMI",
@@ -1134,8 +1135,10 @@ async function slaOp(params) {
       const [links, rechts] = kaarten;
       canvas = document.createElement("canvas");
       canvas.width = links.width + rechts.width;
-      canvas.height = links.height;
+      canvas.height = Math.max(links.height, rechts.height);
       const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(links, 0, 0);
       ctx.drawImage(rechts, links.width, 0);
     }

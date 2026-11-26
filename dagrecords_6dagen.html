@@ -13,7 +13,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 #record-map-size { align-items:center; flex-wrap:wrap; }
 #record-map-size input { accent-color:var(--mini-accent); }
 #record-map-size output { font-variant-numeric:tabular-nums; min-width:60px; }
-.legenda { display:flex; gap:8px 12px; flex-wrap:wrap; padding:12px 24px 0; color:var(--mini-muted); }
+.legenda { display:flex; gap:8px 12px; flex-wrap:wrap; max-width:var(--grid-breedte,1180px); margin:16px auto 0; color:var(--mini-muted); }
 .legenda-item,.hist-key { display:inline-flex; align-items:center; gap:5px; font-size:11px; }
 .legenda-blok { width:14px; height:14px; border-radius:3px; border:1px solid #a7b8c6; }
 .hist-dot { width:11px; height:11px; border:2px dashed #56728a; border-radius:50%; background:#fff; }
@@ -28,7 +28,13 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 .mini-body canvas,.mini-body .overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 .mosmix-mini-page .mini-body { cursor:default; }
 .mosmix-mini-page .mini-footer { flex-wrap:wrap; }
-.kaart-naam { min-width:0; overflow-wrap:anywhere; }
+.kaart-top3 { display:grid; gap:4px; padding:9px 13px; color:var(--mini-ink); font-size:12px; }
+.kaart-top3 h2 { font-size:12px; }
+.kaart-top3 ol { display:grid; gap:3px; list-style:none; }
+.kaart-top3 li { display:grid; grid-template-columns:1.3em minmax(0,1fr) auto; gap:5px; }
+.kaart-top3 .rang,.kaart-top3 .jaar { color:var(--mini-muted); }
+.kaart-top3 .naam { overflow-wrap:anywhere; }
+.kaart-top3 .waarde { font-variant-numeric:tabular-nums; }
 .kaart-acties { display:flex; flex-wrap:wrap; gap:4px; margin-left:auto; }
 .mosmix-mini-page .mini-downloadknop { color:var(--mini-accent); }
 .kaart-downloadstatus { padding:0 13px 9px; font-size:12px; color:var(--mini-muted); }
@@ -37,7 +43,8 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 .status:empty { display:none; }
 @media(max-width:1000px){ .mosmix-mini-page .kaarten-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:640px){ .mosmix-mini-page .kaarten-grid { grid-template-columns:1fr!important; max-width:480px; }
-  .kaarten-wrap,.legenda { padding-inline:14px; } }
+  .kaarten-wrap { padding-inline:14px; }
+  .legenda { max-width:480px; } }
 </style>
 <style id="record-kaart-svg-stijl">
 .basemap-land { fill:#f5efd9; fill-rule:evenodd; }
@@ -78,9 +85,9 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
   <output for="zoom-slider" id="zoom-label">1180 px</output>
 </div>
 
-<div class="legenda" id="legenda" aria-label="Temperatuurschaal"></div>
 <div class="kaarten-wrap mosmix-mini-page">
   <div class="kaarten-grid" id="kaarten-grid"></div>
+  <div class="legenda" id="legenda" role="group" aria-label="Temperatuurschaal"></div>
 </div>
 <section class="record-day-table" id="record-day-ranking" hidden>
 <h2 id="record-day-title">Dagrecords per station</h2>
@@ -91,7 +98,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 
 <script src="nl_grens_coords.js"></script>
 <script src="waarnemingen-kaartkleuren.js?v=20261124-topkaart"></script>
-<script src="weerlab-kaart-export.js?v=20261124-1"></script>
+<script src="weerlab-kaart-export.js?v=20261126-legenda"></script>
 <script>
 // ── Geo-projectie (zelfde als alle weerlab NL-kaarten) ───────────────────────
 const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
@@ -286,7 +293,7 @@ function node(tag,attrs,txt){
   return el;
 }
 
-async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kalenderdag){
+async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kalenderdag,topDrie){
   // Teken de stationstekst op canvas zodat de export het geladen webfont gebruikt.
   const exportOverlay=overlay.cloneNode(true);
   exportOverlay.querySelectorAll(".stationlabel").forEach(label=>label.remove());
@@ -304,6 +311,10 @@ async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kal
   const kaart=await maakWeerlabKaartCanvas({
     basis,kleurlaag,overlay:exportOverlay,basisStijl:svgStijl,overlayStijl:svgStijl,
     dagtekst,kaarttitel:titel,kopregel:"Dagrecords KNMI",bron:"KNMI · Klimaatarchief",
+    legenda:kaartLegendaSchaal(KAARTSCHAAL), historischeLocaties:true,
+    topDrie:topDrie.map(({naam,rec,rang})=>({
+      rang,naam,waarde:GETAL.format(rec.t)+" °C · "+rec.d.slice(0,4)
+    })),
     tekenLabels(ctx){
       ctx.textAlign="center";
       ctx.lineJoin="round";
@@ -335,6 +346,7 @@ async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kal
 }
 
 function bouwKaart(stations,dag,config,ondergrond){
+  const topDrie=rangschikDagrecords(dag.rec,config.richting).slice(0,3);
   const punten=Object.entries(dag.rec).filter(([naam])=>stations[naam]).map(([naam,rec])=>({
     naam,lon:stations[naam][0],lat:stations[naam][1],val:rec.t,
     jaar:rec.d.slice(0,4),historisch:!!rec.h
@@ -348,7 +360,7 @@ function bouwKaart(stations,dag,config,ondergrond){
   kaart.className="mini-kaart";
   kaart.setAttribute("aria-label",config.titel+" op "+datum);
   kaart.innerHTML='<div class="mini-header"><span class="mini-dag-naam"></span><span class="mini-dag-datum"></span></div>'
-    +'<div class="mini-body"></div><div class="mini-footer"><span class="kaart-naam"></span><div class="kaart-acties"></div></div>'
+    +'<div class="mini-body"></div><div class="mini-footer"><div class="kaart-acties"></div></div>'
     +'<p class="kaart-downloadstatus" role="status"></p>';
   kaart.querySelector(".mini-dag-naam").textContent=datum;
   kaart.querySelector(".mini-dag-datum").textContent=config.kaarttitel;
@@ -381,11 +393,36 @@ function bouwKaart(stations,dag,config,ondergrond){
       node("text",{class:"stationlabel stationjaar",x:lx,y:ly+32},p.jaar));
   }
 
-  tekenKaartLegenda(overlay,KAARTSCHAAL,10,10);
   body.append(basis,canvas,overlay);
-  kaart.querySelector(".kaart-naam").textContent=extreem
-    ? GETAL.format(extreem.val)+" °C · "+extreem.naam+" · "+extreem.jaar
-    : "Geen gegevens";
+  const samenvatting=document.createElement("section");
+  samenvatting.className="kaart-top3";
+  if(topDrie.length){
+    const titel=document.createElement("h2");
+    titel.textContent="Top 3";
+    const lijst=document.createElement("ol");
+    for(const {naam,rec,rang} of topDrie){
+      const rij=document.createElement("li");
+      const positie=document.createElement("span");
+      positie.className="rang";
+      positie.textContent=rang+".";
+      const station=document.createElement("span");
+      station.className="naam";
+      station.textContent=naam;
+      const waarde=document.createElement("span");
+      waarde.className="waarde";
+      waarde.textContent=GETAL.format(rec.t)+" °C · ";
+      const jaar=document.createElement("span");
+      jaar.className="jaar";
+      jaar.textContent=rec.d.slice(0,4);
+      waarde.append(jaar);
+      rij.append(positie,station,waarde);
+      lijst.append(rij);
+    }
+    samenvatting.append(titel,lijst);
+  }else{
+    samenvatting.textContent="Geen gegevens";
+  }
+  body.after(samenvatting);
   const knop=document.createElement("button");
   knop.type="button";
   knop.className="mini-open";
@@ -408,7 +445,7 @@ function bouwKaart(stations,dag,config,ondergrond){
     download.disabled=true;
     melding.textContent="PNG maken…";
     try{
-      await downloadDagrecordKaart(basis,canvas,overlay,datum,config.titel,kalenderdag);
+      await downloadDagrecordKaart(basis,canvas,overlay,datum,config.titel,kalenderdag,topDrie);
       melding.textContent="";
     }catch(fout){
       melding.textContent="De PNG kon niet worden gemaakt. Probeer opnieuw.";
@@ -478,15 +515,19 @@ function dagenVoor(start,records){
   });
 }
 
+function rangschikDagrecords(records,richting){
+  const rijen=Object.entries(records).sort((a,b)=>
+    richting*(a[1].t-b[1].t)||a[0].localeCompare(b[0],"nl"));
+  let rang=0;
+  return rijen.map(([naam,rec],i)=>{
+    if(i===0||rec.t!==rijen[i-1][1].t) rang=i+1;
+    return {naam,rec,rang};
+  });
+}
+
 function tekenRanglijst(dag,config){
   document.getElementById("record-day-title").textContent=config.titel+" · "+DAG_LABEL.format(dag.dt);
-  let vorigeWaarde=null, vorigeRang=0;
-  const rijen=Object.entries(dag.rec).sort((a,b)=>
-    config.richting*(a[1].t-b[1].t)||a[0].localeCompare(b[0],"nl"));
-  tableRows.replaceChildren(...rijen.map(([naam,rec],i)=>{
-    const rang=rec.t===vorigeWaarde?vorigeRang:i+1;
-    vorigeWaarde=rec.t;
-    vorigeRang=rang;
+  tableRows.replaceChildren(...rangschikDagrecords(dag.rec,config.richting).map(({naam,rec,rang})=>{
     const rij=document.createElement("tr");
     for(const waarde of [rang,naam,GETAL.format(rec.t),rec.d.split("-").reverse().join("-")]){
       const cel=document.createElement("td");
@@ -504,7 +545,6 @@ async function updateRecordDays(){
   const config=RECORDTYPEN[soort];
   document.getElementById("record-day-ranking").hidden=!tabel;
   document.querySelector(".kaarten-wrap").hidden=tabel;
-  document.getElementById("legenda").hidden=tabel;
   document.getElementById("record-map-size").hidden=tabel;
   const url=new URL(location.href);
   url.searchParams.set("start",start);
