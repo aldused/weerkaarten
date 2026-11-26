@@ -59,7 +59,7 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   assert.match(await latestFirst.textContent(),/9 februari 1983/);
   assert.match(await latestFirst.locator('.q-coverage-note').first().innerText(),/Meetgaten/);
   assert.equal(await page.locator('.q-frost-card').count(),4);
-  for(const text of ['−0,1 °C tot −5,0 °C','−5,1 °C tot −10,0 °C','−10,1 °C tot −15,0 °C','−15,1 °C of lager'])assert((await page.locator('#vorst').innerText()).includes(text));
+  for(const text of ['Onder 0 °C','Onder −5 °C','Onder −10 °C','Onder −15 °C'])assert((await page.locator('#vorst').innerText()).includes(text));
   assert.equal(await page.inputValue('#q-start'),'01-08');assert.equal(await page.inputValue('#q-end'),'31-07');
   assert.equal(await page.locator('.q-simple-year-table tbody th').first().evaluate(e=>getComputedStyle(e).position),'static');
   assert(await page.locator('.q-simple-year-table tbody tr').count()>100);
@@ -100,10 +100,10 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   await page.click('#q-view-all');assert.equal(await page.locator('[data-record]').count(),4);
   await page.click('#q-scope-station');await ready(page);assert.equal(await page.inputValue('#q-station'),'260');
   assert.equal(await page.locator('#q-station').isVisible(),true);
-  for(const [key,lower,upper]of [['light','-5','-0.1'],['moderate','-10','-5.1'],['severe','-15','-10.1'],['very-severe','-15.1',null]]){
+  for(const [key,threshold]of [['light','0'],['moderate','-5'],['severe','-10'],['very-severe','-15']]){
    await page.locator(`[data-frost-class="${key}"]`).click();await ready(page);
-   assert.equal(await page.inputValue('#q-threshold'),lower);
-   if(upper)assert.equal(await page.inputValue('#q-upper'),upper);else assert.equal(await page.inputValue('#q-op'),'le');
+   assert.equal(await page.inputValue('#q-threshold'),threshold);
+   assert.equal(await page.inputValue('#q-op'),'lt');
    assert.equal(await page.locator(`[data-frost-class="${key}"]`).getAttribute('aria-pressed'),'true');
   }
   // Other weather questions and the meteorological winter remain available in advanced settings.
@@ -131,7 +131,7 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   // ignore September/May, and exclude a running winter from records.
   const fixture=await browser.newPage({viewport:{width:1280,height:1000}});fixture.on('pageerror',e=>errors.push(e.message));
   await fixture.route('https://**/*',r=>r.abort());await fixture.clock.install({time:new Date('2023-11-19T10:00:00+01:00')});
-  const hits=[['20201205',-60],['20210301',-60],['20211101',-60],['20220115',-60],['20220930',-60],['20221001',-60],['20230430',-60],['20230501',-60],['20231020',-60]];
+  const hits=[['20201205',-60],['20210301',-60],['20211101',-60],['20220115',-60],['20220930',-60],['20221001',-60],['20230430',-60],['20230501',-60],['20231020',-160],['20231110',-170],['20231115',-150],['20231116',-100],['20231117',-50]];
   const hitMap=new Map(hits),days=[];for(let t=Date.UTC(2020,9,1);t<Date.UTC(2023,10,19);t+=86400000){const raw=new Date(t).toISOString().slice(0,10).replaceAll('-','');days.push([raw,hitMap.get(raw)??0]);}
   await fixture.route('**/dagdata_*.json*',r=>r.fulfill({json:{kolommen:['YYYYMMDD','TN'],data:r.request().url().includes('_260.')?days:r.request().url().includes('_215.')?[['20221001',-80]]:[]}}));
   await fixture.route('**/historische-dagwaarden.json*',r=>r.fulfill({json:{units:'physical',stations:{20:{naam:'Historisch basisstation',dailySeries:true}},days:Object.fromEntries(days.map(([day])=>[day,{20:{TN:1}}]))}}));
@@ -141,7 +141,21 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
    const card=fixture.locator(`[data-record="${key}"]`);assert.equal(await card.locator('.q-big-date').innerText(),day);assert.match(await card.locator('.q-record-year').innerText(),new RegExp(year));
   }
   const tied=fixture.locator('[data-record="earlyFirst"] .q-tied-stations');assert.match(await tied.innerText(),/Alle 3 stations/);await tied.locator('summary').click();assert.match(await fixture.locator('[data-record="earlyFirst"]').innerText(),/Historisch dorp/);
+  // Heavier frost can set the first and last dates for lighter thresholds.
+  await fixture.click('#q-view-year');
+  const yearCards=fixture.locator('.q-year-cards .q-date-card');
+  for(const [key,last]of [['light','17 november'],['moderate','16 november'],['severe','15 november'],['very-severe','10 november']]){
+   await fixture.locator(`[data-frost-class="${key}"]`).click();await ready(fixture);
+   await fixture.selectOption('#q-year','2023/2024');
+   assert.match(await yearCards.first().innerText(),/20 oktober 2023[\s\S]*-16 °C/);
+   assert.equal(await yearCards.last().locator('.q-big-date').innerText(),last);
+  }
+  await fixture.click('#q-scope-station');await ready(fixture);
+  await fixture.locator('[data-frost-class="light"]').click();await ready(fixture);
+  await fixture.selectOption('#q-year','2021/2022');
+  assert.match(await yearCards.first().innerText(),/1 november 2021[\s\S]*-6 °C/);
+  assert.match(await yearCards.last().innerText(),/15 januari 2022[\s\S]*-6 °C/);
   await fixture.close();assert.deepEqual(errors,[]);
-  console.log('PASS: default national all-year records, one-year view and shareable links, Winterswijk December 1903 and Castricum May 1944 historical observations, full historical source retry, August–July winter year and legacy links, four exact frost classes, explicit October–April subset, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
+  console.log('PASS: default national all-year records, one-year view and shareable links, Winterswijk December 1903 and Castricum May 1944 historical observations, full historical source retry, August–July winter year and legacy links, cumulative frost thresholds, explicit October–April subset, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());

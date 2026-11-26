@@ -8,18 +8,18 @@ const short=md=>md?new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',day:'numeric'
 const number=n=>Number(n).toLocaleString('nl-NL',{maximumFractionDigits:2}),symbols={lt:'<',le:'≤',gt:'>',ge:'≥',eq:'=',between:'van'};
 const questions={first:'Eerste optreden per jaar of seizoen',last:'Laatste optreden per jaar of seizoen',recent:'Meest recente waargenomen optreden',meanFirst:'Gemiddelde datum van het eerste optreden',meanLast:'Gemiddelde datum van het laatste optreden',earlyFirst:'Vroegste datum van een eerste optreden',lateFirst:'Laatste datum van een eerste optreden',earlyLast:'Vroegste datum van een laatste optreden',lateLast:'Laatste datum van een laatste optreden',count:'Aantal dagen dat aan de grens voldoet',streak:'Langste aaneengesloten reeks'};
 const frostClasses=[
- {key:'light',label:'Lichte vorst',range:'−0,1 °C tot −5,0 °C',lower:-5,upper:-.1},
- {key:'moderate',label:'Matige vorst',range:'−5,1 °C tot −10,0 °C',lower:-10,upper:-5.1},
- {key:'severe',label:'Strenge vorst',range:'−10,1 °C tot −15,0 °C',lower:-15,upper:-10.1},
- {key:'very-severe',label:'Zeer strenge vorst',range:'−15,1 °C of lager',lower:null,upper:-15.1}
-];
+ {key:'light',label:'Lichte vorst',threshold:0},
+ {key:'moderate',label:'Matige vorst',threshold:-5},
+ {key:'severe',label:'Strenge vorst',threshold:-10},
+ {key:'very-severe',label:'Zeer strenge vorst',threshold:-15}
+].map(frost=>({...frost,range:`Onder ${number(frost.threshold).replace('-','−')} °C`}));
 const presets=[
  ['custom','Zelf een vraag samenstellen','TX','ge',20,'01-01','12-31','first'],
  ['autumn','Eerste vorst in het winterjaar','TN','lt',0,'08-01','07-31','first'],
  ['spring','Laatste vorst in het winterjaar','TN','lt',0,'08-01','07-31','last'],
- ...frostClasses.flatMap(({key,label,lower,upper})=>[
-  ['frost-'+key+'-first','Eerste dag met '+label.toLowerCase(),'TN',lower===null?'le':'between',lower===null?upper:lower,'08-01','07-31','first',upper],
-  ['frost-'+key+'-last','Laatste dag met '+label.toLowerCase(),'TN',lower===null?'le':'between',lower===null?upper:lower,'08-01','07-31','last',upper]
+ ...frostClasses.flatMap(({key,label,threshold})=>[
+  ['frost-'+key+'-first','Eerste dag met '+label.toLowerCase(),'TN','lt',threshold,'08-01','07-31','first'],
+  ['frost-'+key+'-last','Laatste dag met '+label.toLowerCase(),'TN','lt',threshold,'08-01','07-31','last']
  ]),
  ['warm-first','Eerste warme dag (20 °C)','TX','ge',20,'01-01','12-31','first'],
  ['warm-last','Laatste warme dag (20 °C)','TX','ge',20,'01-01','12-31','last'],
@@ -49,6 +49,7 @@ el.innerHTML=`<header><p class="q-eyebrow">Eerste & laatste</p><h2>Wanneer viel 
 <section id="vorst" class="q-frost" aria-labelledby="q-frost-title">
 <h3 id="q-frost-title">Of kies een vorstklasse</h3>
 <div class="q-frost-grid" role="group" aria-label="Vorstklasse">${frostClasses.map(f=>`<button type="button" class="q-frost-card" data-frost-class="${f.key}" aria-pressed="false"><strong>${f.label}</strong><span>${f.range}</span></button>`).join('')}</div>
+<p class="q-frost-note">Een dag met zwaardere vorst telt ook mee bij de lichtere vorstklassen.</p>
 </section>
 <section class="q-simple-scope" aria-labelledby="q-scope-title"><h3 id="q-scope-title">Waar?</h3>
 <div class="q-scope" role="group" aria-label="Stationsbereik"><button type="button" id="q-scope-all" aria-pressed="true">Alle stations · ook historisch</button><button type="button" id="q-scope-station" aria-pressed="false">Eén station</button></div>
@@ -68,7 +69,7 @@ el.innerHTML=`<header><p class="q-eyebrow">Eerste & laatste</p><h2>Wanneer viel 
 <label>Periode<select id="q-window"><option value="year">Heel kalenderjaar</option><option value="winterjaar">Winterjaar: 1 augustus t/m 31 juli</option><option value="octapr">Beperkte periode: oktober t/m april</option><option value="autumn">Na de zomer: september t/m februari</option><option value="spring">Vóór de zomer: januari t/m juni</option><option value="winter">Meteorologische winter: december t/m februari</option><option value="summer">Zomer: juni t/m augustus</option><option value="custom">Eigen begin en einde</option></select></label>
 <label>Begin (dag-maand)<input id="q-start" value="01-01" placeholder="01-09" pattern="[0-9]{2}-[0-9]{2}" required></label><label>Einde, inclusief (dag-maand)<input id="q-end" value="31-12" placeholder="28-02" pattern="[0-9]{2}-[0-9]{2}" required></label>
 <label>Eerste beginjaar<input id="q-from" type="number" min="1700" max="2200" placeholder="Begin meetreeks"></label><label>Laatste beginjaar<input id="q-to" type="number" min="1700" max="2200" placeholder="Tot nu"></label><button type="submit" class="q-submit">Beantwoord mijn vraag</button></div>
-<p id="q-period-help"></p><p id="q-definition"></p><p id="q-frost-classes" hidden>Vorstklassen op basis van TN: licht −5,0 t/m −0,1 °C; matig −10,0 t/m −5,1 °C; streng −15,0 t/m −10,1 °C; zeer streng ≤ −15,1 °C.</p>
+<p id="q-period-help"></p><p id="q-definition"></p>
 </details></details></form>
 <p id="q-status" role="status" aria-live="polite"></p>
 <div id="q-output" hidden></div>
@@ -87,8 +88,11 @@ function syncFrost(){
  for(const button of el.querySelectorAll('[data-weather-preset]'))button.setAttribute('aria-pressed',String(button.dataset.weatherPreset===selected||button.dataset.weatherPreset.replace(/-first$/,'-last')===selected));
  for(const button of el.querySelectorAll('[data-frost-class]'))button.setAttribute('aria-pressed',String(selected.startsWith('frost-'+button.dataset.frostClass+'-')));
 }
-function frostFor(a){return a.field==='TN'?frostClasses.find(f=>f.lower===null?a.op==='le'&&a.threshold===f.upper:a.op==='between'&&a.threshold===f.lower&&a.upper===f.upper):null;}
-function definition(){syncFrost();$('q-simple-window').value=$('q-window').value; $('q-upper-label').hidden=$('q-op').value!=='between';$('q-upper').required=$('q-op').value==='between';const v=C.variables[$('q-field').value];if(!v)return;$('q-unit').textContent=v.unit;$('q-upper-unit').textContent=v.unit;$('q-frost-classes').hidden=$('q-field').value!=='TN';$('q-definition').textContent=v.definition||v.label+' · KNMI-dagwaarde.';
+function frostFor(a){
+ if(a.field!=='TN'||a.op!=='lt'||['autumn','spring'].includes($('q-preset').value))return null;
+ return frostClasses.find(f=>a.threshold===f.threshold);
+}
+function definition(){syncFrost();$('q-simple-window').value=$('q-window').value; $('q-upper-label').hidden=$('q-op').value!=='between';$('q-upper').required=$('q-op').value==='between';const v=C.variables[$('q-field').value];if(!v)return;$('q-unit').textContent=v.unit;$('q-upper-unit').textContent=v.unit;$('q-definition').textContent=v.definition||v.label+' · KNMI-dagwaarde.';
  try{const s=mdInput('q-start'),e=mdInput('q-end');C.boundary(2000,s);C.boundary(2000,e);$('q-period-help').textContent=`Iedere periode loopt van ${short(s)} t/m ${short(e)}${e<s?' in het volgende kalenderjaar. Het beginjaar 2021 heet dan seizoen 2021/2022.':'. Het beginjaar is het kalenderjaar.'} Daggegevens van vandaag blijven voorlopig en tellen nog niet mee.`;}catch{$('q-period-help').textContent='Vul een geldige begin- en einddatum in.';}}
 function setWindow(s,e){$('q-start').value=inputDate(s);$('q-end').value=inputDate(e);const windows={year:['01-01','12-31'],winterjaar:['08-01','07-31'],octapr:['10-01','04-30'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31'],frostseason:['08-01','07-31']};$('q-window').value=Object.keys(windows).find(k=>windows[k][0]===s&&windows[k][1]===e)||'custom';definition();}
 function options(){return {field:$('q-field').value,op:$('q-op').value,threshold:Number($('q-threshold').value),upper:$('q-op').value==='between'?Number($('q-upper').value):undefined,start:mdInput('q-start'),end:mdInput('q-end'),from:$('q-from').value?Number($('q-from').value):undefined,to:$('q-to').value?Number($('q-to').value):undefined,today:today()};}
@@ -205,7 +209,7 @@ function applyPreset(key,calculate=true){
  const p=presets.find(p=>p[0]===key);if(!p)return;
  $('q-preset').value=key;
  if(![...$('q-field').options].some(o=>o.value===p[2]))$('q-field').add(new Option(C.variables[p[2]].label,p[2]));
- $('q-field').value=p[2];$('q-op').value=p[3];$('q-threshold').value=p[4];$('q-upper').value=p[8]??0;$('q-question').value=p[7];setWindow(p[5],p[6]);el.querySelector('.q-settings').open=p[0]==='custom';
+ $('q-field').value=p[2];$('q-op').value=p[3];$('q-threshold').value=p[4];$('q-upper').value=0;$('q-question').value=p[7];setWindow(p[5],p[6]);el.querySelector('.q-settings').open=p[0]==='custom';
  syncFrost();$('q-advanced').open=key==='custom';if(calculate)run();
 }
 $('q-preset').addEventListener('change',()=>applyPreset($('q-preset').value));
