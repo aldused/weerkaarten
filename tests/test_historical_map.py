@@ -1,6 +1,8 @@
 """Offline end-to-end checks of atomic map updates and retired stations."""
 import ast,gzip,json,shutil,subprocess,sys,tempfile,unittest
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 ROOT=Path(__file__).resolve().parents[1]
 class HistoricalMap(unittest.TestCase):
  def test_import_uses_complete_registry(self):
@@ -48,6 +50,26 @@ class HistoricalMap(unittest.TestCase):
     self.assertEqual(days['01-27']['De Bilt']['d'],'1942-01-27')
    self.assertEqual(cold['dagrecords']['tn_laag']['01-27']['Warnsveld'],
                     {'t':-25.4,'d':'1942-01-27','h':1})
+   vandaag=datetime.now(ZoneInfo('Europe/Amsterdam')).date()
+   iso=vandaag.isoformat()
+   sleutel=iso[5:]
+   de_bilt['lopend']=iso
+   rijen=de_bilt['dag'][str(vandaag.month)][str(vandaag.day)]
+   warmere_tx=cold['dagrecords']['tx_laag'][sleutel]['De Bilt']['t']+1
+   for soort,waarde in [('tx_laag',-40),('tn_laag',-45)]:
+    rijen[soort].insert(0,[waarde,iso])
+   (root/'records_260.json').write_text(json.dumps(de_bilt))
+   result=run('--koude');self.assertEqual(result.returncode,0,result.stderr)
+   met_tussenstand=json.loads(cold_output.read_bytes())
+   self.assertEqual(met_tussenstand['voorlopig']['datum'],iso)
+   for soort,waarde in [('tx_laag',-40),('tn_laag',-45)]:
+    self.assertEqual(met_tussenstand['voorlopig']['records'][soort]['De Bilt'],{'t':waarde,'d':iso})
+    self.assertNotEqual(met_tussenstand['dagrecords'][soort][sleutel]['De Bilt']['d'],iso)
+   rijen['tx_laag'][0][0]=warmere_tx
+   (root/'records_260.json').write_text(json.dumps(de_bilt))
+   result=run('--koude');self.assertEqual(result.returncode,0,result.stderr)
+   cold_before=cold_output.read_bytes()
+   self.assertNotIn('De Bilt',json.loads(cold_before)['voorlopig']['records']['tx_laag'])
    (root/'records_20.json').unlink()
    result=run();self.assertNotEqual(result.returncode,0)
    self.assertIn('Onvolledige dagrecordbronnen',result.stderr)

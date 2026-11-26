@@ -28,6 +28,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 .mini-body canvas,.mini-body .overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 .mosmix-mini-page .mini-body { cursor:default; }
 .mosmix-mini-page .mini-footer { flex-wrap:wrap; }
+.kaart-voorlopig { font-size:12px; color:var(--mini-muted); }
 .kaart-acties { display:flex; flex-wrap:wrap; gap:4px; margin-left:auto; }
 .mosmix-mini-page .mini-downloadknop { color:var(--mini-accent); }
 .kaart-downloadstatus { padding:0 13px 9px; font-size:12px; color:var(--mini-muted); }
@@ -58,7 +59,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 <section class="climate-heading" aria-labelledby="climate-title">
   <a class="climate-back" href="index.html#menu/terugkijken?type=klimaat">← Records &amp; klimaat</a>
   <div class="climate-heading-row"><div><h1 id="climate-title">Temperatuurrecords per kalenderdag</h1><p>Kies een recordtype en bekijk zes kalenderdagen of de ranglijst voor één dag.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
-  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>Per meetlocatie zie je de uiterste gemeten waarde voor die kalenderdag en het jaar waarin die viel. Voor de kouderecords tellen afgeronde etmalen mee. De kleuren tussen de meetpunten zijn geschat uit de stationswaarden. Historische meetlocaties waarvan de coördinaten ontbreken, staan alleen in de ranglijst. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">Daggegevens van het KNMI ↗</a></p></details>
+  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>Per meetlocatie zie je de uiterste gemeten waarde voor die kalenderdag en het jaar waarin die viel. Bij een record tijdens het lopende etmaal staat een sterretje. Vooral een voorlopig laag dagmaximum kan nog vervallen als het later warmer wordt. De kleuren tussen de meetpunten zijn geschat uit de stationswaarden. Historische meetlocaties waarvan de coördinaten ontbreken, staan alleen in de ranglijst. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">Daggegevens van het KNMI ↗</a></p></details>
 </section>
 
 <div class="toolbar record-day-controls">
@@ -287,7 +288,7 @@ function node(tag,attrs,txt){
   return el;
 }
 
-async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kalenderdag){
+async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kalenderdag,voorlopig){
   // Teken de stationstekst op canvas zodat de export het geladen webfont gebruikt.
   const exportOverlay=overlay.cloneNode(true);
   exportOverlay.querySelectorAll(".stationlabel").forEach(label=>label.remove());
@@ -304,7 +305,7 @@ async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kal
   await document.fonts.ready;
   const kaart=await maakWeerlabKaartCanvas({
     basis,kleurlaag,overlay:exportOverlay,basisStijl:svgStijl,overlayStijl:svgStijl,
-    dagtekst,kaarttitel:titel,kopregel:"Dagrecords KNMI",bron:"KNMI · Klimaatarchief",
+    dagtekst,kaarttitel:titel,kopregel:voorlopig?"Dagrecords KNMI · * Voorlopig":"Dagrecords KNMI",bron:"KNMI · Klimaatarchief",
     legenda:kaartLegendaSchaal(KAARTSCHAAL), historischeLocaties:true,
     tekenLabels(ctx){
       ctx.textAlign="center";
@@ -337,12 +338,13 @@ async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kal
 }
 
 function bouwKaart(stations,dag,config,ondergrond){
+  const voorlopig=Object.values(dag.rec).some(rec=>rec.voorlopig);
   const topDrie=rangschikDagrecords(dag.rec,config.richting).slice(0,3).map(({naam,rec,rang})=>({
-    rang,naam,waarde:GETAL.format(rec.t)+" °C · "+rec.d.slice(0,4)
+    rang,naam,waarde:GETAL.format(rec.t)+" °C · "+rec.d.slice(0,4)+(rec.voorlopig?"*":"")
   }));
   const punten=Object.entries(dag.rec).filter(([naam])=>stations[naam]).map(([naam,rec])=>({
     naam,lon:stations[naam][0],lat:stations[naam][1],val:rec.t,
-    jaar:rec.d.slice(0,4),historisch:!!rec.h
+    jaar:rec.d.slice(0,4)+(rec.voorlopig?"*":""),historisch:!!rec.h
   }));
   const extreem=punten.reduce((beste,p)=>
     !beste||config.richting*(p.val-beste.val)<0?p:beste,null);
@@ -354,9 +356,11 @@ function bouwKaart(stations,dag,config,ondergrond){
   const samenvatting=topDrie.length
     ? "Top 3: "+topDrie.map(({rang,naam,waarde})=>rang+". "+naam+", "+waarde).join(", ")
     : "Geen gegevens";
-  kaart.setAttribute("aria-label",config.titel+" op "+datum+". "+samenvatting);
+  kaart.setAttribute("aria-label",config.titel+" op "+datum+". "+samenvatting+(voorlopig?". * Voorlopig · lopend etmaal":""));
   kaart.innerHTML='<div class="mini-header"><span class="mini-dag-naam"></span><span class="mini-dag-datum"></span></div>'
-    +'<div class="mini-body"></div><div class="mini-footer"><div class="kaart-acties"></div></div>'
+    +'<div class="mini-body"></div><div class="mini-footer">'
+    +(voorlopig?'<span class="kaart-voorlopig">* Voorlopig · lopend etmaal</span>':'')
+    +'<div class="kaart-acties"></div></div>'
     +'<p class="kaart-downloadstatus" role="status"></p>';
   kaart.querySelector(".mini-dag-naam").textContent=datum;
   kaart.querySelector(".mini-dag-datum").textContent=config.kaarttitel;
@@ -399,6 +403,7 @@ function bouwKaart(stations,dag,config,ondergrond){
   knop.textContent="Ranglijst";
   knop.setAttribute("aria-label","Ranglijst voor "+datum);
   knop.addEventListener("click",()=>{
+    volgVandaag=false;
     startInput.value=kalenderdag;
     viewSelect.value="table";
     viewSelect.focus();
@@ -415,7 +420,7 @@ function bouwKaart(stations,dag,config,ondergrond){
     download.disabled=true;
     melding.textContent="PNG maken…";
     try{
-      await downloadDagrecordKaart(basis,canvas,overlay,datum,config.titel,kalenderdag);
+      await downloadDagrecordKaart(basis,canvas,overlay,datum,config.titel,kalenderdag,voorlopig);
       melding.textContent="";
     }catch(fout){
       melding.textContent="De PNG kon niet worden gemaakt. Probeer opnieuw.";
@@ -449,8 +454,9 @@ const viewSelect=document.getElementById("record-view");
 const status=document.getElementById("status");
 const grid=document.getElementById("kaarten-grid");
 const tableRows=document.getElementById("record-day-rows");
+const VERVERSTIJD=5*60*1000;
 const feeds=new Map();
-let kaartondergrond, updateNr=0;
+let kaartondergrond, laatsteWeergave, updateNr=0, bezig=false;
 
 function vandaag(){
   return new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Amsterdam",day:"2-digit",month:"2-digit",year:"numeric"}).format(new Date());
@@ -458,30 +464,48 @@ function vandaag(){
 
 function haalDagrecords(config){
   const {bestand}=config;
-  if(!feeds.has(bestand)){
+  const bewaard=feeds.get(bestand);
+  if(!bewaard||Date.now()-bewaard.opgehaald>=VERVERSTIJD){
     const lokaal=/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
     const r2="https://data.weerlab.nl/"+bestand;
     async function lees(url){
-      const reactie=await fetch(url,{signal:AbortSignal.timeout(8000)});
+      const reactie=await fetch(url,{cache:"no-cache",signal:AbortSignal.timeout(8000)});
       if(!reactie.ok) throw new Error("Dagrecords ontbreken");
       const data=await reactie.json();
       if(!data.stations||!data.dagrecords) throw new Error("Ongeldige dagrecords");
       return data;
     }
-    const laden=lees(lokaal?bestand:r2).catch(()=>lees(lokaal?r2:bestand)).catch(fout=>{
-      feeds.delete(bestand);
+    const feed={opgehaald:Date.now()};
+    feed.laden=lees(lokaal?bestand:r2).catch(()=>lees(lokaal?r2:bestand)).catch(fout=>{
+      if(feeds.get(bestand)===feed) feeds.delete(bestand);
       throw fout;
     });
-    feeds.set(bestand,laden);
+    feeds.set(bestand,feed);
   }
-  return feeds.get(bestand);
+  return feeds.get(bestand).laden;
 }
 
-function dagenVoor(start,records){
+function dagenVoor(start,soort,data){
+  const records=soort==="tx_hoog"?data.dagrecords:data.dagrecords[soort];
+  const lopend=data.voorlopig;
+  const nu=vandaag();
   const eerste=Date.parse(start+"T12:00:00Z");
   return Array.from({length:6},(_,i)=>{
     const dt=new Date(eerste+i*86400000);
-    return {dt,rec:records[dt.toISOString().slice(5,10)]||{}};
+    const datum=dt.toISOString().slice(0,10);
+    const rec={...records[datum.slice(5)]};
+    if(datum===nu){
+      if(soort==="tx_hoog"&&data.lopend===datum){
+        for(const [naam,rij] of Object.entries(rec)){
+          if(rij.d===datum) rec[naam]={...rij,voorlopig:true};
+        }
+      }else if(lopend?.datum===datum){
+        for(const [naam,rij] of Object.entries(lopend.records[soort]||{})){
+          rec[naam]={...rij,voorlopig:true};
+        }
+      }
+    }
+    return {dt,rec};
   });
 }
 
@@ -499,7 +523,8 @@ function tekenRanglijst(dag,config){
   document.getElementById("record-day-title").textContent=config.titel+" · "+DAG_LABEL.format(dag.dt);
   tableRows.replaceChildren(...rangschikDagrecords(dag.rec,config.richting).map(({naam,rec,rang})=>{
     const rij=document.createElement("tr");
-    for(const waarde of [rang,naam,GETAL.format(rec.t),rec.d.split("-").reverse().join("-")]){
+    const datum=rec.d.split("-").reverse().join("-")+(rec.voorlopig?" (voorlopig)":"");
+    for(const waarde of [rang,naam,GETAL.format(rec.t),datum]){
       const cel=document.createElement("td");
       cel.textContent=waarde;
       rij.append(cel);
@@ -508,72 +533,105 @@ function tekenRanglijst(dag,config){
   }));
 }
 
-async function updateRecordDays(){
+async function updateRecordDays({achtergrond=false}={}){
   if(!startInput.value||!startInput.validity.valid) return;
   const wijziging=++updateNr;
+  bezig=true;
   const start=startInput.value, soort=typeSelect.value, tabel=viewSelect.value==="table";
   const config=RECORDTYPEN[soort];
   document.getElementById("record-day-ranking").hidden=!tabel;
   document.querySelector(".kaarten-wrap").hidden=tabel;
   document.getElementById("record-map-size").hidden=tabel;
   const url=new URL(location.href);
-  url.searchParams.set("start",start);
+  if(volgVandaag) url.searchParams.delete("start");
+  else url.searchParams.set("start",start);
   url.searchParams.set("type",soort);
   url.searchParams.set("view",viewSelect.value);
   history.replaceState(null,"",url);
 
-  grid.replaceChildren();
-  tableRows.replaceChildren();
-  document.getElementById("record-day-title").textContent=config.titel;
-  status.textContent="Dagrecords laden…";
+  if(!achtergrond){
+    laatsteWeergave=null;
+    grid.replaceChildren();
+    tableRows.replaceChildren();
+    document.getElementById("record-day-title").textContent=config.titel;
+    status.textContent="Dagrecords laden…";
+  }
   try{
     const [data,ondergrond]=await Promise.all([
       haalDagrecords(config),tabel?null:(kaartondergrond??=laadKaartondergrond())
     ]);
     if(wijziging!==updateNr) return;
-    const records=soort==="tx_hoog"?data.dagrecords:data.dagrecords[soort];
-    const dagen=dagenVoor(start,records);
+    const weergave=`${start}/${soort}/${tabel}`;
+    if(achtergrond&&laatsteWeergave?.weergave===weergave&&
+      data.gegenereerd<=laatsteWeergave.gegenereerd) return;
+
+    const dagen=dagenVoor(start,soort,data);
     if(tabel){
       tekenRanglijst(dagen[0],config);
     }else{
       if(!LANDMASK) maakLandMask();
+      const kaarten=[];
       for(const dag of dagen){
         await new Promise(requestAnimationFrame);
         if(wijziging!==updateNr) return;
-        grid.append(bouwKaart(data.stations,dag,config,ondergrond));
+        const kaart=bouwKaart(data.stations,dag,config,ondergrond);
+        if(achtergrond) kaarten.push(kaart);
+        else grid.append(kaart);
       }
+      if(achtergrond) grid.replaceChildren(...kaarten);
     }
+    laatsteWeergave={weergave,gegenereerd:data.gegenereerd};
     window.weerlabClimateStatus({
       through:data.lopend,generated:data.gegenereerd,
-      note:soort==="tx_hoog"?"historische maximumtemperaturen":"afgeronde etmalen"
+      note:soort==="tx_hoog"?"historische maximumtemperaturen":"afgeronde etmalen en voorlopige records"
     });
     const gen=(data.gegenereerd||"").replace("T"," ").replace("+00:00"," UTC");
     document.getElementById("footer").textContent="weerlab.nl · KNMI-dagrecords · "+gen;
     status.textContent="";
   }catch(fout){
-    if(wijziging===updateNr) status.textContent="Dagrecords konden niet worden geladen. Vernieuw de pagina om opnieuw te proberen.";
+    if(wijziging===updateNr&&(!achtergrond||!laatsteWeergave)){
+      status.textContent="Dagrecords konden niet worden geladen. Vernieuw de pagina om opnieuw te proberen.";
+    }
     console.error(fout);
+  }finally{
+    if(wijziging===updateNr) bezig=false;
   }
+}
+
+function verversDagrecords(){
+  if(document.hidden||bezig) return;
+  if(volgVandaag) startInput.value=vandaag();
+  updateRecordDays({achtergrond:true});
 }
 
 const query=new URLSearchParams(location.search);
 const vanaf=query.get("start");
 startInput.value=vanaf&&/^\d{4}-\d{2}-\d{2}$/.test(vanaf)?vanaf:"";
-if(!startInput.value) startInput.value=vandaag();
+let volgVandaag=!startInput.value;
+if(volgVandaag) startInput.value=vandaag();
 if(Object.hasOwn(RECORDTYPEN,query.get("type"))) typeSelect.value=query.get("type");
 if(query.get("view")==="table") viewSelect.value="table";
-for(const invoer of [startInput,typeSelect,viewSelect]) invoer.addEventListener("change",updateRecordDays);
+startInput.addEventListener("change",()=>{
+  volgVandaag=false;
+  updateRecordDays();
+});
+for(const invoer of [typeSelect,viewSelect]) invoer.addEventListener("change",updateRecordDays);
 for(const [id,delta] of [["record-prev",-1],["record-next",1]]){
   document.getElementById(id).addEventListener("click",()=>{
     const datum=Date.parse((startInput.value||vandaag())+"T12:00:00Z")+delta*86400000;
+    volgVandaag=false;
     startInput.value=new Date(datum).toISOString().slice(0,10);
     updateRecordDays();
   });
 }
 document.getElementById("record-today").addEventListener("click",()=>{
+  volgVandaag=true;
   startInput.value=vandaag();
   updateRecordDays();
 });
+document.addEventListener("visibilitychange",verversDagrecords);
+window.addEventListener("focus",verversDagrecords);
+setInterval(verversDagrecords,VERVERSTIJD);
 tekenLegenda();
 updateRecordDays();
 </script>

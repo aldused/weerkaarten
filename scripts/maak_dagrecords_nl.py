@@ -4,8 +4,9 @@
 import argparse
 import json
 import os
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 try:
     import requests
@@ -43,7 +44,10 @@ def bouw_dagrecords(bronmap, uitvoer, koude=False):
     gemist = []
     lopend_data = []
     tx_correcties = {}
-    dit_jaar = date.today().year
+    vandaag = datetime.now(ZoneInfo("Europe/Amsterdam")).date()
+    vandaag_iso = vandaag.isoformat()
+    dit_jaar = vandaag.year
+    metingen_vandaag = {soort: {} for soort in soorten}
 
     def zet_record(soort, sleutel, naam, waarde, datum, historisch):
         dag = kaarten[soort].setdefault(sleutel, {})
@@ -92,7 +96,12 @@ def bouw_dagrecords(bronmap, uitvoer, koude=False):
             ), default=0)
             historisch = nieuwste_jaar < dit_jaar - MAX_MEETGAT
             for sleutel, waarden in dagen:
-                rij = next((r for r in waarden.get(soort, []) if r[1] != voorlopig), None)
+                rijen = waarden.get(soort, [])
+                if koude and voorlopig == vandaag_iso and sleutel == vandaag_iso[5:]:
+                    lopende_rij = next((r for r in rijen if r[1] == vandaag_iso), None)
+                    if lopende_rij is not None:
+                        metingen_vandaag[soort][naam] = round(lopende_rij[0], 1)
+                rij = next((r for r in rijen if r[1] != voorlopig), None)
                 if rij is not None:
                     zet_record(soort, sleutel, naam, rij[0], rij[1], historisch)
 
@@ -155,7 +164,17 @@ def bouw_dagrecords(bronmap, uitvoer, koude=False):
         "stations": stations,
     }
     if koude:
+        sleutel = vandaag_iso[5:]
+        kandidaten = {}
+        for soort, metingen in metingen_vandaag.items():
+            afgesloten = kaarten[soort][sleutel]
+            kandidaten[soort] = {
+                naam: {"t": waarde, "d": vandaag_iso}
+                for naam, waarde in metingen.items()
+                if naam in afgesloten and waarde < afgesloten[naam]["t"]
+            }
         uit.update(
+            voorlopig={"datum": vandaag_iso, "records": kandidaten},
             bron="KNMI-dagwaarden en historische aanvullingen — afgeronde etmalen",
             station_aantallen=aantallen,
             dagrecords=kaarten,
@@ -168,7 +187,7 @@ def bouw_dagrecords(bronmap, uitvoer, koude=False):
             dagrecords=kaarten["tx_hoog"],
         )
 
-    # Een identieke koudekaart hoeft tijdens de lopende metingen niet opnieuw naar R2.
+    # Vernieuw de tijdstempel alleen als de koudegegevens veranderen.
     if koude and uit == {**vorige, "gegenereerd": uit["gegenereerd"]}:
         return
     tijdelijk = uitvoer.with_suffix(".json.tmp")
