@@ -43,11 +43,11 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 <style id="record-kaart-svg-stijl">
 .basemap-land { fill:#f5efd9; fill-rule:evenodd; }
 .provinciegrens { fill:none; stroke:#fff; stroke-opacity:.82; stroke-width:2; stroke-linejoin:round; }
-.stationlabel { font-family:"DM Sans",system-ui,sans-serif; paint-order:stroke; stroke:#fff;
+.stationlabel { font-family:system-ui,sans-serif; paint-order:stroke; stroke:#f8fafc;
   stroke-linejoin:round; fill:#172b40; text-anchor:middle; font-variant-numeric:tabular-nums; }
-.stationwaarde { font-size:24px; font-weight:700; stroke-width:4px; }
-.stationnaam { font-size:18px; font-weight:700; stroke-width:3.5px; }
-.stationjaar { font-size:17px; font-weight:600; stroke-width:3.5px; }
+.stationwaarde { font-size:21px; font-weight:700; stroke-width:3.5px; }
+.stationnaam { font-size:17px; font-weight:600; stroke-width:3px; }
+.stationpunt { pointer-events:auto; }
 .stationpunt[data-historisch] { stroke-dasharray:3 2; }
 </style>
 <link rel="stylesheet" href="klimaat.css?v=20260908-2">
@@ -59,7 +59,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 <section class="climate-heading" aria-labelledby="climate-title">
   <a class="climate-back" href="index.html#menu/terugkijken?type=klimaat">← Records &amp; klimaat</a>
   <div class="climate-heading-row"><div><h1 id="climate-title">Temperatuurrecords per kalenderdag</h1><p>Kies een recordtype en bekijk zes kalenderdagen of de ranglijst voor één dag.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
-  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>Per meetlocatie zie je de uiterste gemeten waarde voor die kalenderdag en het jaar waarin die viel. Bij een record tijdens het lopende etmaal staat een sterretje. Vooral een voorlopig laag dagmaximum kan nog vervallen als het later warmer wordt. De kleuren tussen de meetpunten zijn geschat uit de stationswaarden. Historische meetlocaties waarvan de coördinaten ontbreken, staan alleen in de ranglijst. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">Daggegevens van het KNMI ↗</a></p></details>
+  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>Per meetlocatie zie je de uiterste gemeten waarde voor die kalenderdag en het jaar waarin die viel. Bij een record tijdens het lopende etmaal staat een sterretje. Vooral een voorlopig laag dagmaximum kan nog vervallen als het later warmer wordt. De kleuren tussen de meetpunten zijn geschat uit de stationswaarden. Op de kaart maken labels plaats als het te druk wordt. Wijs een stip aan voor de meting of open de ranglijst voor alle stations. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">Daggegevens van het KNMI ↗</a></p></details>
 </section>
 
 <div class="toolbar record-day-controls">
@@ -113,24 +113,12 @@ const RECORDTYPEN={
 // Interpolatie met Modified Shepard en lichte gaussiaanse vervaging.
 const POWER=2.5, KNN=8, BLUR=1.6, ALPHA=0.64;
 
-// Label-offset [dlon,dlat] voor stations die te dicht op elkaar liggen: alleen het
-// LABEL schuift (met leiderlijntje), de stip + interpolatie blijven op de echte plek.
-// Historische locaties kunnen dicht bij een huidig station liggen. Alleen hun
-// label verschuift; de meetstip en interpolatie blijven op de echte locatie.
-const LABEL_OFFSET = {
-  "Venlo":[-0.08,-0.04], "Arcen":[0.06,0.05],
-  "Sittard":[0.08,0.04], "Maastricht":[-0.06,-0.05],
-  "Soesterberg":[0.08,-0.04], "De Bilt":[-0.06,0.04]
-};
-const LABEL_KANDIDATEN = [[0,0]];
-for(const straal of [44,88,132,176,220]){
-  for(let dx=-straal;dx<=straal;dx+=44){
-    LABEL_KANDIDATEN.push([dx,-straal],[dx,straal]);
-  }
-  for(let dy=-straal+44;dy<=straal-44;dy+=44){
-    LABEL_KANDIDATEN.push([-straal,dy],[straal,dy]);
-  }
-}
+const LABEL_AFSTANDEN=[26,40,54,68,82,96];
+const TOPLABEL_AFSTANDEN=[...LABEL_AFSTANDEN,112,128];
+const LABEL_RICHTINGEN=Array.from({length:16},(_,i)=>{
+  const hoek=(i-4)*Math.PI/8;
+  return [Math.cos(hoek),Math.sin(hoek)];
+});
 
 // ── Land-mask uit NL_GRENS (rasteren op GRID-resolutie) ──────────────────────
 let LANDMASK=null;
@@ -238,45 +226,30 @@ async function laadKaartondergrond(){
   }
 }
 
-// Bij verschoven labels blijft de stip op de gemeten locatie.
-function berekenLabelPosities(punten,extreem,richting,paneel){
-  const geprojecteerd=punten.map(p=>({
-    ...p,
-    x:(p.lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W,
-    y:(1-(p.lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H
-  })).sort((a,b)=>{
-    const verschil=Number(b.naam===extreem?.naam)-Number(a.naam===extreem?.naam);
-    if(verschil) return verschil;
-    const histVerschil=Number(b.historisch)-Number(a.historisch);
-    return histVerschil || richting*(a.val-b.val);
-  });
-  const bezet=[paneel], resultaat={};
-  for(const p of geprojecteerd){
-    const breedte=Math.max(76,p.naam.length*9), marge=5;
-    const voorkeur=LABEL_OFFSET[p.naam];
-    const kandidaten=voorkeur ? [[
-      voorkeur[0]/(LON_MAX-LON_MIN)*SVG_W,
-      -voorkeur[1]/(LAT_MAX-LAT_MIN)*SVG_H
-    ],...LABEL_KANDIDATEN] : LABEL_KANDIDATEN;
-    let beste=null;
-    for(const [dx,dy] of kandidaten){
-      const lx=Math.max(breedte/2+marge,Math.min(SVG_W-breedte/2-marge,p.x+dx));
-      const ly=Math.max(34+marge,Math.min(SVG_H-43-marge,p.y+dy));
-      const box={l:lx-breedte/2-marge,r:lx+breedte/2+marge,
-        t:ly-30-marge,b:ly+38+marge};
-      let overlap=0;
-      for(const q of bezet){
-        const ow=Math.max(0,Math.min(box.r,q.r)-Math.max(box.l,q.l));
-        const oh=Math.max(0,Math.min(box.b,q.b)-Math.max(box.t,q.t));
-        overlap+=ow*oh;
+// Laat ruimte rond de labels, de meetpunten en het top 3-paneel.
+function berekenLabelPosities(punten,richting,paneel){
+  const geprioriteerd=[...punten].sort((a,b)=>
+    Number(b.topDrie)-Number(a.topDrie)||Number(b.voorlopig)-Number(a.voorlopig)||richting*(a.val-b.val));
+  const context=document.createElement("canvas").getContext("2d");
+  const bezet=[paneel,...punten.map(({x,y})=>({l:x-8,r:x+8,t:y-8,b:y+8}))];
+  const resultaat=new Map();
+  for(const p of geprioriteerd){
+    context.font="700 21px system-ui,sans-serif";
+    const waardeBreedte=context.measureText(p.waarde).width;
+    context.font="600 17px system-ui,sans-serif";
+    const halfBreedte=Math.max(waardeBreedte,context.measureText(p.naam).width)/2+5;
+    kandidaat:
+    for(const afstand of p.topDrie?TOPLABEL_AFSTANDEN:LABEL_AFSTANDEN){
+      for(const [dx,dy] of LABEL_RICHTINGEN){
+        const x=Math.max(halfBreedte+4,Math.min(SVG_W-halfBreedte-4,p.x+dx*afstand));
+        const y=Math.max(24,Math.min(SVG_H-24,p.y+dy*afstand));
+        const box={l:x-halfBreedte,r:x+halfBreedte,t:y-23,b:y+23};
+        if(bezet.some(q=>box.l<q.r&&box.r>q.l&&box.t<q.b&&box.b>q.t)) continue;
+        resultaat.set(p.naam,{x,y,box});
+        bezet.push(box);
+        break kandidaat;
       }
-      const afstand=Math.hypot(lx-p.x,ly-p.y);
-      const score=overlap*10000+afstand;
-      if(!beste||score<beste.score) beste={lx,ly,box,score};
-      if(overlap===0&&afstand<1) break;
     }
-    resultaat[p.naam]=beste;
-    bezet.push(beste.box);
   }
   return resultaat;
 }
@@ -342,12 +315,18 @@ function bouwKaart(stations,dag,config,ondergrond){
   const topDrie=rangschikDagrecords(dag.rec,config.richting).slice(0,3).map(({naam,rec,rang})=>({
     rang,naam,waarde:GETAL.format(rec.t)+" °C · "+rec.d.slice(0,4)+(rec.voorlopig?"*":"")
   }));
-  const punten=Object.entries(dag.rec).filter(([naam])=>stations[naam]).map(([naam,rec])=>({
-    naam,lon:stations[naam][0],lat:stations[naam][1],val:rec.t,
-    jaar:rec.d.slice(0,4)+(rec.voorlopig?"*":""),historisch:!!rec.h
-  }));
-  const extreem=punten.reduce((beste,p)=>
-    !beste||config.richting*(p.val-beste.val)<0?p:beste,null);
+  const topStations=new Set(topDrie.map(({naam})=>naam));
+  const punten=Object.entries(dag.rec).filter(([naam])=>stations[naam]).map(([naam,rec])=>{
+    const [lon,lat]=stations[naam];
+    const jaar=rec.d.slice(0,4)+(rec.voorlopig?"*":"");
+    return {
+      naam,lon,lat,val:rec.t,topDrie:topStations.has(naam),voorlopig:!!rec.voorlopig,historisch:!!rec.h,
+      x:(lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W,
+      y:(1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H,
+      waarde:GETAL.format(rec.t)+"° · "+jaar
+    };
+  });
+  const extreem=punten.reduce((beste,p)=>!beste||config.richting*(p.val-beste.val)<0?p:beste,null);
   const datum=DAG_LABEL.format(dag.dt);
   const kalenderdag=dag.dt.toISOString().slice(0,10);
 
@@ -377,23 +356,29 @@ function bouwKaart(stations,dag,config,ondergrond){
 
   const titel=topDrie.length?"Top 3 "+config.kaarttitel+" (°C)":"Geen gegevens";
   const paneel=maakKaartTopDrie(overlay,titel,topDrie);
-  const posities=berekenLabelPosities(punten,extreem,config.richting,paneel.grenzen);
+  const posities=berekenLabelPosities(punten,config.richting,paneel.grenzen);
+  const stippen=node("g",{});
+  const labels=node("g",{});
   for(const p of punten){
-    const x=(p.lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;
-    const y=(1-(p.lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H;
-    const {lx,ly}=posities[p.naam];
-    const uitgelicht=p===extreem;
-    if(Math.hypot(lx-x,ly-y)>12){
-      overlay.append(node("line",{x1:x,y1:y,x2:lx,y2:ly,stroke:"#385369","stroke-opacity":.55,"stroke-width":1.5}));
+    const pos=posities.get(p.naam);
+    if(pos){
+      const {x,y,box}=pos;
+      const x2=Math.max(box.l+4,Math.min(box.r-4,p.x));
+      const y2=Math.max(box.t+4,Math.min(box.b-4,p.y));
+      overlay.append(node("line",{x1:p.x,y1:p.y,x2,y2,
+        stroke:"#385369","stroke-opacity":.55,"stroke-width":1.25}));
+      labels.append(
+        node("text",{class:"stationlabel stationwaarde",x,y:y-3},p.waarde),
+        node("text",{class:"stationlabel stationnaam",x,y:y+16},p.naam)
+      );
     }
-    const stip=node("circle",{class:"stationpunt",cx:x,cy:y,r:uitgelicht?7:4.5,
-      fill:p.historisch?"white":"#243e53",stroke:p.historisch?"#243e53":"white","stroke-width":2});
+    const stip=node("circle",{class:"stationpunt",cx:p.x,cy:p.y,r:p===extreem?6:4,
+      fill:p.historisch?"white":"#243e53",stroke:p.historisch?"#243e53":"white","stroke-width":1.5});
     if(p.historisch) stip.setAttribute("data-historisch","");
-    overlay.append(stip,
-      node("text",{class:"stationlabel stationwaarde",x:lx,y:ly-9},GETAL.format(p.val)+"°"),
-      node("text",{class:"stationlabel stationnaam",x:lx,y:ly+12},p.naam),
-      node("text",{class:"stationlabel stationjaar",x:lx,y:ly+32},p.jaar));
+    stip.append(node("title",{},p.naam+" · "+p.waarde+(p.voorlopig?" (voorlopig)":"")));
+    stippen.append(stip);
   }
+  overlay.append(labels,stippen);
 
   overlay.append(paneel.groep);
   body.append(basis,canvas,overlay);
