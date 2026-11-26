@@ -28,13 +28,6 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 .mini-body canvas,.mini-body .overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 .mosmix-mini-page .mini-body { cursor:default; }
 .mosmix-mini-page .mini-footer { flex-wrap:wrap; }
-.kaart-top3 { display:grid; gap:4px; padding:9px 13px; color:var(--mini-ink); font-size:12px; }
-.kaart-top3 h2 { font-size:12px; }
-.kaart-top3 ol { display:grid; gap:3px; list-style:none; }
-.kaart-top3 li { display:grid; grid-template-columns:1.3em minmax(0,1fr) auto; gap:5px; }
-.kaart-top3 .rang,.kaart-top3 .jaar { color:var(--mini-muted); }
-.kaart-top3 .naam { overflow-wrap:anywhere; }
-.kaart-top3 .waarde { font-variant-numeric:tabular-nums; }
 .kaart-acties { display:flex; flex-wrap:wrap; gap:4px; margin-left:auto; }
 .mosmix-mini-page .mini-downloadknop { color:var(--mini-accent); }
 .kaart-downloadstatus { padding:0 13px 9px; font-size:12px; color:var(--mini-muted); }
@@ -98,7 +91,8 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 
 <script src="nl_grens_coords.js"></script>
 <script src="waarnemingen-kaartkleuren.js?v=20261124-topkaart"></script>
-<script src="weerlab-kaart-export.js?v=20261126-legenda"></script>
+<script src="weerlab-kaart-top3.js?v=20261126"></script>
+<script src="weerlab-kaart-export.js?v=20261126-top3"></script>
 <script>
 // ── Geo-projectie (zelfde als alle weerlab NL-kaarten) ───────────────────────
 const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
@@ -244,7 +238,7 @@ async function laadKaartondergrond(){
 }
 
 // Bij verschoven labels blijft de stip op de gemeten locatie.
-function berekenLabelPosities(punten,extreem,richting){
+function berekenLabelPosities(punten,extreem,richting,paneel){
   const geprojecteerd=punten.map(p=>({
     ...p,
     x:(p.lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W,
@@ -255,7 +249,7 @@ function berekenLabelPosities(punten,extreem,richting){
     const histVerschil=Number(b.historisch)-Number(a.historisch);
     return histVerschil || richting*(a.val-b.val);
   });
-  const bezet=[{l:4,r:138,t:4,b:438}], resultaat={};
+  const bezet=[paneel], resultaat={};
   for(const p of geprojecteerd){
     const breedte=Math.max(76,p.naam.length*9), marge=5;
     const voorkeur=LABEL_OFFSET[p.naam];
@@ -293,7 +287,7 @@ function node(tag,attrs,txt){
   return el;
 }
 
-async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kalenderdag,topDrie){
+async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kalenderdag){
   // Teken de stationstekst op canvas zodat de export het geladen webfont gebruikt.
   const exportOverlay=overlay.cloneNode(true);
   exportOverlay.querySelectorAll(".stationlabel").forEach(label=>label.remove());
@@ -312,9 +306,6 @@ async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kal
     basis,kleurlaag,overlay:exportOverlay,basisStijl:svgStijl,overlayStijl:svgStijl,
     dagtekst,kaarttitel:titel,kopregel:"Dagrecords KNMI",bron:"KNMI · Klimaatarchief",
     legenda:kaartLegendaSchaal(KAARTSCHAAL), historischeLocaties:true,
-    topDrie:topDrie.map(({naam,rec,rang})=>({
-      rang,naam,waarde:GETAL.format(rec.t)+" °C · "+rec.d.slice(0,4)
-    })),
     tekenLabels(ctx){
       ctx.textAlign="center";
       ctx.lineJoin="round";
@@ -346,7 +337,9 @@ async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kal
 }
 
 function bouwKaart(stations,dag,config,ondergrond){
-  const topDrie=rangschikDagrecords(dag.rec,config.richting).slice(0,3);
+  const topDrie=rangschikDagrecords(dag.rec,config.richting).slice(0,3).map(({naam,rec,rang})=>({
+    rang,naam,waarde:GETAL.format(rec.t)+" °C · "+rec.d.slice(0,4)
+  }));
   const punten=Object.entries(dag.rec).filter(([naam])=>stations[naam]).map(([naam,rec])=>({
     naam,lon:stations[naam][0],lat:stations[naam][1],val:rec.t,
     jaar:rec.d.slice(0,4),historisch:!!rec.h
@@ -358,7 +351,10 @@ function bouwKaart(stations,dag,config,ondergrond){
 
   const kaart=document.createElement("article");
   kaart.className="mini-kaart";
-  kaart.setAttribute("aria-label",config.titel+" op "+datum);
+  const samenvatting=topDrie.length
+    ? "Top 3: "+topDrie.map(({rang,naam,waarde})=>rang+". "+naam+", "+waarde).join(", ")
+    : "Geen gegevens";
+  kaart.setAttribute("aria-label",config.titel+" op "+datum+". "+samenvatting);
   kaart.innerHTML='<div class="mini-header"><span class="mini-dag-naam"></span><span class="mini-dag-datum"></span></div>'
     +'<div class="mini-body"></div><div class="mini-footer"><div class="kaart-acties"></div></div>'
     +'<p class="kaart-downloadstatus" role="status"></p>';
@@ -375,7 +371,8 @@ function bouwKaart(stations,dag,config,ondergrond){
   const overlay=node("svg",{...svgAttrs,class:"overlay","aria-hidden":"true"});
   overlay.append(node("path",{class:"provinciegrens",d:ondergrond.provincies}));
 
-  const posities=berekenLabelPosities(punten,extreem,config.richting);
+  const paneel=maakKaartTopDrie(overlay,topDrie.length?"Top 3":"Geen gegevens",topDrie,1.65);
+  const posities=berekenLabelPosities(punten,extreem,config.richting,paneel.grenzen);
   for(const p of punten){
     const x=(p.lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;
     const y=(1-(p.lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H;
@@ -393,36 +390,8 @@ function bouwKaart(stations,dag,config,ondergrond){
       node("text",{class:"stationlabel stationjaar",x:lx,y:ly+32},p.jaar));
   }
 
+  overlay.append(paneel.groep);
   body.append(basis,canvas,overlay);
-  const samenvatting=document.createElement("section");
-  samenvatting.className="kaart-top3";
-  if(topDrie.length){
-    const titel=document.createElement("h2");
-    titel.textContent="Top 3";
-    const lijst=document.createElement("ol");
-    for(const {naam,rec,rang} of topDrie){
-      const rij=document.createElement("li");
-      const positie=document.createElement("span");
-      positie.className="rang";
-      positie.textContent=rang+".";
-      const station=document.createElement("span");
-      station.className="naam";
-      station.textContent=naam;
-      const waarde=document.createElement("span");
-      waarde.className="waarde";
-      waarde.textContent=GETAL.format(rec.t)+" °C · ";
-      const jaar=document.createElement("span");
-      jaar.className="jaar";
-      jaar.textContent=rec.d.slice(0,4);
-      waarde.append(jaar);
-      rij.append(positie,station,waarde);
-      lijst.append(rij);
-    }
-    samenvatting.append(titel,lijst);
-  }else{
-    samenvatting.textContent="Geen gegevens";
-  }
-  body.after(samenvatting);
   const knop=document.createElement("button");
   knop.type="button";
   knop.className="mini-open";
@@ -445,7 +414,7 @@ function bouwKaart(stations,dag,config,ondergrond){
     download.disabled=true;
     melding.textContent="PNG maken…";
     try{
-      await downloadDagrecordKaart(basis,canvas,overlay,datum,config.titel,kalenderdag,topDrie);
+      await downloadDagrecordKaart(basis,canvas,overlay,datum,config.titel,kalenderdag);
       melding.textContent="";
     }catch(fout){
       melding.textContent="De PNG kon niet worden gemaakt. Probeer opnieuw.";

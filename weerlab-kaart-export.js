@@ -58,7 +58,7 @@ function tekenWeerlabKaartVoet(ctx, breedte, y, hoogte, bronTekst) {
   ctx.textAlign = "left";
 }
 
-function tekenWeerlabKaartBijschrift(breedte, legenda, historischeLocaties, topDrie) {
+function tekenWeerlabKaartBijschrift(breedte, legenda, historischeLocaties) {
   const paneel = document.createElement("canvas");
   const ctx = paneel.getContext("2d");
   const pad = 26, regelhoogte = 31;
@@ -67,7 +67,7 @@ function tekenWeerlabKaartBijschrift(breedte, legenda, historischeLocaties, topD
   })) : [];
   if (historischeLocaties) legendaItems.push({tekst:"Historische meetlocatie"});
   ctx.font = "500 21px 'DM Sans', Arial, sans-serif";
-  let x = pad, y = pad + (topDrie.length ? (topDrie.length+1)*regelhoogte + 12 : 0);
+  let x = pad, y = pad;
   const posities = legendaItems.map(item=>{
     const ruimte = 29 + ctx.measureText(item.tekst).width + 18;
     if (x > pad && x + ruimte > breedte-pad) {
@@ -101,15 +101,6 @@ function tekenWeerlabKaartBijschrift(breedte, legenda, historischeLocaties, topD
     ctx.fillStyle = "#172b40";
     ctx.fillText(label,x+26,y);
   }
-  if (topDrie.length) {
-    ctx.fillStyle = "#172b40";
-    ctx.font = "700 23px 'DM Sans', Arial, sans-serif";
-    ctx.fillText("Top 3",pad,pad);
-    ctx.font = "500 21px 'DM Sans', Arial, sans-serif";
-    topDrie.forEach(({rang,naam,waarde}, i)=>{
-      ctx.fillText(rang+".  "+naam+" · "+waarde,pad,pad+(i+1)*regelhoogte,breedte-2*pad);
-    });
-  }
   return paneel;
 }
 
@@ -137,14 +128,14 @@ async function rasteriseerWeerlabKaartlaag(svg, breedte, hoogte, stijl) {
 async function maakWeerlabKaartCanvas({
   basis, kleurlaag, overlay, basisStijl, overlayStijl,
   breedte = 1600, dagtekst, kaarttitel, kopregel, bron, tekenLabels,
-  legenda, historischeLocaties = false, topDrie = []
+  legenda, historischeLocaties = false
 }) {
   const kaart = basis.viewBox.baseVal;
   const hoogte = Math.round(breedte * kaart.height / kaart.width);
   const kopHoogte = 130, voetHoogte = 60;
   const canvas = document.createElement("canvas");
-  const bijschrift = legenda || topDrie.length
-    ? tekenWeerlabKaartBijschrift(breedte,legenda,historischeLocaties,topDrie)
+  const bijschrift = legenda
+    ? tekenWeerlabKaartBijschrift(breedte,legenda,historischeLocaties)
     : null;
   const voetY = kopHoogte + hoogte + (bijschrift?.height || 0);
   canvas.width = breedte;
