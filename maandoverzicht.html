@@ -161,7 +161,7 @@ tfoot td.sq { color: #e67e00; }
 <section class="climate-heading" aria-labelledby="climate-title">
 <a class="climate-back" href="index.html#menu/terugkijken?type=terug">← Maand &amp; archief</a>
 <div class="climate-heading-row"><div><h1 id="climate-title">Maandstanden per station</h1><p>Bekijk dagelijkse metingen, maandgemiddelden en totalen, met een voorlopige ECMWF-doorkijk voor de komende tien dagen.</p></div><span class="climate-label">KNMI · Weerarchief</span></div>
-<details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens met recente aanvullingen. Normaalwaarden gelden voor de volledige kalendermaand (1991–2020). Ranglijsten vergelijken dezelfde gemeten kalenderdagen; ontbrekende waarden tellen niet als nul. De lichtere waarden zijn een voorlopige doorkijk met ECMWF IFS, maximaal tien dagen vanaf vandaag en tot de maandgrens. Verwachte dagwaarden vervangen de lopende dag eenmaal in de berekende stand. Dagvenster: 00–24 UTC. TX/TN worden uit de modeltijdstappen bepaald, TG is tijdgewogen; zonduur is een schatting uit modelstraling. Ontbrekende dagen blijven vermeld; de doorkijk is geen definitieve maandstand. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">KNMI-brongegevens ↗</a> · <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noopener">ECMWF Open Data (CC BY 4.0) ↗</a></p></details>
+<details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens met recente aanvullingen. Maandnormen gelden voor de volledige kalendermaand (1991–2020). Waar een KNMI-maandnorm ontbreekt, tonen we voor de gemiddelde temperatuur een historische referentie op basis van ten minste 24 volledige meetmaanden uit die periode. Ranglijsten vergelijken dezelfde gemeten kalenderdagen; ontbrekende waarden tellen niet als nul. De lichtere waarden zijn een voorlopige doorkijk met ECMWF IFS, maximaal tien dagen vanaf vandaag en tot de maandgrens. Verwachte dagwaarden vervangen de lopende dag eenmaal in de berekende stand. Dagvenster: 00–24 UTC. TX/TN worden uit de modeltijdstappen bepaald, TG is tijdgewogen; zonduur is een schatting uit modelstraling. Ontbrekende dagen blijven vermeld; de doorkijk is geen definitieve maandstand. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">KNMI-brongegevens ↗</a> · <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noopener">ECMWF Open Data (CC BY 4.0) ↗</a></p></details>
 </section>
 <div class="header">
   <div>
@@ -370,6 +370,60 @@ function corrigeerMetToplijst(data, stationNaam) {
 }
 
 var stationRequest = 0;
+var knmiMaandnormenLader;
+var knmiMaandnormen = {};
+
+function laadKnmiMaandnormen() {
+  if (!knmiMaandnormenLader) {
+    knmiMaandnormenLader = fetch('knmi_klimaattabellen.json?v=20261015', {signal:AbortSignal.timeout(4000)})
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(tabel) {
+        if (tabel.period !== '1991–2020' && tabel.period !== '1991-2020') return {};
+        return Object.fromEntries(tabel.stations.map(function(station) {
+          return [station.id, station.values.slice(0,12).map(function(rij) {
+            var normaal = {};
+            ['tg','tn','tx'].forEach(function(veld, i) {
+              var waarde = Number.parseFloat(rij[i]);
+              if (Number.isFinite(waarde)) normaal[veld] = waarde;
+            });
+            return normaal;
+          })];
+        }));
+      })
+      .catch(function() {
+        knmiMaandnormenLader = null;
+        return {};
+      });
+  }
+  return knmiMaandnormenLader;
+}
+
+function maandnorm(station, maand) {
+  return (ALLE_NM[station] || {})[maand] || (knmiMaandnormen[station] || [])[maand-1] || {};
+}
+
+function historischeTemperatuur(data, maand) {
+  var gemiddelden = [];
+  var maandcode = String(maand).padStart(2,'0');
+  for (var jaar = 1991; jaar <= 2020; jaar++) {
+    var dagen = new Date(jaar, maand, 0).getDate();
+    var som = 0, aantal = 0;
+    for (var dag = 1; dag <= dagen; dag++) {
+      var rij = data[jaar + '-' + maandcode + '-' + String(dag).padStart(2,'0')];
+      if (rij && Number.isFinite(rij.tg)) {
+        som += rij.tg;
+        aantal++;
+      }
+    }
+    if (aantal === dagen) gemiddelden.push(som / dagen);
+  }
+  if (gemiddelden.length < 24) return null;
+  var gemiddelde = gemiddelden.reduce(function(som, waarde) { return som + waarde; }, 0) / gemiddelden.length;
+  return {waarde:Number(gemiddelde.toFixed(1)), jaren:gemiddelden.length};
+}
 var verwachting = null, verwachtingStatus = '', verwachtingStation = null, verwachtingDag = '';
 var verwachtingLader = MaandForecast.create({core:TSCore});
 function laadVerwachting() {
@@ -419,12 +473,14 @@ function laadData(achtergrond) {
       .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
     fetch(dataUrl('toplijst.json'), { cache: 'no-store', signal:AbortSignal.timeout(30000) })
       .then(function(r) { return r.ok ? r.json() : {}; })
-      .catch(function() { return {}; })
+      .catch(function() { return {}; }),
+    ALLE_NM[requestedStation.nr] ? Promise.resolve(knmiMaandnormen) : laadKnmiMaandnormen()
   ])
     .then(function(res) {
       if(request!==stationRequest)return;
       var j = res[0];
       TOPLIJST = res[1] || {};
+      knmiMaandnormen = res[2];
       D = corrigeerMetToplijst(j.data || {}, requestedStation.naam);
       document.getElementById('bw').textContent = hSt.naam + ' (0' + hSt.nr + ') · ' + (j.bijgewerkt || '');
       toon();
@@ -480,6 +536,9 @@ function rang(val, veld, hoger, ix) {
   }
   return '<span class="rng">#' + r + '/' + (v.length + 1) + '</span>';
 }
+
+var temperatuurNotatie = new Intl.NumberFormat('nl-NL', {minimumFractionDigits:1, maximumFractionDigits:1});
+function formatTemperatuur(waarde) { return temperatuurNotatie.format(waarde); }
 
 function ds(val, nm) {
   if (val == null || nm == null) return '';
@@ -614,7 +673,7 @@ function toon() {
       (verwachting.solarAvailable ? 'Zonduur is een schatting.' : 'Geen ECMWF-zonduur beschikbaar.')+
       ' Lichte waarden combineren metingen en verwachting.';
   } else note.textContent = 'Geen verwachte dagwaarden beschikbaar voor deze maand.';
-  var nm = (ALLE_NM[hSt.nr] || {})[M] || {};
+  var nm = maandnorm(hSt.nr, M);
   var ad = new Date(J, M, 0).getDate();
   var ms = String(M).padStart(2,'0');
   var tx=[],tn=[],tg=[],rr=[],sq=[], rows=[];
@@ -635,17 +694,36 @@ function toon() {
   function sm(a) { if (!a.length) return null; var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return s; }
 
   var txG=gm(tx), tnG=gm(tn), tgG=gm(tg), rrS=sm(rr), sqS=sm(sq);
+  var tgReferentie = nm.tg == null ? historischeTemperatuur(D, M) : null;
 
   document.getElementById('st').innerHTML = [
     {c:'tx',l:'Gem. TX',v:txG,e:'°',nm:nm.tx},
     {c:'tn',l:'Gem. TN',v:tnG,e:'°',nm:nm.tn},
-    {c:'tg',l:'Gem. TG',v:tgG,e:'°',nm:nm.tg},
+    {c:'tg',l:'Gem. TG',v:tgG,e:'°',nm:nm.tg,referentie:tgReferentie},
     {c:'rr',l:'Neerslag',v:rrS,e:' mm',nm:nm.rr},
     {c:'sq',l:'Zonneschijn',v:sqS,e:' u',nm:nm.sq}
   ].map(function(s) {
+    var vergelijking = '';
+    if (s.c === 'tg') {
+      var basis = s.referentie ? s.referentie.waarde : s.nm;
+      if (basis != null) {
+        var label = s.referentie ? 'Historisch (' + s.referentie.jaren + ' meetjaren uit 1991–2020)' : 'Maandnorm (1991–2020)';
+        vergelijking = '<div class="stat-norm">' + label + ' · ' + formatTemperatuur(basis) + ' °C</div>';
+        if (s.v != null) {
+          var afwijking = Number((s.v - basis).toFixed(1));
+          var tekst = afwijking === 0 ? 'Gelijk aan de referentie'
+            : formatTemperatuur(Math.abs(afwijking)) + ' °C ' + (afwijking < 0 ? 'kouder' : 'warmer');
+          vergelijking += '<div class="stat-norm ' + (afwijking < 0 ? 'dm' : afwijking > 0 ? 'dp' : '') + '">' + tekst + '</div>';
+        }
+      } else {
+        vergelijking = '<div class="stat-norm">Geen maandreferentie beschikbaar</div>';
+      }
+    } else if (s.nm != null) {
+      vergelijking = '<div class="stat-norm">Maandnorm: ' + s.nm + s.e + ((['rr','sq'].includes(s.c) && (s.c==='rr'?rr:sq).length<ad)?'':ds(s.v,s.nm)) + '</div>';
+    }
     return '<div class="stat ' + s.c + '"><div class="stat-lbl">' + s.l + '</div>' +
-      '<div class="stat-val">' + (s.v!=null ? s.v.toFixed(1)+s.e : '&#8211;') + '</div>' +
-      (s.nm!=null ? '<div class="stat-norm">Maandnorm: ' + s.nm + s.e + ((['rr','sq'].includes(s.c) && (s.c==='rr'?rr:sq).length<ad)?'':ds(s.v,s.nm)) + '</div>' : '') +
+      '<div class="stat-val">' + (s.v!=null ? (s.c === 'tg' ? formatTemperatuur(s.v) + ' °C' : s.v.toFixed(1)+s.e) : '&#8211;') + '</div>' +
+      vergelijking +
       forecastStat(doorkijk,s.c,s.e) + '</div>';
   }).join('');
 
@@ -700,7 +778,7 @@ function toon() {
   var selectedKeys=rows.filter(r=>r.o && ['tx','tn','tg','rr','sq'].some(field=>r.o[field]!=null)).map(r=>r.k);
   var through=selectedKeys[selectedKeys.length-1];
   var huidige=nederlandseMaand(), historical=J!==huidige.jaar||M!==huidige.maand;
-  weerlabClimateStatus(through?{through,historical,note:`${selectedKeys.length} van ${ad} dagen · normaalwaarden gelden voor de hele maand`}:{fixed:'Geen metingen beschikbaar voor deze maand'});
+  weerlabClimateStatus(through?{through,historical,note:`${selectedKeys.length} van ${ad} dagen · referentiewaarden gelden voor de hele maand`}:{fixed:'Geen metingen beschikbaar voor deze maand'});
 
   tekenGrafiek();
 }
@@ -737,7 +815,7 @@ function tekenGrafiek() {
     sq.push(o && o.sq != null ? o.sq : null);
   }
 
-  var nm = (ALLE_NM[hSt.nr] || {})[M] || {};
+  var nm = maandnorm(hSt.nr, M);
 
   var datasets = [];
 
