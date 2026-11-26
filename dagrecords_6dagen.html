@@ -33,6 +33,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 .kaart-records td:first-child { color:var(--mini-muted); width:1%; }
 .kaart-records td:nth-child(3) { font-weight:700; }
 .kaart-records .record-getal { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.lopend-recordjaar { color:#b91c1c; font-weight:700; }
 .kaart-records .record-jaar { color:var(--mini-muted); font-size:11px; font-weight:400; white-space:nowrap; }
 .record-page .kaart-records tbody tr[data-voorlopig] { background:#e9f7f7; }
 .kaart-records [colspan] { color:var(--mini-muted); }
@@ -275,7 +276,7 @@ function node(tag,attrs,txt){
   return el;
 }
 
-async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kalenderdag,voorlopig,rijen){
+async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kalenderdag,voorlopig,rijen,lopendJaar){
   // Teken de stationstekst op canvas zodat de export het geladen webfont gebruikt.
   const exportOverlay=overlay.cloneNode(true);
   exportOverlay.querySelectorAll(".stationlabel").forEach(label=>label.remove());
@@ -294,7 +295,7 @@ async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kal
     basis,kleurlaag,overlay:exportOverlay,basisStijl:svgStijl,overlayStijl:svgStijl,
     dagtekst,kaarttitel:titel,kopregel:voorlopig?"Dagrecords KNMI · * Voorlopig":"Dagrecords KNMI",bron:"KNMI · Klimaatarchief",
     legenda:kaartLegendaSchaal(KAARTSCHAAL), historischeLocaties:true,
-    zijpaneel:tekenRecordlijstPng(rijen),
+    zijpaneel:tekenRecordlijstPng(rijen,lopendJaar),
     tekenLabels(ctx){
       ctx.textAlign="center";
       ctx.lineJoin="round";
@@ -329,7 +330,20 @@ function recordTekst(rec){
   return rec?GETAL.format(rec.t)+" °C · "+rec.d.slice(0,4)+(rec.voorlopig?"*":""):"—";
 }
 
-function bouwKaartRecords(rijen,datum){
+function maakRecordDatum(rec,lopendJaar,volledig=false){
+  const [jaar,maand,dag]=rec.d.split("-");
+  const datum=document.createElement("time");
+  datum.dateTime=rec.d;
+  if(volledig) datum.append(dag+"-"+maand+"-");
+  const jaarLabel=document.createElement("span");
+  if(jaar===lopendJaar) jaarLabel.className="lopend-recordjaar";
+  jaarLabel.textContent=jaar;
+  datum.append(jaarLabel);
+  if(rec.voorlopig) datum.append(volledig?" lopend":"*");
+  return datum;
+}
+
+function bouwKaartRecords(rijen,datum,lopendJaar){
   const blok=document.createElement("div");
   blok.className="kaart-lijst";
   blok.innerHTML='<div class="kaart-lijst-scroll" tabindex="0" role="region"><table class="kaart-records" data-record-table-static>'
@@ -351,10 +365,8 @@ function bouwKaartRecords(rijen,datum){
       const getal=document.createElement("span");
       getal.className="record-getal";
       getal.textContent=GETAL.format(record.t)+" °C";
-      const jaar=document.createElement("time");
+      const jaar=maakRecordDatum(record,lopendJaar);
       jaar.className="record-jaar";
-      jaar.dateTime=record.d;
-      jaar.textContent=record.d.slice(0,4)+(record.voorlopig?"*":"");
       cel.append(getal,document.createElement("br"),jaar);
     }
   }
@@ -366,7 +378,23 @@ function bouwKaartRecords(rijen,datum){
   return blok;
 }
 
-function tekenRecordlijstPng(rijen){
+function tekenRecordPng(ctx,rec,x,y,lopendJaar){
+  if(!rec||rec.d.slice(0,4)!==lopendJaar){
+    ctx.fillText(recordTekst(rec),x,y,200);
+    return;
+  }
+  const suffix=rec.voorlopig?"*":"";
+  if(suffix) ctx.fillText(suffix,x,y);
+  const jaarX=x-ctx.measureText(suffix).width;
+  const temperatuurX=jaarX-ctx.measureText(lopendJaar+" ").width;
+  ctx.fillText(GETAL.format(rec.t)+" °C ·",temperatuurX,y);
+  ctx.save();
+  ctx.fillStyle="#b91c1c";
+  ctx.fillText(lopendJaar,jaarX,y);
+  ctx.restore();
+}
+
+function tekenRecordlijstPng(rijen,lopendJaar){
   const paneel=document.createElement("canvas");
   const boven=82;
   const rijHoogte=Math.max(37,Math.min(52,Math.floor(2098/Math.max(1,rijen.length))));
@@ -403,14 +431,14 @@ function tekenRecordlijstPng(rijen){
     ctx.fillText(naam,76,y+26,320);
     ctx.textAlign="right";
     ctx.font="700 22px system-ui";
-    ctx.fillText(recordTekst(rec),600,y+26,200);
+    tekenRecordPng(ctx,rec,600,y+26,lopendJaar);
     ctx.font="500 22px system-ui";
-    ctx.fillText(recordTekst(rec.vorig),825,y+26,200);
+    tekenRecordPng(ctx,rec.vorig,825,y+26,lopendJaar);
   });
   return paneel;
 }
 
-function bouwKaart(stations,dag,config,ondergrond){
+function bouwKaart(stations,dag,config,ondergrond,lopendJaar){
   const rijen=rangschikDagrecords(dag.rec,config.richting);
   const voorlopig=rijen.some(({rec})=>rec.voorlopig);
   const punten=Object.entries(dag.rec).filter(([naam])=>stations[naam]).map(([naam,rec])=>{
@@ -437,7 +465,7 @@ function bouwKaart(stations,dag,config,ondergrond){
   kaart.querySelector(".mini-dag-naam").textContent=datum;
   kaart.querySelector(".mini-dag-datum").textContent=config.kaarttitel;
 
-  kaart.querySelector(".kaart-met-records").append(bouwKaartRecords(rijen,datum));
+  kaart.querySelector(".kaart-met-records").append(bouwKaartRecords(rijen,datum,lopendJaar));
   const body=kaart.querySelector(".mini-body");
   const canvas=document.createElement("canvas");
   canvas.setAttribute("aria-hidden","true");
@@ -493,7 +521,7 @@ function bouwKaart(stations,dag,config,ondergrond){
     download.disabled=true;
     melding.textContent="PNG maken…";
     try{
-      await downloadDagrecordKaart(basis,canvas,overlay,datum,config.titel,kalenderdag,voorlopig,rijen);
+      await downloadDagrecordKaart(basis,canvas,overlay,datum,config.titel,kalenderdag,voorlopig,rijen,lopendJaar);
       melding.textContent="";
     }catch(fout){
       melding.textContent="De PNG kon niet worden gemaakt. Probeer opnieuw.";
@@ -592,16 +620,15 @@ function rangschikDagrecords(records,richting){
   });
 }
 
-function tekenRanglijst(dag,config){
+function tekenRanglijst(dag,config,lopendJaar){
   document.getElementById("record-day-title").textContent=config.titel+" · "+DAG_LABEL.format(dag.dt);
   tableRows.replaceChildren(...rangschikDagrecords(dag.rec,config.richting).map(({naam,rec,rang})=>{
     const rij=document.createElement("tr");
-    const datum=rec.d.split("-").reverse().join("-")+(rec.voorlopig?" lopend":"");
-    for(const waarde of [rang,naam,GETAL.format(rec.t),datum,recordTekst(rec.vorig)]){
-      const cel=document.createElement("td");
-      cel.textContent=waarde;
-      rij.append(cel);
-    }
+    for(const waarde of [rang,naam,GETAL.format(rec.t)]) rij.insertCell().textContent=waarde;
+    rij.insertCell().append(maakRecordDatum(rec,lopendJaar,true));
+    const vorig=rij.insertCell();
+    if(rec.vorig) vorig.append(GETAL.format(rec.vorig.t)+" °C · ",maakRecordDatum(rec.vorig,lopendJaar));
+    else vorig.textContent="—";
     return rij;
   }));
 }
@@ -634,20 +661,21 @@ async function updateRecordDays({achtergrond=false}={}){
       haalDagrecords(config),tabel?null:(kaartondergrond??=laadKaartondergrond())
     ]);
     if(wijziging!==updateNr) return;
-    const weergave=`${start}/${soort}/${tabel}`;
+    const lopendJaar=vandaag().slice(0,4);
+    const weergave=`${start}/${soort}/${tabel}/${lopendJaar}`;
     if(achtergrond&&laatsteWeergave?.weergave===weergave&&
       data.gegenereerd<=laatsteWeergave.gegenereerd) return;
 
     const dagen=dagenVoor(start,soort,data);
     if(tabel){
-      tekenRanglijst(dagen[0],config);
+      tekenRanglijst(dagen[0],config,lopendJaar);
     }else{
       if(!LANDMASK) maakLandMask();
       const kaarten=[];
       for(const dag of dagen){
         await new Promise(requestAnimationFrame);
         if(wijziging!==updateNr) return;
-        const kaart=bouwKaart(data.stations,dag,config,ondergrond);
+        const kaart=bouwKaart(data.stations,dag,config,ondergrond,lopendJaar);
         if(achtergrond) kaarten.push(kaart);
         else grid.append(kaart);
       }
