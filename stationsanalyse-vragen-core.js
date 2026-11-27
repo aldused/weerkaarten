@@ -8,7 +8,7 @@ const variables={
  RH:{label:'Neerslag (RH)',unit:'mm',factor:10,trace:true,definition:'KNMI-etmaalsom. Code −1 betekent minder dan 0,05 mm; geen negatieve neerslag.'},
  FXX:{label:'Hoogste windstoot (FXX)',unit:'km/u',factor:10/3.6,definition:'Hoogste windstoot van de KNMI-dag; bron in 0,1 m/s, omgerekend naar km/u.'},
  SQ:{label:'Zonneschijnduur (SQ)',unit:'uur',factor:10,trace:true,definition:'Zonneschijnduur van de KNMI-dag. Code −1 betekent minder dan 0,05 uur.'},
- TG:{label:'Gemiddelde temperatuur (TG)',unit:'°C',factor:10},T10N:{label:'Minimum op 10 cm (T10N · grondvorst)',unit:'°C',factor:10},
+ TG:{label:'Gemiddelde temperatuur (TG)',unit:'°C',factor:10},T10N:{label:'Minimum op 10 cm (T10N · grondvorst)',unit:'°C',factor:10,definition:'Grondvorst treedt op als de minimumtemperatuur op 10 cm boven de grond onder 0 °C komt.'},
  FG:{label:'Gemiddelde wind (FG)',unit:'km/u',factor:10/3.6},FHX:{label:'Hoogste uurwind (FHX)',unit:'km/u',factor:10/3.6},
  DR:{label:'Neerslagduur (DR)',unit:'uur',factor:10},Q:{label:'Globale straling (Q)',unit:'J/cm²',factor:1},SP:{label:'Percentage zonneschijn (SP)',unit:'%',factor:1},
  PG:{label:'Gemiddelde luchtdruk (PG)',unit:'hPa',factor:10},PX:{label:'Hoogste luchtdruk (PX)',unit:'hPa',factor:10},PN:{label:'Laagste luchtdruk (PN)',unit:'hPa',factor:10},
@@ -82,6 +82,7 @@ function analyzeNetwork(sources,records,options){
  if(!variable)throw Error('Kies een geldige variabele.');
 
  const days=new Map(),coverage=[];
+ let dailySeriesStart=Infinity;
  function add(time,v,station,historical=false){
   if(time===null||!v)return;
   let entry=days.get(time);if(!entry){entry=new Map();days.set(time,entry);}
@@ -90,10 +91,16 @@ function analyzeNetwork(sources,records,options){
  }
  for(const source of sources){const di=source.json.kolommen.indexOf('YYYYMMDD'),vi=source.json.kolommen.indexOf(field);if(di<0||vi<0)continue;
   const dates=new Set();let first=Infinity,last=-Infinity;
-  for(const row of source.json.data){const t=day(row[di]),v=decode(row[vi],variable);add(t,v,source.id,source.historical===true);if(t!==null&&v&&match(v,op,threshold,upper)!==null){dates.add(t);first=Math.min(first,t);last=Math.max(last,t);}}
+  for(const row of source.json.data){
+   const t=day(row[di]),v=decode(row[vi],variable);
+   if(t===null||!v)continue;
+   add(t,v,source.id,source.historical===true);
+   dailySeriesStart=Math.min(dailySeriesStart,t);
+   if(match(v,op,threshold,upper)!==null){dates.add(t);first=Math.min(first,t);last=Math.max(last,t);}
+  }
   if(dates.size)coverage.push({dates,first,last});
  }
- for(const record of records)if(record.parameter===field&&Number.isFinite(record.waarde))add(day(record.datum),{value:record.waarde,trace:false},record.station,true);
+ for(const record of records)if(record.parameter===field&&Number.isFinite(record.waarde))add(day(record.datum),{value:record.waarde,trace:false,source:record.bron},record.station,true);
  if(!days.size)throw Error('Geen geldige daggegevens beschikbaar voor deze variabele.');
  const hits=new Map(),rows=[];
  for(const [time,entries]of days){const values=[...entries.values()],matching=values.filter(v=>match(v,op,threshold,upper)===true);
@@ -103,6 +110,7 @@ function analyzeNetwork(sources,records,options){
  }
  const result=analyze({kolommen:['YYYYMMDD',field],data:rows},options);
  for(const p of result.periods){
+  p.startsBeforeDailySeries=p.start<dailySeriesStart;
   // Records need daily coverage in every available station's active interval.
   // Historic isolated records may extend an observed boundary, never certify absence.
   p.dailyComplete=!p.running&&coverage.some(s=>s.first<=p.start&&s.last>=p.end)&&coverage.every(s=>{
@@ -112,9 +120,9 @@ function analyzeNetwork(sources,records,options){
   p.complete=false;p.status=p.running?'lopend':p.valid?'onvolledig':'geen gegevens';
   for(const side of ['first','last'])if(p[side])p[side].observations=hits.get(p[side].time);
  }
- // National dates are observed boundaries, including periods with station gaps.
- // A complete-only subset would contradict the dates in the annual overview.
- const eventPeriods=result.periods.filter(p=>p.first&&!p.running);
+ // Keep ordinary station gaps in the observed comparison. A period that began
+ // before the first daily series has no observations of its opening stretch.
+ const eventPeriods=result.periods.filter(p=>p.first&&!p.running&&!p.startsBeforeDailySeries);
 
  result.rank=(side,descending=false,limit=10)=>{const sorted=eventPeriods.slice().sort((a,b)=>(descending?-1:1)*(a[side].position-b[side].position)||a.year-b.year);let rank=0,previous=null;return sorted.map((p,i)=>{if(p[side].position!==previous)rank=i+1;previous=p[side].position;return {...p,rank};}).filter((p,i)=>i<limit||p[side].position===sorted[limit-1]?.[side].position);};
  return {...result,national:true,comparisonPeriodCount:eventPeriods.length,recordPeriodCount:result.periods.filter(p=>p.dailyComplete).length,completeCount:0,eventCount:0,noEvent:0,excluded:result.periods.length,meanFirst:null,meanLast:null,meanFirstOffset:null,meanLastOffset:null};

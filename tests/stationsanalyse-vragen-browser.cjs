@@ -27,6 +27,18 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   assert.equal(await page.locator('#q-advanced').getAttribute('open'),null);
   assert.equal(await page.locator('#q-preset').isVisible(),true);
   assert.equal(await page.locator('#q-question').isVisible(),true);
+  await page.locator('[data-frost-class="light"]').click();await ready(page);
+  assert.match(await page.locator('[data-record="lateFirst"]').innerText(),/16 december[\s\S]*2000\/2001/);
+  const openingWinter=page.locator('.q-simple-year-table tbody tr').filter({hasText:'1893/1894'});
+  assert.match(await openingWinter.innerText(),/begon vóór meetreeks[\s\S]*1 januari 1894[\s\S]*Winterswijk/);
+  await page.click('#q-view-year');
+  await page.selectOption('#q-year','1893/1894');
+  assert.match(await page.locator('.q-year-cards .q-date-card').first().innerText(),/1 januari 1894/);
+  assert.match(await page.locator('.q-simple-results > .q-coverage-note').innerText(),/begon vóór de beschikbare dagreeksen/);
+  await page.click('#q-view-all');
+  await page.locator('[data-frost-class="severe"]').click();await ready(page);
+  const epenWinter=page.locator('.q-simple-year-table tbody tr').filter({hasText:'1987/1988'});
+  assert.match(await epenWinter.locator('td').first().innerText(),/9 december 1987[\s\S]*Epen \(aangeleverde waarneming\)[\s\S]*11,6/);
   for(const key of ['warm-first','summer-first','tropical-first','ice','rain','gust','sun'])assert.equal(await page.locator(`[data-weather-preset="${key}"]`).isVisible(),true);
   for(const [key,field,threshold]of [['warm-first','TX','20'],['summer-first','TX','25'],['tropical-first','TX','30'],['ice','TX','0'],['rain','RH','10'],['gust','FXX','90'],['sun','SQ','10']]){
    await page.locator(`[data-weather-preset="${key}"]`).click();await ready(page);
@@ -155,6 +167,22 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   await fixture.selectOption('#q-year','2021/2022');
   assert.match(await yearCards.first().innerText(),/1 november 2021[\s\S]*-6 °C/);
   assert.match(await yearCards.last().innerText(),/15 januari 2022[\s\S]*-6 °C/);
+  const groundReadings={'20201002':-2,'20210423':-5};
+  await fixture.unroute('**/dagdata_*.json*');
+  await fixture.route('**/dagdata_*.json*',r=>r.fulfill({json:{kolommen:['YYYYMMDD','TN','T10N'],data:r.request().url().includes('_260.')?days.map(([date])=>[date,2,groundReadings[date]??0]):[]}}));
+  await fixture.goto(url+'?station=all&preset=ground-first&view=year&year=2020%2F2021');await ready(fixture);
+  assert.match(await fixture.locator('#q-simple-title').innerText(),/Grondvorst/);
+  assert.match(await fixture.locator('.q-range').innerText(),/Minimum op 10 cm < 0 °C/);
+  assert.match(await yearCards.first().innerText(),/2 oktober 2020[\s\S]*0,2 °C/);
+  assert.match(await yearCards.last().innerText(),/23 april 2021[\s\S]*0,5 °C/);
+  await fixture.selectOption('#q-question','last');
+  assert.equal(await fixture.inputValue('#q-preset'),'ground-last');
+  await fixture.click('#q-scope-station');await ready(fixture);
+  await fixture.selectOption('#q-station','215');
+  await fixture.waitForFunction(()=>document.querySelector('#q-status').dataset.state==='error');
+  assert.match(await fixture.locator('#q-status').innerText(),/Voor dit station zijn geen dagmetingen op 10 cm beschikbaar/);
+  await fixture.selectOption('#q-station','260');await ready(fixture);
+  assert.equal(await fixture.inputValue('#q-field'),'T10N');
   await fixture.close();assert.deepEqual(errors,[]);
   console.log('PASS: default national all-year records, one-year view and shareable links, Winterswijk December 1903 and Castricum May 1944 historical observations, full historical source retry, August–July winter year and legacy links, cumulative frost thresholds, explicit October–April subset, December–February winter, historical ties, running-year exclusion, advanced questions, retry and responsive layouts');
  }finally{await browser.close();}

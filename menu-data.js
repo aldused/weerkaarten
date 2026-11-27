@@ -1150,10 +1150,10 @@ const MENU_PRODUCTS = [
     "section": "Seizoenen & bijzondere dagen",
     "icon": "tabel",
     "href": "index.html#eerstelaatste",
-    "src": "stationsanalyse.html?v=20261123-ijsdagen-winterjaar",
+    "src": "stationsanalyse.html?v=20261127-grondvorst",
     "thumbnail": null,
     "facets": {},
-    "keywords": "Eerste laatste vorst ijsdag warm zomers tropisch neerslag windstoot zon gemiddelde datum ranglijst seizoen reeks",
+    "keywords": "Eerste laatste vorst grondvorst vorst aan de grond ijsdag warm zomers tropisch neerslag windstoot zon gemiddelde datum ranglijst seizoen reeks",
     "restricted": false
   },
   {

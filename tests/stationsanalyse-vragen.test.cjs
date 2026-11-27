@@ -103,6 +103,52 @@ test('historical physical units, daily-series coverage and sparse curated measur
  assert.throws(()=>C.historicalSources({...feed,units:'KNMI-tenths'}));
 });
 
+test('the partial opening winter stays visible but cannot set a national date record',()=>{
+ const sources=C.historicalSources(require('../historische-dagwaarden.json'));
+ sources.push({id:'Modern basisstation',json:series('2000-08-01','2001-07-31',{'2000-12-16':-14})});
+ const olderRecord={datum:'1893-08-01',station:'Losse historische meting',parameter:'TN',waarde:1};
+ const a=C.analyzeNetwork(sources,[olderRecord],{field:'TN',op:'lt',threshold:0,start:'08-01',end:'07-31',from:1893,to:2000,today});
+ const opening=a.periods[0];
+ assert.equal(opening.label,'1893/1894');
+ assert.equal(opening.startsBeforeDailySeries,true);
+ assert.equal(iso(opening.first.time),'1894-01-01');
+ assert.equal(opening.first.value,-1.6);
+ assert.equal(a.periods[1].startsBeforeDailySeries,false);
+ for(const side of ['first','last'])for(const descending of [false,true]){
+  assert(a.rank(side,descending,200).every(p=>p.year!==1893));
+ }
+ assert.equal(iso(a.rank('first',true,1)[0].first.time),'2000-12-16');
+});
+
+test('ground frost uses only available daily minima at 10 cm and excludes exact zero',()=>{
+ const daily=series('2024-08-01','2025-07-31',{'2024-09-20':-4,'2025-05-05':-2,'2025-06-01':null},'T10N',0);
+ const other=series('2024-08-01','2025-07-31',{'2024-09-01':-15,'2025-06-12':-12},'TN',0);
+ const historic=[{datum:'2024-08-01',station:'Los record',parameter:'TN',waarde:-16}];
+ const a=C.analyzeNetwork([{id:'Grasstation',json:daily},{id:'Luchtstation',json:other}],historic,
+  {field:'T10N',op:'lt',threshold:0,start:'08-01',end:'07-31',from:2024,to:2024,today});
+ const p=a.periods[0];
+ assert.equal(p.hits,2);
+ assert.equal(iso(p.first.time),'2024-09-20');
+ assert.equal(iso(p.last.time),'2025-05-05');
+ assert.equal(p.first.observations[0].station,'Grasstation');
+ assert.equal(p.first.value,-0.4);
+ assert.equal(p.missing,1);
+});
+
+test('the supplied Epen minimum fills the December 1987 gap with provenance',()=>{
+ const H=require('../stationsanalyse-records.js');
+ const sources=C.historicalSources(require('../historische-dagwaarden.json'));
+ const records=H.historicalRecords(require('../historische-grenswaarnemingen.json'));
+ const options={field:'TN',op:'lt',threshold:-10,start:'08-01',end:'07-31',from:1987,to:1987,today};
+ const result=C.analyzeNetwork(sources,records,options);
+ const first=result.periods[0].first;
+ assert.equal(iso(first.time),'1987-12-09');
+ assert.equal(first.observations[0].station,'Epen');
+ assert.equal(first.observations[0].value,-11.6);
+ assert.equal(first.observations[0].source,'aangeleverde waarneming');
+ assert.equal(result.periods[0].dailyComplete,false);
+});
+
 test('every historical frost-class boundary agrees with the full day-map feed across all years',()=>{
  const feed=require('../historische-dagwaarden.json'),sources=C.historicalSources(feed);
  const ids=new Set(Object.entries(feed.stations).filter(([,s])=>s.dailySeries).map(([id])=>id));

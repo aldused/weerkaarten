@@ -7,7 +7,7 @@ Vult dagdata_{stn}.json aan met de meest recente dagen via de KNMI EDR API
 gisteren. maak_dagdata_json.py moet eerst zijn gedraaid om de CSV-basis te
 leveren. Aangevulde JSON wordt lokaal opgeslagen en ge-upload naar R2.
 
-Parameters: TX, TN, RH, FXX, SQ (zelfde als maak_dagdata_json.py).
+Parameters: TX, TN, RH, FXX, SQ, T10N (zelfde als maak_dagdata_json.py).
 
 EDR API gebruikt UTC-etmalen (00-00), KNMI ZIP gebruikt 08-08 UTC. De EDR-
 datum loopt daardoor 1 dag voor, dus we vragen datum+1 aan bij EDR (zoals
@@ -33,7 +33,7 @@ EDR_COLLECTIES = [
     "daily-in-situ-meteorological-observations-validated",
     "daily-in-situ-meteorological-observations",
 ]
-EDR_PARAMS = "TX,TN,RH,FXX,SQ"
+EDR_PARAMS = "TX,TN,RH,FXX,SQ,T10N"
 
 # Alle stations uit stationsanalyse.html
 STATIONS = [
@@ -85,7 +85,8 @@ def haal_edr(stn, datum_iso):
             rh  = laatste("RH")
             fxx = laatste("FXX")
             sq  = laatste("SQ")
-            if all(v is None for v in [tx, tn, rh, fxx, sq]):
+            t10n = laatste("T10N")
+            if all(v is None for v in [tx, tn, rh, fxx, sq, t10n]):
                 continue
 
             def naar_raw(v):
@@ -97,6 +98,7 @@ def haal_edr(stn, datum_iso):
                 "RH":  naar_raw(rh),
                 "FXX": naar_raw(fxx),
                 "SQ":  naar_raw(sq),
+                "T10N": naar_raw(t10n),
                 "_bron": "validated" if "validated" in col else "realtime",
             }
         except RuntimeError:
@@ -154,11 +156,11 @@ def main():
             print(f"  {stn}: CSV t/m {laatste_iso} is >{MAX_LAG} dagen oud, station waarschijnlijk gesloten — overgeslagen")
             continue
 
-        volgorde = ["TX", "TN", "RH", "FXX", "SQ"]
-        verwacht = ["YYYYMMDD"] + volgorde
-        if js["kolommen"] != verwacht:
+        verwacht = ["YYYYMMDD", "TX", "TN", "RH", "FXX", "SQ"]
+        if js["kolommen"] not in (verwacht, verwacht + ["T10N"]):
             print(f"  {stn}: onverwachte kolommen {js['kolommen']}, overgeslagen")
             continue
+        volgorde = js["kolommen"][1:]
 
         nieuwe = []
         d = laatste_d + timedelta(days=1)

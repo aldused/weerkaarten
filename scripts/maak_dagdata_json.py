@@ -2,7 +2,7 @@
 """
 Converteer KNMI dagdata CSV's naar compacte JSON-bestanden.
 Alleen de kolommen die stationsanalyse.html nodig heeft:
-YYYYMMDD, TX, TN, RH, FXX, SQ
+YYYYMMDD, TX, TN, RH, FXX, SQ, T10N
 
 Output: dagdata_XXX.json per station, compact genoeg voor Cloudflare Pages.
 """
@@ -14,7 +14,7 @@ import os
 import boto3
 
 # Kolommen die we nodig hebben (naast datum)
-KOLOMMEN = ['TX', 'TN', 'RH', 'FXX', 'SQ']
+KOLOMMEN = ['TX', 'TN', 'RH', 'FXX', 'SQ', 'T10N']
 
 def parse_csv(filepath):
     """Parse een KNMI dagdata CSV en retourneer compacte data."""

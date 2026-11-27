@@ -13,7 +13,7 @@ assert.equal(C.decode(null,C.variables.TN),null);
 assert.equal(C.decode(-9999,C.variables.TN),null);
 assert.throws(()=>C.analyze(json([['20241010',-60]]),{...opts,upper:-11}));
 const a=C.analyzeNetwork([
- {id:'De Bilt',json:json([['20241010',-50],['20241011',-51],['20250301',-100],['20250731',-101]])},
+ {id:'De Bilt',json:json([['20241001',0],['20241010',-50],['20241011',-51],['20250301',-100],['20250731',-101]])},
  {id:'Valkenburg',json:json([['20241010',-60],['20241011',-80],['20250301',-55]])}
 ],[{station:'Historisch dorp',datum:'20241001',parameter:'TN',waarde:-6},{station:'De Bilt',datum:'20241011',parameter:'TN',waarde:-5.1}],opts);
 const p=a.periods[0];assert.equal(p.first.time,C.day('20241001'));assert.equal(p.first.observations[0].station,'Historisch dorp');

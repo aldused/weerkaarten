@@ -17,6 +17,8 @@ const presets=[
  ['custom','Zelf een vraag samenstellen','TX','ge',20,'01-01','12-31','first'],
  ['autumn','Eerste vorst in het winterjaar','TN','lt',0,'08-01','07-31','first'],
  ['spring','Laatste vorst in het winterjaar','TN','lt',0,'08-01','07-31','last'],
+ ['ground-first','Eerste grondvorst in het winterjaar','T10N','lt',0,'08-01','07-31','first'],
+ ['ground-last','Laatste grondvorst in het winterjaar','T10N','lt',0,'08-01','07-31','last'],
  ...frostClasses.flatMap(({key,label,threshold})=>[
   ['frost-'+key+'-first','Eerste dag met '+label.toLowerCase(),'TN','lt',threshold,'08-01','07-31','first'],
   ['frost-'+key+'-last','Laatste dag met '+label.toLowerCase(),'TN','lt',threshold,'08-01','07-31','last']
@@ -96,7 +98,8 @@ function definition(){syncFrost();$('q-simple-window').value=$('q-window').value
  try{const s=mdInput('q-start'),e=mdInput('q-end');C.boundary(2000,s);C.boundary(2000,e);$('q-period-help').textContent=`Iedere periode loopt van ${short(s)} t/m ${short(e)}${e<s?' in het volgende kalenderjaar. Het beginjaar 2021 heet dan seizoen 2021/2022.':'. Het beginjaar is het kalenderjaar.'} Daggegevens van vandaag blijven voorlopig en tellen nog niet mee.`;}catch{$('q-period-help').textContent='Vul een geldige begin- en einddatum in.';}}
 function setWindow(s,e){$('q-start').value=inputDate(s);$('q-end').value=inputDate(e);const windows={year:['01-01','12-31'],winterjaar:['08-01','07-31'],octapr:['10-01','04-30'],autumn:['09-01','02-29'],spring:['01-01','06-30'],winter:['12-01','02-29'],summer:['06-01','08-31'],frostseason:['08-01','07-31']};$('q-window').value=Object.keys(windows).find(k=>windows[k][0]===s&&windows[k][1]===e)||'custom';definition();}
 function options(){return {field:$('q-field').value,op:$('q-op').value,threshold:Number($('q-threshold').value),upper:$('q-op').value==='between'?Number($('q-upper').value):undefined,start:mdInput('q-start'),end:mdInput('q-end'),from:$('q-from').value?Number($('q-from').value):undefined,to:$('q-to').value?Number($('q-to').value):undefined,today:today()};}
-function value(hit,a){if(hit?.observations)return hit.observations.map(h=>esc(h.station)+(h.historical?' (historisch)':'')+': '+value(h,a)).join('<br>');return hit?hit.trace?'&lt; 0,05 '+esc(a.variable.unit):number(hit.value)+' '+esc(a.variable.unit):'—';}
+function stationLabel(hit){return esc(hit.station)+(hit.source?` (${esc(hit.source)})`:hit.historical?' (historisch)':'');}
+function value(hit,a){if(hit?.observations)return hit.observations.map(h=>stationLabel(h)+': '+value(h,a)).join('<br>');return hit?hit.trace?'&lt; 0,05 '+esc(a.variable.unit):number(hit.value)+' '+esc(a.variable.unit):'—';}
 function limitTies(sorted,key){return sorted.filter((p,i)=>i<10||key(p)===key(sorted[9]));}
 function syncView(a){
  $('q-view-all').setAttribute('aria-pressed',String(viewMode==='all'));
@@ -117,13 +120,13 @@ function shareSelection(){
 function stationValues(hit,a){
  if(!hit)return '<span class="q-muted">Niet gevonden in de beschikbare metingen</span>';
  const observations=hit.observations||[{...hit,station:$('q-station').selectedOptions[0].textContent}];
- const row=h=>`<span class="q-observation"><span>${esc(h.station)}${h.historical?' (historisch)':''}</span><strong>${value(h,a)}</strong></span>`;
+ const row=h=>`<span class="q-observation"><span>${stationLabel(h)}</span><strong>${value(h,a)}</strong></span>`;
  return observations.slice(0,2).map(row).join('')+(observations.length>2?`<details class="q-tied-stations"><summary>Alle ${observations.length} stations op deze dag</summary>${observations.slice(2).map(row).join('')}</details>`:'');
 }
 function simpleDate(hit){return hit?new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',day:'numeric',month:'long'}).format(hit.time):'Niet gevonden';}
 function renderFirstLast(a,event){
  syncView(a);shareSelection();
- const place=$('q-station').value==='all'?'Alle stations in Nederland, inclusief historische stations':$('q-station').selectedOptions[0].textContent;
+ const place=a.national?(a.field==='T10N'?'Alle stations met dagmetingen op 10 cm':'Alle stations in Nederland, inclusief historische stations'):$('q-station').selectedOptions[0].textContent;
  const periodName=a.start==='08-01'&&a.end==='07-31'?'winterjaar':a.start==='10-01'&&a.end==='04-30'?'oktober–aprilperiode':a.start==='12-01'&&a.end==='02-29'?'meteorologische winter':a.cross?'seizoen':'jaar';
  const windowLabel=`${short(a.start)} t/m ${short(a.end)}`;
  const defs=[['earlyFirst','Eerste dag: het vroegst','first',false],['lateFirst','Eerste dag: het laatst','first',true],['earlyLast','Laatste dag: het vroegst','last',false],['lateLast','Laatste dag: het laatst','last',true]];
@@ -133,10 +136,13 @@ function renderFirstLast(a,event){
  }).join('');
  const selected=a.periods.find(p=>p.label===focusYear);
  const yearCards=selected?['first','last'].map(side=>`<article class="q-date-card"><h4>${side==='first'?'Eerste':'Laatste'} dag</h4><p class="q-big-date">${simpleDate(selected[side])}</p>${selected[side]?`<p class="q-record-year">${date(selected[side].time)}</p>${stationValues(selected[side],a)}`:`<p>${selected.complete?'Geen dag die aan deze grens voldoet.':'Er is geen passende meting gevonden.'}</p>`}</article>`).join(''):'';
- const tableRows=a.periods.slice().reverse().map(p=>`<tr><th scope="row">${p.label}${p.running?'<span class="q-running">lopend</span>':a.national&&!p.dailyComplete?'<span class="q-running">meetgaten</span>':''}</th>${['first','last'].map(side=>`<td>${p[side]?`<strong>${date(p[side].time)}</strong>${stationValues(p[side],a)}`:p.complete?'Geen dag die aan deze grens voldoet':'Niet gevonden'}</td>`).join('')}</tr>`).join('');
+ const tableRows=a.periods.slice().reverse().map(p=>`<tr><th scope="row">${p.label}${p.running?'<span class="q-running">lopend</span>':p.startsBeforeDailySeries?'<span class="q-running">begon vóór meetreeks</span>':a.national&&!p.dailyComplete?'<span class="q-running">meetgaten</span>':''}</th>${['first','last'].map(side=>`<td>${p[side]?`<strong>${date(p[side].time)}</strong>${stationValues(p[side],a)}`:p.complete?'Geen dag die aan deze grens voldoet':'Niet gevonden'}</td>`).join('')}</tr>`).join('');
+ const nationalCoverage=viewMode==='year'
+  ? selected?.startsBeforeDailySeries?'Deze periode begon vóór de beschikbare dagreeksen. De gevonden metingen staan alleen in het jaaroverzicht.':'Dit zijn de eerste en laatste gevonden metingen. Historische meetreeksen zijn niet altijd volledig.'
+  : `${a.comparisonPeriodCount} afgesloten perioden met gevonden metingen vergeleken. Perioden die vóór de eerste dagreeks beginnen, staan alleen in het jaaroverzicht. Gemarkeerde meetgaten kunnen de gevonden datums veranderen.`;
  $('q-output').innerHTML=`<section class="q-simple-results" aria-labelledby="q-simple-title"><header class="q-simple-heading"><p class="q-eyebrow">${esc(place)}</p><h3 id="q-simple-title">${event.label} · ${viewMode==='all'?'alle jaren vergeleken':selected?.label||'geen jaar beschikbaar'}</h3><p class="q-range">${esc(event.range)} · ${periodName}: ${windowLabel}</p></header>
  ${viewMode==='all'?`<p class="q-compare-intro">De eerste en laatste dag worden vergeleken op dag en maand, over alle beschikbare jaren.</p><div class="q-record-grid">${recordCards}</div>`:`<div class="q-record-grid q-year-cards">${yearCards}</div>${selected?.running?'<p class="q-coverage-note">Deze periode loopt nog. Er kunnen nog nieuwe metingen bijkomen.</p>':''}`}
- <p class="q-coverage-note">${viewMode==='year'?a.national?'Dit zijn de eerste en laatste gevonden metingen. Historische meetreeksen zijn niet altijd volledig.':selected?.complete?'Volledige dagreeks voor deze periode.':'Deze periode mist meetdagen of loopt nog; dit zijn de gevonden grensdatums.':a.national?`${a.comparisonPeriodCount} afgesloten perioden met gevonden metingen vergeleken. Ook perioden met meetgaten tellen mee; die zijn gemarkeerd. De datums zijn de eerste en laatste gevonden waarnemingen. Ontbrekende metingen kunnen deze grenzen veranderen. De lopende periode telt niet mee.`:`Records vergelijken volledige, afgesloten perioden. ${a.excluded} onvolledige of lopende perioden tellen niet mee voor de records; hun gevonden datums staan wel in de tabel.`}</p>
+ <p class="q-coverage-note">${a.national?nationalCoverage:viewMode==='year'?(selected?.complete?'Volledige dagreeks voor deze periode.':'Deze periode mist meetdagen of loopt nog; dit zijn de gevonden grensdatums.'):`Records vergelijken volledige, afgesloten perioden. ${a.excluded} onvolledige of lopende perioden tellen niet mee voor de records; hun gevonden datums staan wel in de tabel.`}</p>
  <section class="q-simple-year-table"><h3>Overzicht per ${periodName}</h3><div class="q-scroll"><table><thead><tr><th scope="col">${periodName==='winterjaar'?'Winterjaar':'Jaar / seizoen'}</th><th scope="col">Eerste dag</th><th scope="col">Laatste dag</th></tr></thead><tbody>${tableRows||'<tr><td colspan="3">Geen jaren beschikbaar.</td></tr>'}</tbody></table></div></section>
  </section>`;
  $('q-output').hidden=false;
@@ -145,8 +151,9 @@ function render(a){
  const frost=frostFor(a);
  const simple=['first','last'].includes($('q-question').value);$('q-simple-period').hidden=!simple;
  if(simple){
-  const key=$('q-preset').value.replace(/-(first|last)$/,''),labels={warm:'Warme dag',summer:'Zomerse dag',tropical:'Tropische dag',autumn:'Vorstdag',spring:'Vorstdag',ice:'IJsdag',rain:'Natte dag',gust:'Windstoot',sun:'Zonnige dag'};
-  const range=a.op==='between'?`${number(a.threshold)} t/m ${number(a.upper)} ${a.variable.unit}`:`${key==='ice'?'TX ':''}${symbols[a.op]} ${number(a.threshold)} ${a.variable.unit}`;
+  const key=$('q-preset').value.replace(/-(first|last)$/,''),labels={warm:'Warme dag',summer:'Zomerse dag',tropical:'Tropische dag',autumn:'Vorstdag',spring:'Vorstdag',ground:'Grondvorst',ice:'IJsdag',rain:'Natte dag',gust:'Windstoot',sun:'Zonnige dag'};
+  const measurement=a.field==='T10N'?'Minimum op 10 cm ':key==='ice'?'TX ':'';
+  const range=a.op==='between'?`${measurement}${number(a.threshold)} t/m ${number(a.upper)} ${a.variable.unit}`:`${measurement}${symbols[a.op]} ${number(a.threshold)} ${a.variable.unit}`;
   renderFirstLast(a,frost||{label:labels[key]||a.variable.label,range});return;
  }
  const q=$('q-question').value,condition=frost?`${frost.label} · ${frost.range}`:a.op==='between'?`${a.variable.label} van ${number(a.threshold)} t/m ${number(a.upper)} ${a.variable.unit}`:`${a.variable.label} ${symbols[a.op]} ${number(a.threshold)} ${a.variable.unit}`,complete=a.periods.filter(p=>p.complete),chosen=a.periods.find(p=>p.label===document.getElementById('q-focus')?.value)||a.periods.at(-1);
@@ -166,7 +173,7 @@ function render(a){
  $('q-output').innerHTML=`<section class="q-answer" aria-labelledby="q-answer-title"><p class="q-eyebrow">${esc($('q-station').selectedOptions[0].textContent)} · ${esc(condition)}</p><h3 id="q-answer-title">${answer}</h3>${q==='first'||q==='last'?`<label>Antwoord voor jaar / seizoen<select id="q-focus">${a.periods.slice().reverse().map(p=>`<option value="${p.label}" ${p===chosen?'selected':''}>${p.label} · ${p.status}</option>`).join('')}</select></label>`:''}<p>Periode: ${short(a.start)} t/m ${short(a.end)}${a.cross?' van het volgende jaar':''}. Gekozen beginjaren: ${a.from}–${a.to}.</p></section>
  <div class="q-cards" ${a.national?'hidden':''}>${cards.map(([k,v])=>`<div><span>${k}</span><strong>${v}</strong></div>`).join('')}</div>
  <p class="q-coverage" ${a.national?'hidden':''}>Gemiddelden: ${a.eventCount} perioden mét overschrijding; ${a.noEvent} volledige perioden zonder overschrijding tellen niet mee in gemiddelde datums. Van ${a.periods.length} begonnen perioden zijn ${a.completeCount} volledig en ${a.excluded} uitgesloten wegens ontbrekende gegevens of een lopende periode. Dateringen zijn afgerond op een dag.</p>
- ${a.national?'<p class="q-coverage">Alle beschikbare stations, inclusief gesloten stations en historische recordnoteringen. Dit zijn waargenomen grensdatums; ontbrekende stations of meetdagen kunnen eerdere of latere gebeurtenissen bevatten. Aantallen en reeksen zijn ondergrenzen. Iedere kalenderdag telt eenmaal, ook als meerdere stations aan de grens voldoen.</p>':''}
+ ${a.national?'<p class="q-coverage">Alle beschikbare stations, inclusief gesloten stations en historische recordnoteringen. De ranglijsten vergelijken afgesloten perioden vanaf de start van de dagreeksen. Ontbrekende stations of meetdagen kunnen de gevonden datums veranderen. Aantallen en reeksen zijn ondergrenzen. Iedere kalenderdag telt eenmaal, ook als meerdere stations aan de grens voldoen.</p>':''}
  <p>${a.national?'Beschikbare waarnemingen':'Beschikbare dagreeks'}: ${date(a.sourceFirst)} t/m ${date(a.sourceLast)}. Alleen waarden vóór vandaag worden als afgeronde dag gebruikt. Definitie: ${esc(a.variable.definition||a.variable.label)} Grens: ${esc(condition)}.</p>
  ${extra}<h3>Vier verschillende datumvragen${a.national?' · beschikbare waarnemingen':''}</h3><p>Een laatste vorstdag is het laatste optreden binnen één seizoen. Het jaar waarin de eerste vorst het laatst kwam, staat in de ranglijst ‘Laatste datum van een eerste optreden’.</p><div class="q-ranks">${rankTable('Vroegste datum van een eerste optreden','first',false)}${rankTable('Laatste datum van een eerste optreden','first',true)}${rankTable('Vroegste datum van een laatste optreden','last',false)}${rankTable('Laatste datum van een laatste optreden','last',true)}</div>
  <details class="q-periods"><summary>Alle jaren en seizoenen · inclusief ontbrekende en lopende perioden</summary><div class="q-scroll"><table><thead><tr><th>Jaar / seizoen</th><th>Status</th><th>Eerste waargenomen optreden</th><th>Laatste waargenomen optreden</th><th>Aantal dagen</th><th>Langste reeks</th><th>Geldige dagen / verwacht</th><th>Ontbrekend / onzeker, verstreken dagen</th></tr></thead><tbody>${a.periods.slice().reverse().map(p=>`<tr class="q-${p.status.replace(' ','-')}"><th>${p.label}</th><td><span class="q-badge">${p.status}</span>${p.complete&&!p.first?'<br>Geen overschrijding':''}</td><td>${p.first?date(p.first.time)+'<br>'+value(p.first,a):p.complete?'Geen overschrijding':'Niet vastgesteld'}</td><td>${p.last?date(p.last.time)+'<br>'+value(p.last,a):p.complete?'Geen overschrijding':'Niet vastgesteld'}</td><td>${p.complete?'':'≥ '}${p.hits}</td><td>${p.complete?'':'≥ '}${p.longest}</td><td>${p.valid} / ${p.expected}</td><td>${p.missing} / ${p.uncertain}</td></tr>`).join('')}</tbody></table></div></details>`;
@@ -177,6 +184,10 @@ function loadFile(key,site=false){
  if(!cache.has(cacheKey)){const local=site||location.protocol==='file:'||['localhost','127.0.0.1'].includes(location.hostname),url=(local?'':'https://data.weerlab.nl/')+key+'?v='+Math.floor(Date.now()/300000);
  cache.set(cacheKey,fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Bron niet bereikbaar');return r.json();}).catch(e=>{cache.delete(cacheKey);throw e;}));}return cache.get(cacheKey);
 }
+function groundRowFilter(json){
+ const index=json.kolommen.indexOf('T10N');
+ return row=>C.decode(row[index],C.variables.T10N)!==null;
+}
 async function run(){const token=++version;current=null;syncScope();$('q-status').dataset.state='loading';$('q-status').textContent='Dagreeks laden en perioden controleren…';$('q-output').hidden=true;
  try{const o=options(),station=$('q-station').value;if(!station)throw Error('Kies een station.');let data,failures=[],sources=[],historical=[];
  if(station==='all'){
@@ -184,14 +195,25 @@ async function run(){const token=++version;current=null;syncScope();$('q-status'
   async function worker(){while(next<stationList.length&&token===version){const [id,s]=stationList[next++];try{sources.push({id:s.naam,json:await loadFile('dagdata_'+id+'.json')});}catch{failures.push(s.naam);}done++;if(token===version)$('q-status').textContent=`Dagreeksen laden: ${done}/${stationList.length}…`;}}
   await Promise.all(Array.from({length:4},worker));if(token!==version)return;
   try{sources.push(...C.historicalSources(await loadFile('historische-dagwaarden.json',true)));}catch{cache.delete('site:historische-dagwaarden.json');failures.push('volledige historische dagreeksen');}
-  if(['TX','TN'].includes(o.field)){try{historical=StationRecords.historicalRecords(await loadFile('records_nl_extreme.json'));}catch{failures.push('historisch recordarchief');}}
+  if(['TX','TN'].includes(o.field)){
+   try{historical=StationRecords.historicalRecords(await loadFile('records_nl_extreme.json'));}catch{failures.push('historisch recordarchief');}
+   try{historical.push(...StationRecords.historicalRecords(await loadFile('historische-grenswaarnemingen.json',true)));}catch{failures.push('aanvullende historische waarnemingen');}
+  }
   if(!sources.length)throw Error('Geen dagreeksen bereikbaar. Probeer opnieuw.');
   data={kolommen:[...new Set(sources.flatMap(s=>s.json.kolommen))]};
  }else data=await loadFile('dagdata_'+station+'.json');
  if(token!==version)return;
+ if(o.field==='T10N'){
+  if(station==='all'){
+   if(!sources.some(({json})=>json.data.some(groundRowFilter(json))))throw Error('Er zijn nog geen dagmetingen op 10 cm beschikbaar.');
+  }else{
+   data={...data,data:data.data.filter(groundRowFilter(data))};
+   if(!data.data.length)throw Error('Voor dit station zijn geen dagmetingen op 10 cm beschikbaar. Kies een ander station of ‘Alle stations’.');
+  }
+ }
  if(loadedStation!==station){const selected=$('q-field').value;$('q-field').innerHTML=Object.entries(C.variables).filter(([k])=>data.kolommen.includes(k)).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');if(data.kolommen.includes(selected))$('q-field').value=selected;loadedStation=station;if(!data.kolommen.includes(o.field))throw Error('Deze variabele ontbreekt bij dit station. Kies een andere variabele.');}
- current=station==='all'?C.analyzeNetwork(sources,historical,o):C.analyze(data,o);if(current.national&&failures.length){current.rank=()=>[];current.recordPeriodCount=0;current.comparisonPeriodCount=0;}definition();render(current);window.weerlabClimateStatus?.(current.national?{fixed:'Alle stations · inclusief historische recordnoteringen'}:{through:new Date(current.sourceLast).toISOString().slice(0,10).replaceAll('-','')});
- $('q-status').dataset.state=failures.length?'error':'ready';$('q-status').textContent=failures.length?'Resultaten onvolledig. Niet geladen: '+failures.join(', ')+'. Klik opnieuw op ‘Beantwoord mijn vraag’ om te herproberen.':current.national?'Analyse gereed. Landelijke datums zijn uiterste beschikbare waarnemingen, inclusief historische records.':'Analyse gereed. Records en gemiddelden gebruiken uitsluitend volledige, afgesloten perioden.';
+ current=station==='all'?C.analyzeNetwork(sources,historical,o):C.analyze(data,o);if(current.national&&failures.length){current.rank=()=>[];current.recordPeriodCount=0;current.comparisonPeriodCount=0;}definition();render(current);window.weerlabClimateStatus?.(current.national?{fixed:o.field==='T10N'?'Alle stations · grondvorst op 10 cm':'Alle stations · inclusief historische recordnoteringen'}:{through:new Date(current.sourceLast).toISOString().slice(0,10).replaceAll('-','')});
+ $('q-status').dataset.state=failures.length?'error':'ready';$('q-status').textContent=failures.length?'Resultaten onvolledig. Niet geladen: '+failures.join(', ')+'. Klik opnieuw op ‘Beantwoord mijn vraag’ om te herproberen.':current.national?'Analyse gereed. Landelijke datums zijn uiterste beschikbare waarnemingen.':'Analyse gereed. Records en gemiddelden gebruiken uitsluitend volledige, afgesloten perioden.';
  }catch(e){if(token===version){$('q-status').dataset.state='error';$('q-status').textContent=e.message;$('q-output').hidden=true;}}}
 $('q-form').addEventListener('submit',e=>{e.preventDefault();run();});
 $('q-question').addEventListener('change',()=>{
