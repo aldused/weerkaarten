@@ -149,6 +149,25 @@ test('the supplied Epen minimum fills the December 1987 gap with provenance',()=
  assert.equal(result.periods[0].dailyComplete,false);
 });
 
+test('the Rijkswaterstaat minima fill the 1952 and 1984 gaps with provenance',()=>{
+ const H=require('../stationsanalyse-records.js');
+ const sources=C.historicalSources(require('../historische-dagwaarden.json'));
+ const records=H.historicalRecords(require('../historische-grenswaarnemingen.json'));
+ const options={field:'TN',op:'lt',threshold:-10,start:'08-01',end:'07-31',from:1951,to:1983,today};
+ const {periods}=C.analyzeNetwork(sources,records,options);
+ for(const [year,day,station,value,source] of [
+  [1951,'1952-02-16','Epen',-11.8,'IJsverslag 1951–1953'],
+  [1952,'1952-11-29','Emmeloord',-10.3,'IJsverslag 1951–1953'],
+  [1983,'1984-01-23','Wageningen',-11.3,'IJsverslag 1983/1984']
+ ]){
+  const {first}=periods.find(p=>p.year===year);
+  assert.equal(iso(first.time),day);
+  const observation=first.observations.find(r=>r.station===station);
+  assert.equal(observation.value,value);
+  assert.equal(observation.source,source);
+ }
+});
+
 test('every historical frost-class boundary agrees with the full day-map feed across all years',()=>{
  const feed=require('../historische-dagwaarden.json'),sources=C.historicalSources(feed);
  const ids=new Set(Object.entries(feed.stations).filter(([,s])=>s.dailySeries).map(([id])=>id));

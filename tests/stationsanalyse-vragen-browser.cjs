@@ -39,6 +39,12 @@ const ready=page=>page.waitForFunction(()=>document.querySelector('#q-status')?.
   await page.locator('[data-frost-class="severe"]').click();await ready(page);
   const epenWinter=page.locator('.q-simple-year-table tbody tr').filter({hasText:'1987/1988'});
   assert.match(await epenWinter.locator('td').first().innerText(),/9 december 1987[\s\S]*Epen \(aangeleverde waarneming\)[\s\S]*11,6/);
+  const wageningenWinter=page.locator('.q-simple-year-table tbody tr').filter({hasText:'1983/1984'});
+  assert.match(await wageningenWinter.locator('td').first().innerText(),/23 januari 1984[\s\S]*Wageningen \(IJsverslag 1983\/1984\)[\s\S]*11,3/);
+  const winter1952=page.locator('.q-simple-year-table tbody tr').filter({hasText:'1951/1952'});
+  assert.match(await winter1952.locator('td').first().innerText(),/16 februari 1952[\s\S]*Epen \(IJsverslag 1951–1953\)[\s\S]*11,8/);
+  const winter1944=page.locator('.q-simple-year-table tbody tr').filter({hasText:'1943/1944'});
+  assert.match(await winter1944.locator('td').first().innerText(),/Geen passende dag in de beschikbare metingen/);
   for(const key of ['warm-first','summer-first','tropical-first','ice','rain','gust','sun'])assert.equal(await page.locator(`[data-weather-preset="${key}"]`).isVisible(),true);
   for(const [key,field,threshold]of [['warm-first','TX','20'],['summer-first','TX','25'],['tropical-first','TX','30'],['ice','TX','0'],['rain','RH','10'],['gust','FXX','90'],['sun','SQ','10']]){
    await page.locator(`[data-weather-preset="${key}"]`).click();await ready(page);
