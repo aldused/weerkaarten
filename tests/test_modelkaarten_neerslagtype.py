@@ -37,6 +37,10 @@ def fixture(root, cache, model):
         'tijden': [f'2026-11-27T{hour}:00:00Z' for hour in (13, 14, 15)],
         'grid': SOURCE_GRID, 'parameters': parameters,
     }))
+    target = cache/f'{model}-2026112712-velden.npz'
+    if model.startswith('icond2'):
+        np.savez(target, **{'2_ww': np.array([[61, 71, 67, 3], [96, 45, np.nan, 80]])})
+        return
     # Op 2 m suggereerde de oude regel sneeuw. Een warme laag daarboven
     # kan de neerslag laten smelten. Voor het kaarttype telt de bron aan de grond.
     prior = np.full(SHAPE, 2)
@@ -45,7 +49,7 @@ def fixture(root, cache, model):
     graupel = prior + [0, 0, 0, .3]
     rain[1] = prior[1]
     graupel[1] = prior[1]
-    np.savez(cache/f'{model}-2026112712-velden.npz', **{
+    np.savez(target, **{
         '1_rain_cum': prior, '1_snow_cum': prior, '1_graupel_cum': prior,
         '2_rain_cum': rain, '2_snow_cum': snow, '2_graupel_cum': graupel,
         '2_t850': np.full(SHAPE, 4.5),
@@ -53,10 +57,15 @@ def fixture(root, cache, model):
     })
 
 
-class HarmoniePrecipitationTypeTest(unittest.TestCase):
+class PrecipitationTypeTest(unittest.TestCase):
     def test_published_phase_uses_knmi_surface_amounts_or_is_unknown(self):
-        self.assertLessEqual(regional.wet_bulb(1, -1.5), .6)
-        for model in ('harmonie', 'harmonie46'):
+        self.check_models(('harmonie', 'harmonie46'), 'knmi-p1-surface-hour', [1, 2, 4, 9, 8, 8, 8, 8])
+
+    def test_published_phase_uses_dwd_diagnosis_or_is_unknown(self):
+        self.check_models(('icond2', 'icond2ruc'), 'dwd-ww-surface-hour', [1, 2, 5, 8, 8, 8, 8, 1])
+
+    def check_models(self, models, source, types):
+        for model in models:
             with self.subTest(model=model), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 cache = root/'cache'
@@ -68,10 +77,10 @@ class HarmoniePrecipitationTypeTest(unittest.TestCase):
                     run = regional.native_model(root, model, cache_dir=cache)
                 manifest = wire(model, GRID, [run], assets)
                 diagnosed, unknown = manifest['runs'][0]['steps'][1:]
-                self.assertEqual(diagnosed['ptypeSource'], 'knmi-p1-surface-hour')
+                self.assertEqual(diagnosed['ptypeSource'], source)
                 self.assertNotIn('ptypeSource', unknown)
                 for step, expected in (
-                    (diagnosed, [1, 2, 4, 9, 8, 8, 8, 8]),
+                    (diagnosed, types),
                     (unknown, [8] * 8),
                 ):
                     frames = json.loads((assets/step['asset']).read_text())

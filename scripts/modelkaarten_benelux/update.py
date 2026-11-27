@@ -15,7 +15,7 @@ import tempfile
 
 import numpy as np
 from ecmwf_frames import atomic, crop_bounds, crop_grid, crop_layer, enrich, MIRROR, sunshine_minutes, write_frame
-from regional_frames import GRID, HARMONIE_MODELS, HARMONIE_PHASE_SOURCE, NATIVE, add_bytes, native_model
+from regional_frames import GRID, NATIVE, PRECIP_TYPE_SOURCES, add_bytes, native_model
 
 UTC = timezone.utc
 REMOTE = 'r2:weerlab-data/modelkaarten-benelux'
@@ -124,9 +124,13 @@ def regional(key, project, cache, previous):
     raw = meta_path.read_bytes()
     fingerprint = digest(raw)
     prior = next((r for r in previous if r.get('_source')==fingerprint),None)
+    phase_source = PRECIP_TYPE_SOURCES.get(key)
+
+    def has_phase(step):
+        return not phase_source or step['lead']==0 or step.get('ptypeSource')==phase_source
+
     if prior and prior.get('_complete') and all(
-        {'frz','td2m'} <= set(s['keys'])
-        and (key not in HARMONIE_MODELS or s['lead']==0 or s.get('ptypeSource')==HARMONIE_PHASE_SOURCE)
+        {'frz','td2m'} <= set(s['keys']) and has_phase(s)
         for s in prior['steps']
     ):
         return GRID,previous
@@ -141,8 +145,7 @@ def regional(key, project, cache, previous):
         raise ValueError('Modeldata bijgewerkt tijdens de bouw')
     run['_source']=fingerprint
     run['_complete']=all(
-        {'t850','t500','sdep','sun','frz'} <= set(s['keys']) and not s.get('snowPartial')
-        and (key not in HARMONIE_MODELS or s['lead']==0 or s.get('ptypeSource')==HARMONIE_PHASE_SOURCE)
+        {'t850','t500','sdep','sun','frz'} <= set(s['keys']) and not s.get('snowPartial') and has_phase(s)
         for s in run['steps']
     )
     # Bewaar beschikbare aanvullende velden als een bron voor dezelfde run tijdelijk achterloopt.

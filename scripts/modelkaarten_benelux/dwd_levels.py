@@ -1,4 +1,4 @@
-"""Lees DWD druktemperaturen en sneeuwhoogte voor exact dezelfde modelrun."""
+"""Lees DWD-druktemperaturen, sneeuwhoogte en weerdiagnose voor dezelfde run."""
 import bz2
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
@@ -10,11 +10,12 @@ import numpy as np
 from ruc_zon import BASE, map_indices
 
 CLASSIC = 'https://opendata.dwd.de/weather/nwp/icon-d2/grib'
-FIELDS = {'t850': (850, 'K'), 't500': (500, 'K'), 'sdep': (None, 'm'), 'frz': (None, 'm')}
-SINGLE = {'sdep':'h_snow','frz':'hzerocl'}
+FIELDS = {'t850': (850, 'K'), 't500': (500, 'K'), 'sdep': (None, 'm'), 'frz': (None, 'm'),
+          'ww': (None, 'Numeric')}
+SINGLE = {'sdep':'h_snow','frz':'hzerocl','ww':'ww'}
 
 
-def icon_fields(model, start, leads, grid, get):
+def icon_fields(model, start, requested, grid, get):
     ruc = model == 'icond2ruc'
     stamp = start.strftime('%Y%m%d%H')
     cycle = start.strftime('%H')
@@ -52,6 +53,9 @@ def icon_fields(model, start, leads, grid, get):
                         or get_key('endStep') != lead or unit != expected_unit
                         or (level and (get_key('typeOfLevel') != 'isobaricInhPa' or get_key('level') != level))):
                     raise ValueError(f'Onverwachte DWD GRIB-metadata: {model} {field} T+{lead}')
+                if field == 'ww' and (get_key('discipline'), get_key('parameterCategory'),
+                                      get_key('parameterNumber'), get_key('typeOfLevel')) != (0, 19, 25, 'surface'):
+                    raise ValueError(f'Ongeldige DWD-weerdiagnose: {model} T+{lead}')
             elif unit in ('rad', 'radian'):
                 value = np.degrees(value)
             return value, key
@@ -68,7 +72,7 @@ def icon_fields(model, start, leads, grid, get):
 
         def frame(lead):
             fields = {}
-            for field in FIELDS:
+            for field in sorted(requested[lead]):
                 result = read(field, lead)
                 if not result:
                     continue
@@ -78,15 +82,17 @@ def icon_fields(model, start, leads, grid, get):
                 v = values[target]
                 if field=='frz':
                     fields[field] = np.where(coverage & (v>-100),v,np.nan)
+                elif field=='ww':
+                    fields[field] = np.where(coverage & (v>=0) & (v<=99),v,np.nan)
                 else:
                     fields[field] = np.where(coverage, v*100 if field == 'sdep' else v-273.15, np.nan)
             return start+timedelta(hours=lead), fields
 
-        return dict(pool.map(frame, leads))
+        return dict(pool.map(frame, requested))
 
 
 def cached_icon_fields(root, model, start, leads, grid, get=None):
-    load = (lambda: icon_fields(model,start,leads,grid,get)) if get else None
+    load = (lambda missing: icon_fields(model,start,missing,grid,get)) if get else None
     return cached_model_fields(root,model,start,leads,set(FIELDS),load)
 
 
@@ -99,9 +105,11 @@ def cached_model_fields(root, model, start, leads, expected, load=None):
             for key in data.files:
                 lead, field = key.split('_', 1)
                 fields.setdefault(start+timedelta(hours=int(lead)), {})[field] = data[key]
-    if load is None or all(expected <= set(fields.get(start+timedelta(hours=h), ())) for h in leads):
+    missing = {h: expected - fields.get(start+timedelta(hours=h), {}).keys() for h in leads}
+    missing = {h: names for h, names in missing.items() if names}
+    if load is None or not missing:
         return fields
-    downloaded = load()
+    downloaded = load(missing)
     for when, mapped in downloaded.items():
         fields.setdefault(when, {}).update(mapped)
     temp = cache.with_suffix('.tmp.npz')

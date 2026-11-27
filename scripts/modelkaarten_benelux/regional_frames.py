@@ -15,7 +15,10 @@ from ecmwf_frames import http, sunshine_minutes
 LOCAL = ZoneInfo('Europe/Amsterdam')
 UTC = timezone.utc
 HARMONIE_MODELS = {'harmonie', 'harmonie46'}
+DWD_MODELS = {'icond2', 'icond2ruc'}
 HARMONIE_PHASE_SOURCE = 'knmi-p1-surface-hour'
+DWD_PHASE_SOURCE = 'dwd-ww-surface-hour'
+PRECIP_TYPE_SOURCES = dict.fromkeys(HARMONIE_MODELS, HARMONIE_PHASE_SOURCE) | dict.fromkeys(DWD_MODELS, DWD_PHASE_SOURCE)
 NATIVE = {
     'harmonie': ('HARMONIE 43', 'KNMI · 2 km'),
     'harmonie46': ('HARMONIE 46', 'KNMI · 2 km · experimenteel'),
@@ -136,12 +139,6 @@ def encode(key, values):
     return np.where(np.isfinite(q), np.clip(q, 0, 254), 255).astype('uint8')
 
 
-def wet_bulb(temp, dew):
-    rh = np.clip(100 * np.exp(17.625 * dew / (243.04 + dew) - 17.625 * temp / (243.04 + temp)), 5, 100)
-    return (temp * np.arctan(.151977 * np.sqrt(rh + 8.313659)) + np.arctan(temp + rh)
-            - np.arctan(rh - 1.676331) + .00391838 * rh**1.5 * np.arctan(.023101 * rh) - 4.686035)
-
-
 def harmonie_precip_type(current, previous, first_hour=False):
     from knmi_levels import PHASE_COMPONENTS
 
@@ -159,6 +156,16 @@ def harmonie_precip_type(current, previous, first_hour=False):
     return np.where(valid & (total >= .045), phase, 8).astype('uint8')
 
 
+def dwd_precip_type(weather):
+    if weather is None or not np.isfinite(weather).any():
+        return None
+    # DWD WW bevat ook mist en dubbelzinnige onweerscodes. Die geven geen neerslagtype.
+    rain = np.isin(weather, [51, 53, 55, 61, 63, 65, 80, 81, 82])
+    freezing_rain = np.isin(weather, [56, 57, 66, 67])
+    snow = np.isin(weather, [71, 73, 75, 77, 85, 86])
+    return np.select([rain, freezing_rain, snow], [1, 5, 2], default=8).astype('uint8')
+
+
 def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False, cache_dir=None):
     meta_path = root / f'{key}_canvas_meta.json'
     before = meta_path.read_bytes()
@@ -173,7 +180,7 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
         print(f'RUC-straling: {len(solar)} uurlijkse velden', flush=True)
     extra = {}
     partial_snow = set()
-    if key in ('icond2','icond2ruc'):
+    if key in DWD_MODELS:
         cache = cache_dir or HERE/'.veld-cache'
         if dwd_levels or cache.is_dir():
             from dwd_levels import cached_icon_fields
@@ -183,11 +190,20 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
         if knmi_levels or cache.is_dir():
             from dwd_levels import cached_model_fields
             from knmi_levels import PHASE_COMPONENTS, knmi_fields
-            load = None
-            if knmi_levels:
-                load = lambda: knmi_fields(root.parent,key,start,leads,GRID,http)
-            expected = {'t850','t500','sdep','frz', *PHASE_COMPONENTS}
-            extra = cached_model_fields(cache,key,start,leads,expected,load)
+            pressure_fields = {'t850','t500','frz'}
+            surface_fields = {'sdep', *PHASE_COMPONENTS}
+
+            def load(missing):
+                fields = {}
+                for package, wanted in (('P3', pressure_fields), ('P1', surface_fields)):
+                    selected = [lead for lead, names in missing.items() if names & wanted]
+                    if selected:
+                        for t, values in knmi_fields(root.parent,key,start,selected,GRID,http,packages=(package,)).items():
+                            fields.setdefault(t, {}).update(values)
+                return fields
+
+            expected = pressure_fields | surface_fields
+            extra = cached_model_fields(cache,key,start,leads,expected,load if knmi_levels else None)
         if key == 'harmonie':
             for t, array in harmonie_snow(root.parent,start).items():
                 fields = extra.setdefault(t,{})
@@ -222,17 +238,13 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
         encoded = {k: encode(k, a) for k, a in out.items()}
         gust = np.hypot(*f['windstoten']) * 3.6
         encoded['gustNative'] = np.where(np.isfinite(gust), np.clip(np.rint(gust), 0, 254), 255).astype('uint8')
-        dew = f.get('dauwpunt')
         phase = None
-        if key in HARMONIE_MODELS and lead > 0:
-            phase = harmonie_precip_type(additional, extra.get(t-timedelta(hours=1), {}), first_hour=lead==1)
-        if phase is not None:
-            encoded['ptype'] = phase
-        elif key not in HARMONIE_MODELS and dew is not None:
-            tw = wet_bulb(temp, dew[0])
-            encoded['ptype'] = np.where(np.isfinite(tw), np.where(tw <= .6, 2, np.where(tw <= 1.4, 3, 1)), 8).astype('uint8')
-        else:
-            encoded['ptype'] = np.full(temp.shape, 8, 'uint8')
+        if lead > 0:
+            if key in HARMONIE_MODELS:
+                phase = harmonie_precip_type(additional, extra.get(t-timedelta(hours=1), {}), first_hour=lead==1)
+            elif key in DWD_MODELS:
+                phase = dwd_precip_type(additional.get('ww'))
+        encoded['ptype'] = phase if phase is not None else np.full(temp.shape, 8, 'uint8')
         sun_native = 'zon' in f
         if sun_native:
             sun = f['zon'][0]
@@ -245,7 +257,7 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
         steps.append(dict(lead=lead, valid=t.isoformat(), keys=list(encoded),
                           sunHours=1, sunEstimated=not sun_native, gustPeriod=None,
                           snowPartial=t in partial_snow,
-                          **({'ptypeSource': HARMONIE_PHASE_SOURCE} if phase is not None else {}),
+                          **({'ptypeSource': PRECIP_TYPE_SOURCES[key]} if phase is not None else {}),
                           data=base64.b64encode(gzip.compress(raw, compresslevel=4, mtime=0)).decode()))
     if meta_path.read_bytes() != before:
         raise RuntimeError(f'{key} is bijgewerkt tijdens inlezen. Bouw opnieuw met de nieuwe run.')

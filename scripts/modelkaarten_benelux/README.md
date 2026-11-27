@@ -18,6 +18,8 @@ voor hetzelfde runnummer. Het KNMI-proces gebruikt de bestaande API-toegang via
 Voor HARMONIE 43 en 46 komt het neerslagtype uit de KNMI P1-hoeveelheden regen,
 sneeuw en korrelhagel aan de grond over het voorgaande uur. Bij ontbrekende
 brongegevens toont de kaart het type als onbekend.
+Voor ICON-D2 en ICON-D2-RUC gebruikt de updater de DWD-weerdiagnose `WW` over
+het voorgaande uur. Alleen codes met een eenduidige neerslagsoort krijgen een type.
 
 De worker zet de kaartbestanden eerst in de bestaande R2-databucket. Daarna
 publiceert hij per model `runs.json` met `Cache-Control: no-store`. Het
