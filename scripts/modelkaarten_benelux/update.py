@@ -15,7 +15,7 @@ import tempfile
 
 import numpy as np
 from ecmwf_frames import atomic, crop_bounds, crop_grid, crop_layer, enrich, MIRROR, sunshine_minutes, write_frame
-from regional_frames import GRID, NATIVE, add_bytes, native_model
+from regional_frames import GRID, HARMONIE_MODELS, HARMONIE_PHASE_SOURCE, NATIVE, add_bytes, native_model
 
 UTC = timezone.utc
 REMOTE = 'r2:weerlab-data/modelkaarten-benelux'
@@ -124,7 +124,11 @@ def regional(key, project, cache, previous):
     raw = meta_path.read_bytes()
     fingerprint = digest(raw)
     prior = next((r for r in previous if r.get('_source')==fingerprint),None)
-    if prior and prior.get('_complete') and all({'frz','td2m'} <= set(s['keys']) for s in prior['steps']):
+    if prior and prior.get('_complete') and all(
+        {'frz','td2m'} <= set(s['keys'])
+        and (key not in HARMONIE_MODELS or s['lead']==0 or s.get('ptypeSource')==HARMONIE_PHASE_SOURCE)
+        for s in prior['steps']
+    ):
         return GRID,previous
     try:
         run = native_model(meta_path.parent,key,ruc_solar=key=='icond2ruc',
@@ -136,27 +140,36 @@ def regional(key, project, cache, previous):
     if meta_path.read_bytes()!=raw:
         raise ValueError('Modeldata bijgewerkt tijdens de bouw')
     run['_source']=fingerprint
-    run['_complete']=all({'t850','t500','sdep','sun','frz'} <= set(s['keys']) and not s.get('snowPartial')
-                         for s in run['steps'])
-    # Keep a complete version if an optional field briefly fails on the same run.
+    run['_complete']=all(
+        {'t850','t500','sdep','sun','frz'} <= set(s['keys']) and not s.get('snowPartial')
+        and (key not in HARMONIE_MODELS or s['lead']==0 or s.get('ptypeSource')==HARMONIE_PHASE_SOURCE)
+        for s in run['steps']
+    )
+    # Bewaar beschikbare aanvullende velden als een bron voor dezelfde run tijdelijk achterloopt.
     old = next((r for r in previous if r['id']==run['id'] and r.get('_complete')),None)
     if old and not run['_complete']:
-        # Bewaar de complete kaartvelden en vul het nieuwe dauwpuntveld aan
-        # wanneer een aanvullende bron op dezelfde run tijdelijk achterloopt.
         patched = dict(old,enc={**old['enc'],'td2m':run['enc']['td2m']})
         new_steps = {s['lead']:s for s in run['steps']}
         patched['steps'] = []
+        changed = False
         for original in old['steps']:
             step = dict(original,keys=original['keys'].copy())
             fresh = new_steps.get(step['lead'])
-            if fresh and 'td2m' not in step['keys'] and 'td2m' in fresh['keys'] and fresh['valid']==step['valid']:
-                raw = gzip.decompress(base64.b64decode(fresh['data']))
-                size = GRID['w']*GRID['h']
-                offset = fresh['keys'].index('td2m')*size
-                add_bytes(step,{'td2m':raw[offset:offset+size]})
+            if fresh and fresh['valid']==step['valid']:
+                fields = set()
+                if 'td2m' not in step['keys'] and 'td2m' in fresh['keys']:
+                    fields.add('td2m')
+                if fresh.get('ptypeSource') and fresh['ptypeSource'] != step.get('ptypeSource'):
+                    fields.add('ptype')
+                    step['ptypeSource'] = fresh['ptypeSource']
+                if fields:
+                    raw = gzip.decompress(base64.b64decode(fresh['data']))
+                    size = GRID['w']*GRID['h']
+                    blocks = {k: raw[i*size:(i+1)*size] for i,k in enumerate(fresh['keys']) if k in fields}
+                    add_bytes(step,blocks,replace=True)
+                    changed = True
             patched['steps'].append(step)
-        if any('td2m' in s['keys'] and 'td2m' not in original['keys']
-               for s,original in zip(patched['steps'],old['steps'])):
+        if changed:
             return GRID,retain([patched,*[r for r in previous if r['id']!=patched['id']]])
         return GRID,previous
     return GRID,retain([run,*[r for r in previous if r['id']!=run['id']]])

@@ -15,6 +15,9 @@ zonder bewaarde dauwpuntdata tonen hiervoor geen waarde.
 Extra velden worden rechtstreeks van ECMWF, DWD en KNMI opgehaald
 voor hetzelfde runnummer. Het KNMI-proces gebruikt de bestaande API-toegang via
 `KNMI_API_KEY` of `pascal/.env`.
+Voor HARMONIE 43 en 46 komt het neerslagtype uit de KNMI P1-hoeveelheden regen,
+sneeuw en korrelhagel aan de grond over het voorgaande uur. Bij ontbrekende
+brongegevens toont de kaart het type als onbekend.
 
 De worker zet de kaartbestanden eerst in de bestaande R2-databucket. Daarna
 publiceert hij per model `runs.json` met `Cache-Control: no-store`. Het

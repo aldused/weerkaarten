@@ -14,6 +14,9 @@ from ruc_zon import map_indices
 API = 'https://api.dataplatform.knmi.nl/open-data/v1'
 PRESSURE_LEVELS = (925, 850, 700, 500, 300)
 PROFILE = {'ground','t2m'} | {f'{field}{level}' for field in ('t','z') for level in PRESSURE_LEVELS}
+PHASE_COMPONENTS = ('rain_cum', 'snow_cum', 'graupel_cum')
+PHASE_GRIB1 = dict(zip((181, 184, 201), PHASE_COMPONENTS))
+PHASE_GRIB2 = dict(zip((65, 66, 75), PHASE_COMPONENTS))
 
 
 def freezing_height(profile):
@@ -85,8 +88,11 @@ def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
             if edition == 1:
                 size = int.from_bytes(header[4:7],'big')
                 level = int.from_bytes(header[18:20],'big')
-                if pkg=='P1' and (header[16],header[17],level)==(66,105,0):
-                    return size,'sdep'
+                if pkg=='P1' and (header[17],level)==(105,0):
+                    if header[16]==66 and header[28]==0:
+                        return size,'sdep'
+                    if header[28]==4:
+                        return size,PHASE_GRIB1.get(header[16])
                 if pkg=='P3':
                     param, surface = header[16],header[17]
                     if surface==100 and level in PRESSURE_LEVELS and param in (6,11):
@@ -104,8 +110,12 @@ def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
                 length = int.from_bytes(header[pos:pos+4],'big')
                 if header[pos+4] == 4:
                     cat, number, surface = header[pos+9],header[pos+10],header[pos+22]
-                    if pkg=='P1' and (header[6],cat,number,surface)==(0,1,11,1):
-                        return size,'sdep'
+                    if pkg=='P1' and (header[6],cat,surface)==(0,1,1):
+                        template = int.from_bytes(header[pos+7:pos+9],'big')
+                        if template==0 and number==11:
+                            return size,'sdep'
+                        if template==8:
+                            return size,PHASE_GRIB2.get(number)
                     level = int.from_bytes(header[pos+24:pos+28],'big')
                     if pkg=='P3' and header[6]==0:
                         if surface==100 and level//100 in PRESSURE_LEVELS and (cat,number) in ((0,0),(3,4)):
@@ -121,10 +131,9 @@ def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
             raise ValueError('KNMI GRIB-metadata past niet in de gelezen kop')
 
         first_grid = {}
-        target_keys = {'sdep'} if pkg=='P1' else PROFILE
-
         def member(entry):
             lead,(start_byte,size)=entry
+            target_keys = ({'sdep', *PHASE_COMPONENTS} if lead else {'sdep'}) if pkg=='P1' else PROFILE
             end=start_byte+size
             offset=start_byte
             out={}
@@ -139,10 +148,13 @@ def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
                     msg=grib.codes_new_from_message(partial(offset,span))
                     try:
                         actual=lambda k:grib.codes_get(msg,k)
-                        pressure_field = field not in ('ground','t2m','sdep')
+                        pressure_field = pkg=='P3' and field not in ('ground','t2m')
                         if (actual('dataDate')!=int(stamp[:8]) or actual('dataTime')!=start.hour*100 or actual('endStep')!=lead
                                 or (pressure_field and (actual('typeOfLevel')!='isobaricInhPa' or actual('level')!=int(field[1:])))):
                             raise ValueError(f'KNMI GRIB heeft een verkeerde run of druk: {field} T+{lead}')
+                        if field in PHASE_COMPONENTS and (actual('stepType')!='accum' or actual('startStep')!=0):
+                            offset+=span
+                            continue
                         values=grib.codes_get_values(msg)
                         if actual('bitmapPresent'):
                             values[values==actual('missingValue')]=np.nan
@@ -160,7 +172,7 @@ def knmi_fields(project, model, start, leads, grid, get, packages=('P3','P1')):
                             v=np.where((v>=0)&(v<90),v*100,np.nan)
                         elif field.startswith('t'):
                             v=v-273.15
-                        else:
+                        elif field not in PHASE_COMPONENTS:
                             v=v/9.80665
                         out[field]=np.where(inside,v,np.nan)
                     finally:

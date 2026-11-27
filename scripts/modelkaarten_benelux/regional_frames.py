@@ -1,6 +1,6 @@
 """Bouw de nieuwe Weerlab-modelkaarten met de ECMWF- en regionale bronbestanden."""
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import gzip
 import json
 from pathlib import Path
@@ -14,6 +14,8 @@ from ecmwf_frames import http, sunshine_minutes
 
 LOCAL = ZoneInfo('Europe/Amsterdam')
 UTC = timezone.utc
+HARMONIE_MODELS = {'harmonie', 'harmonie46'}
+HARMONIE_PHASE_SOURCE = 'knmi-p1-surface-hour'
 NATIVE = {
     'harmonie': ('HARMONIE 43', 'KNMI · 2 km'),
     'harmonie46': ('HARMONIE 46', 'KNMI · 2 km · experimenteel'),
@@ -43,13 +45,17 @@ def extract_bundle(path):
     return json.loads(path.read_text().split(marker, 1)[1].split('</script>', 1)[0])
 
 
-def add_bytes(step, fields):
-    new = {k: v for k, v in fields.items() if k not in step['keys']}
-    if not new:
+def add_bytes(step, fields, replace=False):
+    keys = step['keys']
+    changed = {k: v for k, v in fields.items() if replace or k not in keys}
+    if not changed:
         return
     raw = gzip.decompress(base64.b64decode(step['data']))
-    raw += b''.join(new.values())
-    step['keys'].extend(new)
+    size = len(raw) // len(keys)
+    existing = {k: raw[i*size:(i+1)*size] for i, k in enumerate(keys)}
+    existing.update(changed)
+    raw = b''.join(existing.values())
+    step['keys'] = list(existing)
     step['data'] = base64.b64encode(gzip.compress(raw, compresslevel=4, mtime=0)).decode()
 
 
@@ -136,6 +142,23 @@ def wet_bulb(temp, dew):
             - np.arctan(rh - 1.676331) + .00391838 * rh**1.5 * np.arctan(.023101 * rh) - 4.686035)
 
 
+def harmonie_precip_type(current, previous, first_hour=False):
+    from knmi_levels import PHASE_COMPONENTS
+
+    if not all(k in current and (first_hour or k in previous) for k in PHASE_COMPONENTS):
+        return None
+    changes = np.stack([current[k] - (0 if first_hour else previous[k]) for k in PHASE_COMPONENTS])
+    # De cumulatieve modelvelden kunnen door GRIB-quantisatie licht dalen.
+    valid = np.all(np.isfinite(changes) & (changes >= -.05), axis=0)
+    if not valid.any():
+        return None
+    rain, snow, graupel = np.maximum(changes, 0)
+    total = rain + snow + graupel
+    phase = np.select([graupel >= .5 * total, snow >= .9 * total, snow >= .3 * total],
+                      [9, 2, 4], default=1)
+    return np.where(valid & (total >= .045), phase, 8).astype('uint8')
+
+
 def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False, cache_dir=None):
     meta_path = root / f'{key}_canvas_meta.json'
     before = meta_path.read_bytes()
@@ -155,15 +178,15 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
         if dwd_levels or cache.is_dir():
             from dwd_levels import cached_icon_fields
             extra = cached_icon_fields(cache,key,start,leads,GRID,http if dwd_levels else None)
-    if key in ('harmonie','harmonie46'):
+    if key in HARMONIE_MODELS:
         cache = cache_dir or HERE/'.veld-cache'
         if knmi_levels or cache.is_dir():
             from dwd_levels import cached_model_fields
+            from knmi_levels import PHASE_COMPONENTS, knmi_fields
             load = None
             if knmi_levels:
-                from knmi_levels import knmi_fields
                 load = lambda: knmi_fields(root.parent,key,start,leads,GRID,http)
-            expected = {'t850','t500','sdep','frz'}
+            expected = {'t850','t500','sdep','frz', *PHASE_COMPONENTS}
             extra = cached_model_fields(cache,key,start,leads,expected,load)
         if key == 'harmonie':
             for t, array in harmonie_snow(root.parent,start).items():
@@ -184,7 +207,8 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
         u, v = f['wind']
         out = {'t2m': temp, 'ws': np.hypot(u, v), 'u': u, 'v': v, 'tcc': clouds,
                'vis': f['zicht'][0], 'msl': f['druk'][0]/100, 'rain': f['neerslag'][0]}
-        out.update({k: v for k,v in extra.get(t, {}).items() if np.any(np.isfinite(v))})
+        additional = extra.get(t, {})
+        out.update({k: v for k,v in additional.items() if k in ENC and np.any(np.isfinite(v))})
         if 'dauwpunt' in f:
             out['td2m'] = f['dauwpunt'][0]
         total = f.get('cumul')
@@ -199,7 +223,12 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
         gust = np.hypot(*f['windstoten']) * 3.6
         encoded['gustNative'] = np.where(np.isfinite(gust), np.clip(np.rint(gust), 0, 254), 255).astype('uint8')
         dew = f.get('dauwpunt')
-        if dew is not None:
+        phase = None
+        if key in HARMONIE_MODELS and lead > 0:
+            phase = harmonie_precip_type(additional, extra.get(t-timedelta(hours=1), {}), first_hour=lead==1)
+        if phase is not None:
+            encoded['ptype'] = phase
+        elif key not in HARMONIE_MODELS and dew is not None:
             tw = wet_bulb(temp, dew[0])
             encoded['ptype'] = np.where(np.isfinite(tw), np.where(tw <= .6, 2, np.where(tw <= 1.4, 3, 1)), 8).astype('uint8')
         else:
@@ -216,6 +245,7 @@ def native_model(root, key, ruc_solar=False, dwd_levels=False, knmi_levels=False
         steps.append(dict(lead=lead, valid=t.isoformat(), keys=list(encoded),
                           sunHours=1, sunEstimated=not sun_native, gustPeriod=None,
                           snowPartial=t in partial_snow,
+                          **({'ptypeSource': HARMONIE_PHASE_SOURCE} if phase is not None else {}),
                           data=base64.b64encode(gzip.compress(raw, compresslevel=4, mtime=0)).decode()))
     if meta_path.read_bytes() != before:
         raise RuntimeError(f'{key} is bijgewerkt tijdens inlezen. Bouw opnieuw met de nieuwe run.')
