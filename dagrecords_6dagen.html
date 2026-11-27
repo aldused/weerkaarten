@@ -33,9 +33,10 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 .kaart-records td:first-child { color:var(--mini-muted); width:1%; }
 .kaart-records td:nth-child(3) { font-weight:700; }
 .kaart-records .record-getal { font-variant-numeric:tabular-nums; white-space:nowrap; }
-.lopend-recordjaar { color:#b91c1c; font-weight:700; }
 .kaart-records .record-jaar { color:var(--mini-muted); font-size:11px; font-weight:400; white-space:nowrap; }
-.record-page .kaart-records tbody tr[data-voorlopig] { background:#e9f7f7; }
+.record-page :is(.kaart-records,#record-day-table) tbody tr[data-lopend-jaar] { background:#b91c1c; }
+.record-page :is(.kaart-records,#record-day-table) tbody tr[data-lopend-jaar] :is(td,.record-jaar) { color:#fff; }
+.record-page :is(.kaart-records,#record-day-table) tbody tr[data-lopend-jaar] td { border-bottom-color:#ffffff45; }
 .kaart-records [colspan] { color:var(--mini-muted); }
 .mini-header { display:flex; justify-content:space-between; }
 .mosmix-mini-page .mini-header .mini-dag-naam { font-weight:700; text-transform:none; }
@@ -78,7 +79,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 <section class="climate-heading" aria-labelledby="climate-title">
   <a class="climate-back" href="index.html#menu/terugkijken?type=klimaat">← Records &amp; klimaat</a>
   <div class="climate-heading-row"><div><h1 id="climate-title">Temperatuurrecords per kalenderdag</h1><p>Kies een recordtype en bekijk zes kalenderdagen of de ranglijst voor één dag.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
-  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>Per meetlocatie zie je de uiterste gemeten waarde voor die kalenderdag en het jaar waarin die viel. Bij een record tijdens het lopende etmaal staat een sterretje. Vooral een voorlopig laag dagmaximum kan nog vervallen als het later warmer wordt. De kleuren tussen de meetpunten zijn geschat uit de stationswaarden. De lijst toont per station het record en, als dat bekend is, het uiterste van dezelfde kalenderdag vóór de recorddatum. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">Daggegevens van het KNMI ↗</a></p></details>
+  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>Per meetlocatie zie je de uiterste gemeten waarde voor die kalenderdag en het jaar waarin die viel. Records uit het lopende kalenderjaar staan op een rode rij. Een sterretje duidt een voorlopig record van het lopende etmaal aan. Vooral een voorlopig laag dagmaximum kan nog vervallen als het later warmer wordt. De kleuren tussen de meetpunten zijn geschat uit de stationswaarden. De lijst toont per station het record en, als dat bekend is, het uiterste van dezelfde kalenderdag vóór de recorddatum. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">Daggegevens van het KNMI ↗</a></p></details>
 </section>
 
 <div class="toolbar record-day-controls">
@@ -330,15 +331,11 @@ function recordTekst(rec){
   return rec?GETAL.format(rec.t)+" °C · "+rec.d.slice(0,4)+(rec.voorlopig?"*":""):"—";
 }
 
-function maakRecordDatum(rec,lopendJaar,volledig=false){
+function maakRecordDatum(rec,volledig=false){
   const [jaar,maand,dag]=rec.d.split("-");
   const datum=document.createElement("time");
   datum.dateTime=rec.d;
-  if(volledig) datum.append(dag+"-"+maand+"-");
-  const jaarLabel=document.createElement("span");
-  if(jaar===lopendJaar) jaarLabel.className="lopend-recordjaar";
-  jaarLabel.textContent=jaar;
-  datum.append(jaarLabel);
+  datum.textContent=volledig?dag+"-"+maand+"-"+jaar:jaar;
   if(rec.voorlopig) datum.append(volledig?" lopend":"*");
   return datum;
 }
@@ -355,7 +352,7 @@ function bouwKaartRecords(rijen,datum,lopendJaar){
     const rij=tbody.insertRow();
     rij.insertCell().textContent=rang;
     rij.insertCell().textContent=naam;
-    if(rec.voorlopig) rij.dataset.voorlopig="";
+    if(isLopendRecordjaar(rec,lopendJaar)) rij.dataset.lopendJaar="";
     for(const record of [rec,rec.vorig]){
       const cel=rij.insertCell();
       if(!record){
@@ -365,7 +362,7 @@ function bouwKaartRecords(rijen,datum,lopendJaar){
       const getal=document.createElement("span");
       getal.className="record-getal";
       getal.textContent=GETAL.format(record.t)+" °C";
-      const jaar=maakRecordDatum(record,lopendJaar);
+      const jaar=maakRecordDatum(record);
       jaar.className="record-jaar";
       cel.append(getal,document.createElement("br"),jaar);
     }
@@ -378,20 +375,8 @@ function bouwKaartRecords(rijen,datum,lopendJaar){
   return blok;
 }
 
-function tekenRecordPng(ctx,rec,x,y,lopendJaar){
-  if(!rec||rec.d.slice(0,4)!==lopendJaar){
-    ctx.fillText(recordTekst(rec),x,y,200);
-    return;
-  }
-  const suffix=rec.voorlopig?"*":"";
-  if(suffix) ctx.fillText(suffix,x,y);
-  const jaarX=x-ctx.measureText(suffix).width;
-  const temperatuurX=jaarX-ctx.measureText(lopendJaar+" ").width;
-  ctx.fillText(GETAL.format(rec.t)+" °C ·",temperatuurX,y);
-  ctx.save();
-  ctx.fillStyle="#b91c1c";
-  ctx.fillText(lopendJaar,jaarX,y);
-  ctx.restore();
+function isLopendRecordjaar(rec,lopendJaar){
+  return rec.d.slice(0,4)===lopendJaar;
 }
 
 function tekenRecordlijstPng(rijen,lopendJaar){
@@ -420,20 +405,21 @@ function tekenRecordlijstPng(rijen,lopendJaar){
   }
   rijen.forEach(({naam,rec,rang},i)=>{
     const y=boven+i*rijHoogte;
-    if(i%2===1||rec.voorlopig){
-      ctx.fillStyle=rec.voorlopig?"#e9f7f7":"#f5f8fa";
+    const lopend=isLopendRecordjaar(rec,lopendJaar);
+    if(i%2===1||lopend){
+      ctx.fillStyle=lopend?"#b91c1c":"#f5f8fa";
       ctx.fillRect(0,y,paneel.width,rijHoogte);
     }
-    ctx.fillStyle="#19334a";
+    ctx.fillStyle=lopend?"#fff":"#19334a";
     ctx.font="500 22px system-ui";
     ctx.textAlign="left";
     ctx.fillText(rang,22,y+26);
     ctx.fillText(naam,76,y+26,320);
     ctx.textAlign="right";
     ctx.font="700 22px system-ui";
-    tekenRecordPng(ctx,rec,600,y+26,lopendJaar);
+    ctx.fillText(recordTekst(rec),600,y+26,200);
     ctx.font="500 22px system-ui";
-    tekenRecordPng(ctx,rec.vorig,825,y+26,lopendJaar);
+    ctx.fillText(recordTekst(rec.vorig),825,y+26,200);
   });
   return paneel;
 }
@@ -624,10 +610,11 @@ function tekenRanglijst(dag,config,lopendJaar){
   document.getElementById("record-day-title").textContent=config.titel+" · "+DAG_LABEL.format(dag.dt);
   tableRows.replaceChildren(...rangschikDagrecords(dag.rec,config.richting).map(({naam,rec,rang})=>{
     const rij=document.createElement("tr");
+    if(isLopendRecordjaar(rec,lopendJaar)) rij.dataset.lopendJaar="";
     for(const waarde of [rang,naam,GETAL.format(rec.t)]) rij.insertCell().textContent=waarde;
-    rij.insertCell().append(maakRecordDatum(rec,lopendJaar,true));
+    rij.insertCell().append(maakRecordDatum(rec,true));
     const vorig=rij.insertCell();
-    if(rec.vorig) vorig.append(GETAL.format(rec.vorig.t)+" °C · ",maakRecordDatum(rec.vorig,lopendJaar));
+    if(rec.vorig) vorig.append(GETAL.format(rec.vorig.t)+" °C · ",maakRecordDatum(rec.vorig));
     else vorig.textContent="—";
     return rij;
   }));
