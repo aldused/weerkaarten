@@ -34,7 +34,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 .kaart-records td:nth-child(3) { font-weight:700; }
 .kaart-records .record-getal { font-variant-numeric:tabular-nums; white-space:nowrap; }
 .kaart-records .record-jaar { color:var(--mini-muted); font-size:11px; font-weight:400; white-space:nowrap; }
-.record-page :is(.kaart-records,#record-day-table) tbody tr[data-lopend-jaar] { background:#b91c1c; }
+.record-page :is(.kaart-records,#record-day-table) tbody tr[data-lopend-jaar] { background:var(--jaarrecord-kleur); }
 .record-page :is(.kaart-records,#record-day-table) tbody tr[data-lopend-jaar] :is(td,.record-jaar) { color:#fff; }
 .record-page :is(.kaart-records,#record-day-table) tbody tr[data-lopend-jaar] td { border-bottom-color:#ffffff45; }
 .kaart-records [colspan] { color:var(--mini-muted); }
@@ -79,7 +79,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 <section class="climate-heading" aria-labelledby="climate-title">
   <a class="climate-back" href="index.html#menu/terugkijken?type=klimaat">← Records &amp; klimaat</a>
   <div class="climate-heading-row"><div><h1 id="climate-title">Temperatuurrecords per kalenderdag</h1><p>Kies een recordtype en bekijk zes kalenderdagen of de ranglijst voor één dag.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
-  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>Per meetlocatie zie je de uiterste gemeten waarde voor die kalenderdag en het jaar waarin die viel. Records uit het lopende kalenderjaar staan op een rode rij. Een sterretje duidt een voorlopig record van het lopende etmaal aan. Vooral een voorlopig laag dagmaximum kan nog vervallen als het later warmer wordt. De kleuren tussen de meetpunten zijn geschat uit de stationswaarden. De lijst toont per station het record en, als dat bekend is, het uiterste van dezelfde kalenderdag vóór de recorddatum. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">Daggegevens van het KNMI ↗</a></p></details>
+  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>Per meetlocatie zie je de uiterste gemeten waarde voor die kalenderdag en het jaar waarin die viel. Records uit het lopende kalenderjaar staan op een blauwe rij bij het laagste minimum en op een rode rij bij de maxima. Een sterretje duidt een voorlopig record van het lopende etmaal aan. Vooral een voorlopig laag dagmaximum kan nog vervallen als het later warmer wordt. De kleuren tussen de meetpunten zijn geschat uit de stationswaarden. De lijst toont per station het record en, als dat bekend is, het uiterste van dezelfde kalenderdag vóór de recorddatum. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">Daggegevens van het KNMI ↗</a></p></details>
 </section>
 
 <div class="toolbar record-day-controls">
@@ -123,10 +123,11 @@ const NS="http://www.w3.org/2000/svg";
 const DAG_LABEL=new Intl.DateTimeFormat("nl-NL",{day:"numeric",month:"long",timeZone:"UTC"});
 const GETAL=new Intl.NumberFormat("nl-NL",{minimumFractionDigits:1,maximumFractionDigits:1});
 const KAARTSCHAAL={temperatuur:true};
+const JAARRECORD_ROOD="#b91c1c";
 const RECORDTYPEN={
-  tx_hoog:{titel:"Hoogste maximumtemperatuur",kaarttitel:"Hoogste maximum",richting:-1,bestand:"dagrecords_nl.json"},
-  tx_laag:{titel:"Laagste maximumtemperatuur",kaarttitel:"Laagste maximum",richting:1,bestand:"dagrecords_koude_nl.json"},
-  tn_laag:{titel:"Laagste minimumtemperatuur",kaarttitel:"Laagste minimum",richting:1,bestand:"dagrecords_koude_nl.json"}
+  tx_hoog:{titel:"Hoogste maximumtemperatuur",kaarttitel:"Hoogste maximum",richting:-1,jaarkleur:JAARRECORD_ROOD,bestand:"dagrecords_nl.json"},
+  tx_laag:{titel:"Laagste maximumtemperatuur",kaarttitel:"Laagste maximum",richting:1,jaarkleur:JAARRECORD_ROOD,bestand:"dagrecords_koude_nl.json"},
+  tn_laag:{titel:"Laagste minimumtemperatuur",kaarttitel:"Laagste minimum",richting:1,jaarkleur:"#1d4ed8",bestand:"dagrecords_koude_nl.json"}
 };
 
 // Interpolatie met Modified Shepard en lichte gaussiaanse vervaging.
@@ -277,7 +278,8 @@ function node(tag,attrs,txt){
   return el;
 }
 
-async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kalenderdag,voorlopig,rijen,lopendJaar){
+async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,config,kalenderdag,voorlopig,rijen,lopendJaar){
+  const {titel,jaarkleur}=config;
   // Teken de stationstekst op canvas zodat de export het geladen webfont gebruikt.
   const exportOverlay=overlay.cloneNode(true);
   exportOverlay.querySelectorAll(".stationlabel").forEach(label=>label.remove());
@@ -296,7 +298,7 @@ async function downloadDagrecordKaart(basis,kleurlaag,overlay,dagtekst,titel,kal
     basis,kleurlaag,overlay:exportOverlay,basisStijl:svgStijl,overlayStijl:svgStijl,
     dagtekst,kaarttitel:titel,kopregel:voorlopig?"Dagrecords KNMI · * Voorlopig":"Dagrecords KNMI",bron:"KNMI · Klimaatarchief",
     legenda:kaartLegendaSchaal(KAARTSCHAAL), historischeLocaties:true,
-    zijpaneel:tekenRecordlijstPng(rijen,lopendJaar),
+    zijpaneel:tekenRecordlijstPng(rijen,lopendJaar,jaarkleur),
     tekenLabels(ctx){
       ctx.textAlign="center";
       ctx.lineJoin="round";
@@ -379,7 +381,7 @@ function isLopendRecordjaar(rec,lopendJaar){
   return rec.d.slice(0,4)===lopendJaar;
 }
 
-function tekenRecordlijstPng(rijen,lopendJaar){
+function tekenRecordlijstPng(rijen,lopendJaar,jaarkleur){
   const paneel=document.createElement("canvas");
   const boven=82;
   const rijHoogte=Math.max(37,Math.min(52,Math.floor(2098/Math.max(1,rijen.length))));
@@ -407,7 +409,7 @@ function tekenRecordlijstPng(rijen,lopendJaar){
     const y=boven+i*rijHoogte;
     const lopend=isLopendRecordjaar(rec,lopendJaar);
     if(i%2===1||lopend){
-      ctx.fillStyle=lopend?"#b91c1c":"#f5f8fa";
+      ctx.fillStyle=lopend?jaarkleur:"#f5f8fa";
       ctx.fillRect(0,y,paneel.width,rijHoogte);
     }
     ctx.fillStyle=lopend?"#fff":"#19334a";
@@ -442,6 +444,7 @@ function bouwKaart(stations,dag,config,ondergrond,lopendJaar){
 
   const kaart=document.createElement("article");
   kaart.className="mini-kaart";
+  kaart.style.setProperty("--jaarrecord-kleur",config.jaarkleur);
   kaart.setAttribute("aria-label",config.titel+" op "+datum);
   kaart.innerHTML='<div class="mini-header"><span class="mini-dag-naam"></span><span class="mini-dag-datum"></span></div>'
     +'<div class="kaart-met-records"><div class="mini-body"></div></div><div class="mini-footer">'
@@ -507,7 +510,7 @@ function bouwKaart(stations,dag,config,ondergrond,lopendJaar){
     download.disabled=true;
     melding.textContent="PNG maken…";
     try{
-      await downloadDagrecordKaart(basis,canvas,overlay,datum,config.titel,kalenderdag,voorlopig,rijen,lopendJaar);
+      await downloadDagrecordKaart(basis,canvas,overlay,datum,config,kalenderdag,voorlopig,rijen,lopendJaar);
       melding.textContent="";
     }catch(fout){
       melding.textContent="De PNG kon niet worden gemaakt. Probeer opnieuw.";
@@ -607,6 +610,7 @@ function rangschikDagrecords(records,richting){
 }
 
 function tekenRanglijst(dag,config,lopendJaar){
+  document.getElementById("record-day-table").style.setProperty("--jaarrecord-kleur",config.jaarkleur);
   document.getElementById("record-day-title").textContent=config.titel+" · "+DAG_LABEL.format(dag.dt);
   tableRows.replaceChildren(...rangschikDagrecords(dag.rec,config.richting).map(({naam,rec,rang})=>{
     const rij=document.createElement("tr");
