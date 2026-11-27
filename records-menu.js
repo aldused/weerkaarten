@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if(!command&&query.has('station')&&[...$('sel-station').options].some(o=>o.value===query.get('station'))){$('sel-station').value=query.get('station');await wisselStation();}
   const tab=query.get('tab');if(tab==='koudedagen'){if(['winteryear','calendar'].includes(query.get('coldperiod')))kdPeriod=query.get('coldperiod');const category=Number(query.get('coldcategory'));if(query.has('coldcategory')&&Number.isInteger(category)&&category>=0&&category<KD_LABELS.length)kdCat=category;if(['jaar','seizoen','maand','reeksen','stations'].includes(query.get('coldview')))kdView=query.get('coldview');}
   if(buttons.has(tab)){if(tab==='warmedagen')wdThr=1;wisselHoofdtab(tab);}
-  if(tab==='koudedagen'&&kdView==='stations'&&$('sel-station').value!=='alle')await kdShowStationRecords();
+  if(tab==='koudedagen'&&kdView==='stations'&&$('sel-station').value!=='alle'&&(!command||!query.has('station')))await kdShowStationRecords();
   schedule();
  }
  const filters=document.querySelector('.filters');

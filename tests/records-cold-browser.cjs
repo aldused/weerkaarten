@@ -36,6 +36,26 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   assert.match(await page.locator('#kd-viewStations .kd-station-record').innerText(),/72[\s\S]*Twenthe[\s\S]*1962\/1963/);
   assert.match(await page.locator('#kd-viewStations tbody').innerText(),/Winterswijk/i);
   assert.equal(await page.locator('select[aria-label="Winterjaar van koude dagen"]').isVisible(),false);
+  await page.getByRole('combobox',{name:'Soort koude dag'}).selectOption('4');
+  const stationRecords=page.locator('#kd-viewStations');
+  const rowLimit=stationRecords.getByRole('combobox',{name:'Aantal rijen'});
+  assert.equal(await rowLimit.inputValue(),'all');
+  assert.equal(await stationRecords.locator('tbody tr:visible').count(),47);
+  assert.match(await stationRecords.locator('.hsub').first().innerText(),/42 van de 47 geladen stations/);
+  assert.match(await stationRecords.locator('.kd-station-record').innerText(),/37[\s\S]*Eelde/);
+  for(const name of ['Texelhors','Wijdenes','Houtribdijk','Stavenisse','Tholen']){
+   const row=stationRecords.getByRole('row').filter({has:page.getByRole('rowheader',{name,exact:true})});
+   assert.deepEqual(await row.getByRole('cell').allTextContents(),['—','—','Geen dagminima in afgesloten winterjaren']);
+  }
+  const horst=stationRecords.getByRole('row').filter({has:page.getByRole('rowheader',{name:'Horst',exact:true})});
+  assert.match(await horst.getByRole('cell').first().innerText(),/^(≥ )?0$/);
+  await rowLimit.selectOption('10');
+  assert.equal(await stationRecords.locator('tbody tr:visible').count(),10);
+  await stationRecords.getByRole('searchbox',{name:'Filter deze ranglijst'}).fill('Texelhors');
+  assert.equal(await stationRecords.locator('tbody tr:visible').count(),1);
+  assert.match(await stationRecords.locator('tbody tr:visible').innerText(),/Texelhors/);
+  await stationRecords.getByRole('searchbox',{name:'Filter deze ranglijst'}).clear();
+  await rowLimit.selectOption('all');
   await page.locator('#sectie-koudedagen').screenshot({path:'/private/tmp/koudedagen-stations-desktop.png'});
   for(const width of [320,390,768]){
    await page.setViewportSize({width,height:844});

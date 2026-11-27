@@ -1078,7 +1078,7 @@ const MENU_PRODUCTS = [
     "section": "Records & extremen",
     "icon": "records",
     "href": "index.html#records",
-    "src": "records_debilt.html?v=20261127-minimumtijd",
+    "src": "records_debilt.html?v=20261127-alle-stations",
     "thumbnail": null,
     "facets": {},
     "keywords": "Weerrecords De Bilt + landelijk  warme dagen zomerse tropische koude dagen vorst ijsdagen tellen aantal station jaar Rotterdam Airport",

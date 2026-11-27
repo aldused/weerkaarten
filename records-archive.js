@@ -93,7 +93,9 @@ document.addEventListener('DOMContentLoaded',()=>{
  detail.id='archive-record-detail';close.addEventListener('click',()=>detail._trigger?.setAttribute('aria-expanded','false'));detail.addEventListener('keydown',e=>{if(e.key==='Escape')close.click();});
  new MutationObserver(decorate).observe(tbody,{childList:true});decorate();
  function selectionURL(){const url=new URL(location.href);url.search='';const values={station:$('sel-station').value,periode:huidigePeriode,param:huidigeParam,richting:huidigeRichting,tab:huidigeHoofdtab,calculation:$('record-calculation').value};for(const id of ['sel-maand','sel-jaar','sel-seizoen','sel-dag-maand','sel-dag-dag','sel-dec-maand','sel-dec-dec','sel-van','sel-tm'])values[id]=$(id).value;for(const [k,v]of Object.entries(values))url.searchParams.set(k,v);return url.href;}
- async function restore(){const p=new URLSearchParams(location.search);if(!p.has('station'))return;if([...$('sel-station').options].some(o=>o.value===p.get('station'))){$('sel-station').value=p.get('station');await wisselStation();}for(const id of ['sel-maand','sel-jaar','sel-seizoen','sel-dag-maand','sel-dec-maand','sel-dec-dec','sel-van','sel-tm']){if(p.has(id))$(id).value=p.get(id);}vulDagDagen();if(p.has('sel-dag-dag'))$('sel-dag-dag').value=p.get('sel-dag-dag');
+ async function restore(){const p=new URLSearchParams(location.search);if(!p.has('station'))return;
+  const station=p.get('tab')==='koudedagen'&&p.get('coldview')==='stations'?'alle':p.get('station');
+  if([...$('sel-station').options].some(o=>o.value===station)){$('sel-station').value=station;await wisselStation();}for(const id of ['sel-maand','sel-jaar','sel-seizoen','sel-dag-maand','sel-dec-maand','sel-dec-dec','sel-van','sel-tm']){if(p.has(id))$(id).value=p.get(id);}vulDagDagen();if(p.has('sel-dag-dag'))$('sel-dag-dag').value=p.get('sel-dag-dag');
   const savedParam=p.get('param');
   const param=savedParam==='dagen_lichte_vorst'?'dagen_vorst':savedParam;
   if([...$('sel-param-mobile').options].some(o=>o.value===param))wisselParam(param);

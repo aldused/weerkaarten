@@ -190,6 +190,7 @@
     const amount=element('label',{},'Aantal rijen');
     const limit=element('select',{'aria-label':'Aantal rijen'});
     for(const [v,t] of [['10','10'],['25','25'],['all','Alle geladen rijen']])limit.append(element('option',{value:v},t));
+    if(table.dataset.recordRowLimit==='all')limit.value='all';
     amount.append(limit);const count=element('output',{'aria-live':'polite'});
     const empty=element('p',{class:'record-empty',hidden:''},'Geen resultaten binnen deze geladen ranglijst. Pas de zoekterm of de filters bovenaan aan.');
     tools.append(label,amount,count);table.before(tools);table.after(empty);
