@@ -37,6 +37,14 @@ def laad_records(bronmap, nr):
     return None
 
 
+def voeg_minimumvak_toe(cel, maanddetail):
+    jaar, maand, dag = cel["d"].split("-")
+    dagen = maanddetail.get(jaar, {}).get(str(int(maand)), {}).get("dagen", [])
+    meting = next((rij for rij in dagen if rij.get("dag") == int(dag)), None)
+    if meting and meting.get("tn") == cel["t"] and meting.get("tn_vak"):
+        cel["tn_vak"] = meting["tn_vak"]
+
+
 def bouw_dagrecords(bronmap, uitvoer, koude=False):
     registry = json.loads((ROOT / "record-stations.json").read_text())
     register = registry["stations"]
@@ -140,7 +148,7 @@ def bouw_dagrecords(bronmap, uitvoer, koude=False):
                 if koude and voorlopig == vandaag_iso and sleutel == vandaag_iso[5:]:
                     lopende_rij = next((r for r in rijen if r[1] == vandaag_iso), None)
                     if lopende_rij is not None:
-                        metingen_vandaag[soort][naam] = round(lopende_rij[0], 1)
+                        metingen_vandaag[soort][naam] = {"t": round(lopende_rij[0], 1), "d": vandaag_iso}
                 rij = next((r for r in rijen if r[1] != voorlopig), None)
                 if rij is not None:
                     zet_record(soort, sleutel, naam, rij[0], rij[1], historisch)
@@ -155,7 +163,8 @@ def bouw_dagrecords(bronmap, uitvoer, koude=False):
                     zet_vorig(soort, sleutel, naam, waarde, datum, lopend)
 
         velden = [(soort, soort[:2]) for soort in soorten]
-        for jaar, maanden in record.get("maanddetail", {}).items():
+        maanddetail = record.get("maanddetail", {})
+        for jaar, maanden in maanddetail.items():
             for maand, maanddata in maanden.items():
                 for rij in maanddata.get("dagen", []):
                     sleutel = f"{int(maand):02d}-{int(rij['dag']):02d}"
@@ -163,6 +172,17 @@ def bouw_dagrecords(bronmap, uitvoer, koude=False):
                     for soort, veld in velden:
                         if rij.get(veld) is not None:
                             zet_vorig(soort, sleutel, naam, rij[veld], datum, lopend)
+
+        if koude and maanddetail:
+            for dag in kaarten["tn_laag"].values():
+                cel = dag.get(naam)
+                if cel is not None:
+                    voeg_minimumvak_toe(cel, maanddetail)
+                    if cel.get("vorig"):
+                        voeg_minimumvak_toe(cel["vorig"], maanddetail)
+            kandidaat = metingen_vandaag["tn_laag"].get(naam)
+            if kandidaat:
+                voeg_minimumvak_toe(kandidaat, maanddetail)
 
     if gemist:
         raise RuntimeError(f"Onvolledige dagrecordbronnen: {gemist}")
@@ -207,9 +227,8 @@ def bouw_dagrecords(bronmap, uitvoer, koude=False):
         for soort, metingen in metingen_vandaag.items():
             afgesloten = kaarten[soort][sleutel]
             kandidaten[soort] = {
-                naam: {"t": waarde, "d": vandaag_iso}
-                for naam, waarde in metingen.items()
-                if naam in afgesloten and waarde < afgesloten[naam]["t"]
+                naam: meting for naam, meting in metingen.items()
+                if naam in afgesloten and meting["t"] < afgesloten[naam]["t"]
             }
         uit.update(
             voorlopig={"datum": vandaag_iso, "records": kandidaten},

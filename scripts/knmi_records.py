@@ -98,6 +98,13 @@ def download_knmi(station, cache_path):
     print(f"Opgeslagen: {cache_path} ({len(tekst)} bytes)")
     return tekst
 
+# TNH marks the end of an hourly interval in the KNMI UTC day.
+def minimum_uurvak(uur):
+    if uur is not None and 1 <= uur <= 24 and uur == int(uur):
+        return [int(uur) * 60, 60]
+    return None
+
+
 # ── Parse CSV ─────────────────────────────────────────────────────────────────
 def parse_csv(tekst):
     """
@@ -129,7 +136,7 @@ def parse_csv(tekst):
         except:
             continue
 
-        def val(naam):
+        def bronwaarde(naam):
             try:
                 idx = kolomnamen.index(naam)
                 v = delen[idx].strip()
@@ -138,13 +145,19 @@ def parse_csv(tekst):
                 # mm of uur). Alleen NG gebruikt 9 als bijzondere code, maar
                 # bewolking wordt hier niet ingelezen.
                 if v == "": return None
-                f = float(v)
-                if naam == "RH" and f < 0: return 0.0
-                if naam == "SQ" and f < 0: return 0.0
-                return round(f / 10.0, 1)
-            except:
+                return float(v)
+            except (ValueError, IndexError):
                 return None
 
+        def val(naam):
+            f = bronwaarde(naam)
+            if f is None:
+                return None
+            if naam in ("RH", "SQ") and f < 0:
+                return 0.0
+            return round(f / 10.0, 1)
+
+        minimum = val("TN")
         records.append({
             "datum":   f"{jaar:04d}-{maand:02d}-{dag:02d}",
             "jaar":    jaar,
@@ -153,7 +166,8 @@ def parse_csv(tekst):
             "decade":  min(((dag - 1) // 10) + 1, 3),  # dag 31 → decade 3, niet 4
             "seizoen": seizoen(maand),
             "tx": val("TX"),
-            "tn": val("TN"),
+            "tn": minimum,
+            "tn_vak": minimum_uurvak(bronwaarde("TNH")) if minimum is not None else None,
             "tg": val("TG"),
             "rh": val("RH"),
             "fx": val("FXX"),
@@ -173,6 +187,8 @@ def parse_csv(tekst):
         if bestaand is None:
             per_datum[record["datum"]] = record
             continue
+        if record["tn"] is not None and record["tn"] != bestaand["tn"]:
+            bestaand.pop("tn_vak", None)
         for sleutel, waarde in record.items():
             if waarde is not None:
                 bestaand[sleutel] = waarde
@@ -300,7 +316,7 @@ def haal_dag_validated(station_nr, dag):
     """Gefinaliseerde etmaalwaarden voor `dag` uit de validated daily-API.
     Label-conventie: de waarde voor dag D staat op tijdstip (D+1)T00:00Z."""
     label = f"{(dag + timedelta(days=1)).isoformat()}T00:00:00Z"
-    par   = "TX,TN,TG,RH,FXX,FG,FHX,PG,PX,PN,SQ"
+    par   = "TX,TN,TNH,TG,RH,FXX,FG,FHX,PG,PX,PN,SQ"
     try:
         r = knmi_get(f"{EDR_DAG}/locations/{_wigos(station_nr)}",
                      params={"datetime": label, "parameter-name": par}, timeout=20)
@@ -317,6 +333,8 @@ def haal_dag_validated(station_nr, dag):
         w = {"tx": g("TX"), "tn": g("TN"), "tg": g("TG"), "rh": g("RH"),
              "fx": g("FXX"), "fg": g("FG"), "fhx": g("FHX"),
              "pg": g("PG"), "px": g("PX"), "pn": g("PN"), "sq": g("SQ")}
+        if w["tn"] is not None:
+            w["tn_vak"] = minimum_uurvak(g("TNH"))
         return w if (w["tx"] is not None or w["tg"] is not None) else None
     except Exception as e:
         print(f"  EDR-dag {station_nr} {dag}: {e}")
@@ -337,7 +355,7 @@ def maak_dagrecord(station_nr, datum_obj, waarden, lopend=False):
         "seizoen": seizoen(m),
         "lopend":  lopend,
     }
-    for k in ("tx","tn","tg","rh","fx","fg","fhx","pg","px","pn","sq"):
+    for k in ("tx","tn","tn_vak","tg","rh","fx","fg","fhx","pg","px","pn","sq"):
         rec[k] = waarden.get(k)
     return rec
 
@@ -545,6 +563,7 @@ for STATION, STATION_NAAM in STATIONS:
                 "rh":   r["rh"],
                 "sq":   r["sq"],
                 "fg":   r["fg"],
+                **({"tn_vak": r["tn_vak"]} if r.get("tn_vak") else {}),
             } for r in dagen_gesorteerd],
             "gem_tx": round(sum(tx_vals)/len(tx_vals), 1) if tx_vals else None,
             "gem_tn": round(sum(tn_vals)/len(tn_vals), 1) if tn_vals else None,

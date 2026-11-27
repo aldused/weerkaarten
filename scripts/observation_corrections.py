@@ -12,5 +12,7 @@ def apply_corrections(station, rows):
             key = correction['parameter'].lower()
             if row['datum'] == correction['date'] and row.get(key) == correction['original']:
                 row[key] = correction['value']
+                if key == 'tn':
+                    row.pop('tn_vak', None)
                 applied.append(dict(correction))
     return applied

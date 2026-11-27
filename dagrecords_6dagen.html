@@ -34,6 +34,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 .kaart-records td:nth-child(3) { font-weight:700; }
 .kaart-records .record-getal { font-variant-numeric:tabular-nums; white-space:nowrap; }
 .kaart-records .record-jaar { color:var(--mini-muted); font-size:11px; font-weight:400; white-space:nowrap; }
+.record-meetvak { display:block; font-size:0.8em; font-weight:400; }
 .record-page :is(.kaart-records,#record-day-table) tbody tr[data-lopend-jaar] { background:var(--jaarrecord-kleur); }
 .record-page :is(.kaart-records,#record-day-table) tbody tr[data-lopend-jaar] :is(td,.record-jaar) { color:#fff; }
 .record-page :is(.kaart-records,#record-day-table) tbody tr[data-lopend-jaar] td { border-bottom-color:#ffffff45; }
@@ -113,6 +114,7 @@ body { font-family:"DM Sans",system-ui,sans-serif; background:var(--mini-bg); co
 <script src="nl_grens_coords.js"></script>
 <script src="waarnemingen-kaartkleuren.js?v=20261124-topkaart"></script>
 <script src="weerlab-kaart-export.js?v=20261126-lijst"></script>
+<script src="record-minimum-time.js?v=20261127"></script>
 <script>
 // ── Geo-projectie (zelfde als alle weerlab NL-kaarten) ───────────────────────
 const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
@@ -342,6 +344,16 @@ function maakRecordDatum(rec,volledig=false){
   return datum;
 }
 
+function maakRecordMeetvak(rec){
+  const tekst=RecordMinimumTime.format(rec.d,rec.tn_vak);
+  if(!tekst) return "";
+  const meetvak=document.createElement("small");
+  meetvak.className="record-meetvak";
+  meetvak.textContent=tekst;
+  meetvak.title="Meetvak van het minimum in Nederlandse tijd";
+  return meetvak;
+}
+
 function bouwKaartRecords(rijen,datum,lopendJaar){
   const blok=document.createElement("div");
   blok.className="kaart-lijst";
@@ -366,7 +378,7 @@ function bouwKaartRecords(rijen,datum,lopendJaar){
       getal.textContent=GETAL.format(record.t)+" °C";
       const jaar=maakRecordDatum(record);
       jaar.className="record-jaar";
-      cel.append(getal,document.createElement("br"),jaar);
+      cel.append(getal,document.createElement("br"),jaar,maakRecordMeetvak(record));
     }
   }
   if(!rijen.length){
@@ -418,10 +430,15 @@ function tekenRecordlijstPng(rijen,lopendJaar,jaarkleur){
     ctx.fillText(rang,22,y+26);
     ctx.fillText(naam,76,y+26,320);
     ctx.textAlign="right";
-    ctx.font="700 22px system-ui";
-    ctx.fillText(recordTekst(rec),600,y+26,200);
-    ctx.font="500 22px system-ui";
-    ctx.fillText(recordTekst(rec.vorig),825,y+26,200);
+    for(const [record,x,gewicht] of [[rec,600,700],[rec.vorig,825,500]]){
+      const meetvak=record?RecordMinimumTime.format(record.d,record.tn_vak):"";
+      ctx.font=`${gewicht} 22px system-ui`;
+      ctx.fillText(recordTekst(record),x,y+(meetvak?17:26),200);
+      if(meetvak){
+        ctx.font="400 15px system-ui";
+        ctx.fillText(meetvak,x,y+34,200);
+      }
+    }
   });
   return paneel;
 }
@@ -616,9 +633,9 @@ function tekenRanglijst(dag,config,lopendJaar){
     const rij=document.createElement("tr");
     if(isLopendRecordjaar(rec,lopendJaar)) rij.dataset.lopendJaar="";
     for(const waarde of [rang,naam,GETAL.format(rec.t)]) rij.insertCell().textContent=waarde;
-    rij.insertCell().append(maakRecordDatum(rec,true));
+    rij.insertCell().append(maakRecordDatum(rec,true),maakRecordMeetvak(rec));
     const vorig=rij.insertCell();
-    if(rec.vorig) vorig.append(GETAL.format(rec.vorig.t)+" °C · ",maakRecordDatum(rec.vorig));
+    if(rec.vorig) vorig.append(GETAL.format(rec.vorig.t)+" °C · ",maakRecordDatum(rec.vorig),maakRecordMeetvak(rec.vorig));
     else vorig.textContent="—";
     return rij;
   }));

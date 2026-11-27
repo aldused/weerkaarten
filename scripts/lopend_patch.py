@@ -108,11 +108,24 @@ def patch_vandaag(records, vals, today):
     if rec is None:
         rec = {"dag": today.day, "tx": None, "tn": None, "tg": None, "rh": None, "sq": None, "fg": None}
         dagen.append(rec); dagen.sort(key=lambda d: d.get("dag", 0))
+    vorig_minimum = rec.get("tn")
     changed = False
     for k in ("tx", "tn", "tg", "rh", "sq", "fg"):
         nieuw = vals.get(k)
         if nieuw is not None and rec.get(k) != nieuw:
             rec[k] = nieuw; changed = True
+    if vals.get("tn") is not None:
+        vorig_vak = rec.get("tn_vak")
+        vak = vals.get("tn_vak")
+        if rec["tn"] == vorig_minimum and vorig_vak:
+            if not vak or (vorig_vak[1] == vak[1] and vorig_vak[0] < vak[0]):
+                vak = vorig_vak
+        if vak != vorig_vak:
+            if vak:
+                rec["tn_vak"] = vak
+            else:
+                rec.pop("tn_vak", None)
+            changed = True
     # Recompute every month summary from unique dated observations.
     mm["dagen"] = sorted({d["dag"]: d for d in dagen}.values(), key=lambda d: d["dag"])
     for field in ("tx", "tn", "tg", "rh", "sq", "fg"):
@@ -215,7 +228,7 @@ def main():
             os.replace(mp + ".tmp", mp)
             changed.append(os.path.basename(mp))
         key = str(stn)
-        sig = [daysig] + [vals.get(k) for k in ("tx", "tn", "tg", "rh", "sq", "fg")]
+        sig = [daysig] + [vals.get(k) for k in ("tx", "tn", "tn_vak", "tg", "rh", "sq", "fg")]
         if state.get(key) == sig and records.get("lopend_dagrecords_version") == 2:
             continue  # niets nieuws sinds onze laatste R2-upload
         patch_vandaag(records, vals, today)

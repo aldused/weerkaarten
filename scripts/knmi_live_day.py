@@ -13,12 +13,21 @@ def aggregate(rows):
     def calc(k, fn):
         v=values(k); return round(fn(v),1) if v else None
     tx=values('tx')+values('ta'); tn=values('tn')+values('ta')
-    return {'tx':round(max(tx),1) if tx else None,'tn':round(min(tn),1) if tn else None,
+    minimum=min(tn,default=None)
+    result={'tx':round(max(tx),1) if tx else None,'tn':round(minimum,1) if minimum is not None else None,
             'tg':calc('ta',lambda v:sum(v)/len(v)), 'fg':calc('ff',lambda v:sum(v)/len(v)),
             'fx':calc('fx',max), 'rh':calc('rg',lambda v:sum(max(0,x) for x in v)/6),
             'sq':calc('ss',lambda v:sum(max(0,x) for x in v)/60),
             'q':calc('qg',lambda v:sum(max(0,x) for x in v)*600/10000),
             'pg':None, 'px':None, 'pn':None}
+    if minimum is not None:
+        times = [datetime.fromisoformat(r['time'].replace('Z', '+00:00')).astimezone(timezone.utc) for r in rows
+                 if r.get('time') and minimum in (r.get('tn'), r.get('ta'))]
+        if times:
+            first = min(times)
+            # The label is the end of the interval; 00:00 closes the UTC day.
+            result['tn_vak'] = [first.hour * 60 + first.minute or 1440, 10]
+    return result
 
 def fetch_live_day(station, day, wigos):
     cache = ROOT/'data'/'observations'/str(station)/f'{day}.json'

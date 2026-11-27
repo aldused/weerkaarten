@@ -524,6 +524,7 @@
 <link rel="stylesheet" href="records-ui.css?v=20260914-1">
 <script defer src="records-ui.js?v=20261101-navigation"></script>
 <script src="record-stations.js?v=20260928-3"></script>
+<script src="record-minimum-time.js?v=20261127"></script>
 </head>
 <body class="climate-page climate-dagrecords_jaar">
 <section class="climate-heading" aria-labelledby="climate-title">
@@ -2301,13 +2302,15 @@ function drjVerzamel(stObj, jaar){
       const houder=eersteBesteRecord(lst);
       if(!houder || drjYr(houder[1])!==jaar) continue;
       const [v,date]=houder;
-      let prevV=null, prevY=null;
+      let prevV=null, prevY=null, prevD=null;
       for(const [v2,d2] of lst){
         if(drjYr(d2)<jaar && (prevV==null || (hoog? v2>prevV : v2<prevV))){
-          prevV=v2; prevY=drjYr(d2);
+          prevV=v2; prevY=drjYr(d2); prevD=d2;
         }
       }
-      out.push({datum:date,waarde:v,label,kleur,station:stObj.station,prevV,prevY,lopend:date===stObj.lopend});
+      const meetvak=key.startsWith('tn_')?globalThis.RecordMinimumTime:null;
+      out.push({datum:date,waarde:v,label,kleur,station:stObj.station,prevV,prevY,lopend:date===stObj.lopend,
+        meetvak:meetvak?.forRecord?.(stObj,date,v),vorigMeetvak:meetvak?.forRecord?.(stObj,prevD,prevV)});
     }
   }
   return out;
@@ -2428,8 +2431,8 @@ function renderDagrecordsJaar(){
         <td style="padding:9px 10px;font-weight:600;white-space:nowrap;">${fmt(r.datum)}${r.lopend?' <span style="font-size:0.75em;color:var(--tekst2);">(lopend)</span>':''}</td>
         ${multiData?`<td style="padding:9px 10px;color:var(--tekst2);">${r.station}</td>`:''}
         <td style="padding:9px 10px;"><span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:0.77em;font-weight:600;color:#fff;background:${r.kleur};">${r.label}</span></td>
-        <td style="padding:9px 10px;text-align:right;font-weight:700;color:${r.kleur};font-family:'DM Mono',monospace;">${r.waarde.toFixed(1)}°</td>
-        <td style="padding:9px 10px;text-align:right;color:var(--tekst2);font-family:'DM Mono',monospace;">${r.prevV!=null?r.prevV.toFixed(1)+"°"+(r.prevY?` <span style="opacity:0.55;">'${String(r.prevY).slice(2)}</span>`:""):"—"}</td>
+        <td style="padding:9px 10px;text-align:right;font-weight:700;color:${r.kleur};font-family:'DM Mono',monospace;">${r.waarde.toFixed(1)}°${r.meetvak?`<small style="display:block;font-weight:400;">${r.meetvak}</small>`:''}</td>
+        <td style="padding:9px 10px;text-align:right;color:var(--tekst2);font-family:'DM Mono',monospace;">${r.prevV!=null?r.prevV.toFixed(1)+"°"+(r.prevY?` <span style="opacity:0.55;">'${String(r.prevY).slice(2)}</span>`:""):"—"}${r.vorigMeetvak?`<small style="display:block;">${r.vorigMeetvak}</small>`:''}</td>
       </tr>`;
     }
     h+=`</tbody></table></div>`;
@@ -3415,6 +3418,8 @@ function toon() {
       ? `${waarde.toFixed(1)}°`
       : `${waarde.toFixed(1)} ${eenheid}`;
     const kleur = richting === "hoog" ? "hoog" : "laag";
+    const meetvak=param==="tn"&&!isRanking
+      ?RecordMinimumTime.forRecord(isMulti?multiData.find(bron=>bron.station===rec[2]):data,label,waardeRaw):"";
 
     const isLopend = !isRanking && label === (data?.lopend);
     const lopendBadge = isLopend
@@ -3438,7 +3443,7 @@ function toon() {
     tbody.innerHTML += `<tr>
       <td class="rank rank-${rank <= 3 ? rank : ''}">${rank <= 3 ? ["🥇","🥈","🥉"][rank-1] : rank}</td>
       <td class="datum-cel">${datumStr}${lopendBadge}</td>
-      <td><span class="waarde ${kleur}">${waardeStr}</span></td>
+      <td><span class="waarde ${kleur}">${waardeStr}</span>${meetvak?`<small style="display:block;" title="Meetvak van het minimum in Nederlandse tijd">${meetvak}</small>`:''}</td>
       ${isMulti && rec[2] ? `<td style="color:var(--tekst2);font-size:0.85em;">${rec[2]}${reeksBadge}</td>` : ""}
     </tr>`;
   });

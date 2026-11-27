@@ -36,7 +36,8 @@ class HistoricalMap(unittest.TestCase):
    de_bilt=fixtures['260']
    de_bilt['lopend']='2026-01-27'
    de_bilt['maanddetail']={
-    '1930':{'1':{'dagen':[{'dag':27,'tx':-4.6,'tn':-24.6}]}},
+    '1930':{'1':{'dagen':[{'dag':27,'tx':-4.6,'tn':-24.6,'tn_vak':[360,60]}]}},
+    '1942':{'1':{'dagen':[{'dag':27,'tn':-24.8,'tn_vak':[420,60]}]}},
     '1950':{'1':{'dagen':[{'dag':27,'tx':-4.7,'tn':-24.7}]}},
    }
    for soort in ('tx_laag','tn_laag'):
@@ -52,8 +53,11 @@ class HistoricalMap(unittest.TestCase):
     self.assertEqual(len(days),366)
     self.assertEqual(days['01-27']['De Bilt']['t'],waarde)
     self.assertEqual(days['01-27']['De Bilt']['d'],'1942-01-27')
-    self.assertEqual(days['01-27']['De Bilt']['vorig'],
-                     {'t':round(waarde+0.2,1),'d':'1930-01-27'})
+    vorig={'t':round(waarde+0.2,1),'d':'1930-01-27'}
+    if soort=='tn_laag':
+     self.assertEqual(days['01-27']['De Bilt']['tn_vak'],[420,60])
+     vorig['tn_vak']=[360,60]
+    self.assertEqual(days['01-27']['De Bilt']['vorig'],vorig)
    self.assertEqual(cold['dagrecords']['tn_laag']['01-27']['Warnsveld'],
                     {'t':-25.4,'d':'1942-01-27','h':1})
    vandaag=datetime.now(ZoneInfo('Europe/Amsterdam')).date()
@@ -64,12 +68,16 @@ class HistoricalMap(unittest.TestCase):
    warmere_tx=cold['dagrecords']['tx_laag'][sleutel]['De Bilt']['t']+1
    for soort,waarde in [('tx_laag',-40),('tn_laag',-45)]:
     rijen[soort].insert(0,[waarde,iso])
+   de_bilt['maanddetail'].setdefault(str(vandaag.year),{}).setdefault(str(vandaag.month),{'dagen':[]})['dagen'].append(
+    {'dag':vandaag.day,'tn':-45,'tn_vak':[270,10]})
    (root/'records_260.json').write_text(json.dumps(de_bilt))
    result=run('--koude');self.assertEqual(result.returncode,0,result.stderr)
    met_tussenstand=json.loads(cold_output.read_bytes())
    self.assertEqual(met_tussenstand['voorlopig']['datum'],iso)
    for soort,waarde in [('tx_laag',-40),('tn_laag',-45)]:
-    self.assertEqual(met_tussenstand['voorlopig']['records'][soort]['De Bilt'],{'t':waarde,'d':iso})
+    kandidaat={'t':waarde,'d':iso}
+    if soort=='tn_laag': kandidaat['tn_vak']=[270,10]
+    self.assertEqual(met_tussenstand['voorlopig']['records'][soort]['De Bilt'],kandidaat)
     self.assertNotEqual(met_tussenstand['dagrecords'][soort][sleutel]['De Bilt']['d'],iso)
    rijen['tx_laag'][0][0]=warmere_tx
    (root/'records_260.json').write_text(json.dumps(de_bilt))
