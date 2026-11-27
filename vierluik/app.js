@@ -5,6 +5,7 @@ import {readCatalog} from './data-source.js?v=20261125-gfs-iconeu';
 import {cloudBaseLevels,cloudBaseColors,heightLabels} from './cloud-base.js?v=20261122-nulgradenniveau-voet';
 import {cloudColor,cloudRgbLegend} from './clouds.js?v=20261123-wolkenlagen-rgb';
 import {HOUR,dayKey,validateFeed,comparisonTimes,hasForecastTime,closestIndex} from './forecast-core.js?v=20261122-bereik';
+import {precipitationColors,precipitationShades} from './precipitation-type.js?v=20261127-blauwe-regen';
 'use strict';
 const $ = id => document.getElementById(id);
 const iconPaths = {
@@ -214,7 +215,7 @@ function updatePresentedCard(index,selection,result){
 function updateMobileTabs(){document.querySelectorAll('.mobile-models button').forEach((b,i)=>{const d=definitions[presented.selections[i].model];b.textContent=d.short;b.style.setProperty('--model',d.color);b.setAttribute('aria-label',`Spring naar kaart ${i+1}: ${d.name}`);b.setAttribute('aria-controls',`card-${i}`);});}
 function setActive(i){const maps=$('maps'),card=$(`card-${i}`);maps.scrollTo({left:card.offsetLeft-maps.offsetLeft,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}
 function buildCards(){
- $('maps').innerHTML=cards.map((c,i)=>`<article class="map-card" id="card-${i}" style="--model:${c.color}" aria-label="Modelkaart ${i+1}"><header class="card-header"><span class="model-mark" aria-hidden="true">${c.short}</span><div class="model-picker"><label class="sr" for="model-${i}">Model voor kaart ${i+1}</label><select class="model-select" id="model-${i}">${Object.entries(definitions).map(([key,d])=>`<option value="${key}" ${key===c.model?'selected':''} ${state.catalogs[key]?'':'disabled'}>${d.name}</option>`).join('')}</select><div class="model-meta"><span class="resolution">${c.resolution}</span><span class="run-label"></span></div></div><button class="icon-button card-expand" aria-label="${c.name} vergroten" title="Deze kaart vergroten">${icon('maximize')}</button></header><div class="map-window"><iframe id="frame-${i}" title="${c.name}: ${layers[state.layer]}" src="map.html?v=20261127-icon-neerslagtype&id=${i}&model=${c.model}#model=${c.model}&kaart=weather" loading="eager"></iframe><div class="map-label"><span class="map-label-text">Significant weer</span><span class="layer-unit"></span></div></div><div class="card-bottom"><span class="card-time loading">Kaart laden…</span><span class="lead-time"></span></div></article>`).join('');
+ $('maps').innerHTML=cards.map((c,i)=>`<article class="map-card" id="card-${i}" style="--model:${c.color}" aria-label="Modelkaart ${i+1}"><header class="card-header"><span class="model-mark" aria-hidden="true">${c.short}</span><div class="model-picker"><label class="sr" for="model-${i}">Model voor kaart ${i+1}</label><select class="model-select" id="model-${i}">${Object.entries(definitions).map(([key,d])=>`<option value="${key}" ${key===c.model?'selected':''} ${state.catalogs[key]?'':'disabled'}>${d.name}</option>`).join('')}</select><div class="model-meta"><span class="resolution">${c.resolution}</span><span class="run-label"></span></div></div><button class="icon-button card-expand" aria-label="${c.name} vergroten" title="Deze kaart vergroten">${icon('maximize')}</button></header><div class="map-window"><iframe id="frame-${i}" title="${c.name}: ${layers[state.layer]}" src="map.html?v=20261127-blauwe-regen&id=${i}&model=${c.model}#model=${c.model}&kaart=weather" loading="eager"></iframe><div class="map-label"><span class="map-label-text">Significant weer</span><span class="layer-unit"></span></div></div><div class="card-bottom"><span class="card-time loading">Kaart laden…</span><span class="lead-time"></span></div></article>`).join('');
  document.querySelector('.mobile-models').innerHTML=cards.map((c,i)=>`<button data-card="${i}">${c.short}</button>`).join('');
  cards.forEach((c,i)=>{
    const frame=$(`frame-${i}`);
@@ -320,10 +321,16 @@ function heightScale(name,colors,levels,format){
     <div class="scale">${colors.map(color=>`<i style="background:${color}"></i>`).join('')}</div>
     <div class="height-ticks" style="--height-tick-count:${ticks.length}">${ticks.join('')}</div></div>`;
 }
+const precipLabels=[[1,'Regen'],[2,'Sneeuw'],[3,'Natte sneeuw'],[4,'Mix'],[5,'IJzel'],
+  [6,'IJsregen'],[9,'Korrelhagel'],[8,'Type onbekend']];
+const precipTypeLegend='<div class="type-key">'+precipLabels.map(([type,label])=>
+  `<span><i class="swatch" style="--swatch:rgb(${precipitationColors[type].join(',')})"></i>${label}</span>`
+).join('')+'</div>';
+const rainIntensityColors=precipitationShades[1].map(color=>`rgb(${color.join(',')})`);
+
 function renderLegend(){
  const layer=presented?.selections[0].layer||state.layer;
  $('legend-title').textContent=layers[layer];let html='';
- const types='<div class="type-key"><span><i class="swatch" style="--swatch:rgb(26,155,102)"></i>Regen</span><span><i class="swatch" style="--swatch:rgb(86,100,225)"></i>Sneeuw</span><span><i class="swatch" style="--swatch:rgb(79,168,235)"></i>Natte sneeuw</span><span><i class="swatch" style="--swatch:rgb(128,63,196)"></i>Mix</span><span><i class="swatch" style="--swatch:rgb(224,35,113)"></i>IJzel</span><span><i class="swatch" style="--swatch:rgb(245,129,24)"></i>IJsregen</span><span><i class="swatch" style="--swatch:rgb(178,141,23)"></i>Korrelhagel</span><span><i class="swatch" style="--swatch:rgb(25,123,181)"></i>Type onbekend</span></div>';
  switch(layer){
  case 'cloudBase':html='<div class="scale-group height-legend"><div class="scale-name">Boven de grond · m / ft · gearceerd: geen diagnose</div><div class="scale">'+cloudBaseColors.map(c=>'<i style="background:'+c+'"></i>').join('')+'</div><div class="height-ticks">'+cloudBaseLevels.map(v=>{const labels=heightLabels(v);return '<span>'+labels[0]+'<small>'+labels[1]+'</small></span>';}).join('')+'</div></div>';break;
  case 'cloudRgb':
@@ -333,8 +340,11 @@ function renderLegend(){
    break;
  case 'clouds':html=scale('Hoog · blauw',cloudRamp(0),['0%','50%','100%'])+scale('Midden · geel',cloudRamp(1),['0%','50%','100%'])+scale('Laag · rood',cloudRamp(2),['0%','50%','100%']);break;
  case 'cloudHigh':case 'cloudMiddle':case 'cloudLow':html=scale(layers[layer]+' · bedekking',cloudRamp(({cloudHigh:0,cloudMiddle:1,cloudLow:2})[layer]),['0%','50%','100%']);break;
- case 'weather':html=scale('Totale bewolking',['#faf7ef','#e5e6e4','#c5cbd1','#a9b0b9','#939da9'],['0%','25%','50%','75%','100%'])+scale('Neerslagintensiteit · mm/u',Array.from({length:7},(_,i)=>'rgb('+[26,155,102].map(c=>Math.round(c*.83+(1-i/6)*115)).join(',')+')'),['0,05','0,2','0,5','1','2','5','≥10'])+types;break;
- case 'ptypeMap':html=types;break;
+ case 'weather':
+   html=scale('Totale bewolking',['#faf7ef','#e5e6e4','#c5cbd1','#a9b0b9','#939da9'],['0%','25%','50%','75%','100%'])+
+     scale('Neerslagintensiteit · mm/u',rainIntensityColors,['0,05','0,2','0,5','1','2','5','≥10'])+precipTypeLegend;
+   break;
+ case 'ptypeMap':html=precipTypeLegend;break;
  case 'vis':html=scale('Zicht · m / km',['#764f91','#ab779e','#ddb18c','#f2d58c','#c5dbb5','#94c7c7','#b5d9e8','#e7f1f7'],['0 m','200 m','500 m','1 km','2 km','5 km','10 km','≥20 km']);break;
  case 'rate':html=scale('Neerslagintensiteit · mm/u',['#eef2f5','#d4eefe','#a5e1f7','#6bcbf4','#32afe9','#258acb','#3269b7','#7851b2','#ca46a1'],['0','0,1','0,5','1','2','5','10','20','≥50']);break;
  case 'td2m':case 'windchill':case 't2m':case 't850':case 't500':html=scale('Temperatuur · °C',['#57258d','#397ad5','#99cefa','#d0edff','#c3ecae','#76c585','#50ad72','#d8dd71','#ffde64','#f2a443','#e5653b'],['−20','−5','0','5','10','15','20','25','30']);break;
