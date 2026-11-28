@@ -1219,9 +1219,9 @@ const MENU_PRODUCTS = [
     "description": "Vier modelkaarten naast elkaar op dezelfde tijd · HARMONIE 43/46, ICON-D2, ECMWF, AROME, UKV, GFS en ICON-EU",
     "category": "verwachting", "type": "kaarten", "section": "",
     "icon": "vierluik", "href": "index.html#weerkaart",
-    "src": "vierluik/index.html?v=20261128-gedeelde-kaart", "thumbnail": null,
+    "src": "vierluik/index.html?v=20261128-modelradar", "thumbnail": null,
     "facets": {"veld":["significant","temp","neerslag","wind","bewolking","zon","hoogte"],"model":["harmonie","harmonie46","icond2","ecmwf","arome","ukv","gfs","iconeu"],"gebied":["nl"],"weergave":["4"]},
-    "keywords": "vierluik 4-luik vier modellen vergelijken Benelux HARMONIE 43 HARMONIE 46 ICON-D2 ECMWF IFS AROME HD UKMO UKV GFS NOAA ICON-EU DWD significant weer dauwpunt gevoelstemperatuur zicht wolkenbasis bewolking wolkenlagen RGB neerslag windstoten zonduur zonuren dagsom",
+    "keywords": "vierluik 4-luik vier modellen vergelijken Benelux HARMONIE 43 HARMONIE 46 ICON-D2 ECMWF IFS AROME HD UKMO UKV GFS NOAA ICON-EU DWD significant weer dauwpunt gevoelstemperatuur zicht wolkenbasis bewolking wolkenlagen RGB neerslag radarreflectiviteit modelradar gesimuleerde radar dBZ windstoten zonduur zonuren dagsom",
     "restricted": false
   },
   {

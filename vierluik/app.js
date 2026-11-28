@@ -1,7 +1,8 @@
 import {createFrameCache,preloadPolicy,preloadTimes} from './frame-cache.js?v=20261127-kaartbuffer';
 import {sunshineWindow,sunshineTotalLevels,sunshineTotalColors} from './sunshine.js?v=20261123-zonuren-geler';
 import {elevationLabels,freezingLevels,freezingColors} from './height-levels.js';
-import {readCatalog} from './data-source.js?v=20261125-gfs-iconeu';
+import {readCatalog} from './data-source.js?v=20261128-modelradar';
+import {radarColors,radarTicks,radarSources,radarExplanation} from './radar-reflectivity.js';
 import {cloudBaseLevels,cloudBaseColors,heightLabels} from './cloud-base.js?v=20261122-nulgradenniveau-voet';
 import {cloudColor,cloudRgbLegend} from './clouds.js?v=20261123-wolkenlagen-rgb';
 import {HOUR,dayKey,validateFeed,comparisonTimes,hasForecastTime,closestIndex} from './forecast-core.js?v=20261128-uurbestanden';
@@ -39,9 +40,9 @@ const definitions = {...Object.fromEntries(cards.map(c=>[c.model,{...c}])),arome
 };
 const cloudRamp=which=>Array.from({length:11},(_,i)=>'rgb('+cloudColor(...[0,1,2].map(n=>n===which?i*10:0)).join(',')+')');
 const isCloudLayer=layer=>['clouds','cloudRgb','cloudHigh','cloudMiddle','cloudLow'].includes(layer);
-const catalogModeFor=layer=>layer==='cloudBase'?'cloudbase':isCloudLayer(layer)?'clouds':'standard';
-const layers={cloudBase:'Wolkenbasis',clouds:'Bewolking H/M/L',cloudRgb:'Wolkenlagen (RGB)',cloudHigh:'Hoge bewolking',cloudMiddle:'Middelbare bewolking',cloudLow:'Lage bewolking',vis:'Zicht',td2m:'Dauwpunt',windchill:'Gevoelstemperatuur',rate:'Neerslag',weather:'Significant weer',t2m:'Temperatuur',ws:'Wind',gust:'Windstoten',ptot:'Neerslagsom',ptypeMap:'Neerslagtype',t850:'Temperatuur 850 hPa',t500:'Temperatuur 500 hPa',frz:'0 °C-niveau',sdep:'Sneeuwhoogte',sun:'Zonduur',sunTotal:'Zonuren · dagsom'};
-const units={cloudBase:'m / ft',clouds:'%',cloudRgb:'%',cloudHigh:'%',cloudMiddle:'%',cloudLow:'%',vis:'m / km',td2m:'°C',windchill:'°C',rate:'mm/u',weather:'°C / mm/u',t2m:'°C',t850:'°C',t500:'°C',ws:'Bft',gust:'km/u',ptot:'mm',frz:'m / ft',sdep:'cm',sun:'min/uur',sunTotal:'uur',ptypeMap:''};
+const catalogModeFor=layer=>layer==='radar'?'radar':layer==='cloudBase'?'cloudbase':isCloudLayer(layer)?'clouds':'standard';
+const layers={cloudBase:'Wolkenbasis',clouds:'Bewolking H/M/L',cloudRgb:'Wolkenlagen (RGB)',cloudHigh:'Hoge bewolking',cloudMiddle:'Middelbare bewolking',cloudLow:'Lage bewolking',vis:'Zicht',td2m:'Dauwpunt',windchill:'Gevoelstemperatuur',rate:'Neerslag',radar:'Radarreflectiviteit',weather:'Significant weer',t2m:'Temperatuur',ws:'Wind',gust:'Windstoten',ptot:'Neerslagsom',ptypeMap:'Neerslagtype',t850:'Temperatuur 850 hPa',t500:'Temperatuur 500 hPa',frz:'0 °C-niveau',sdep:'Sneeuwhoogte',sun:'Zonduur',sunTotal:'Zonuren · dagsom'};
+const units={cloudBase:'m / ft',clouds:'%',cloudRgb:'%',cloudHigh:'%',cloudMiddle:'%',cloudLow:'%',vis:'m / km',td2m:'°C',windchill:'°C',rate:'mm/u',radar:'dBZ',weather:'°C / mm/u',t2m:'°C',t850:'°C',t500:'°C',ws:'Bft',gust:'km/u',ptot:'mm',frz:'m / ft',sdep:'cm',sun:'min/uur',sunTotal:'uur',ptypeMap:''};
 const MODEL_KEYS=Object.keys(definitions);
 const state={index:0,layer:'weather',sync:true,playing:false,catalogs:null,times:[],timeMode:'common',followNow:true,catalogMode:'standard'};
 const timeFormatter=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
@@ -204,6 +205,7 @@ function updatePresentedCard(index,selection,result){
  card.querySelector('iframe').title=d.name+': '+layers[layer];
  const period=layer==='gust'?result.period:null,baseKind=layer==='cloudBase'?result.cloudBaseKind:null;
  card.querySelector('.map-label-text').textContent=layers[layer]+(baseKind==='ceiling'?' · ceiling >50%':
+   layer==='radar'&&result.radarKind?' · '+radarSources[result.radarKind]:
    baseKind==='ukv_cbh'?' · ≥2,5 oktas':period?` · ${period} uur`:layer==='sun'&&result.sunSourceHours>1?' · uurgemiddelde':'');
  card.querySelector('.layer-unit').textContent=units[layer];
  card.querySelector('.lead-time').textContent=result.ready?`T+${Math.round((selection.time-run)/HOUR)} u`:'';
@@ -215,7 +217,7 @@ function updatePresentedCard(index,selection,result){
 }
 function updateMobileTabs(){document.querySelectorAll('.mobile-models button').forEach((b,i)=>{const d=definitions[presented.selections[i].model];b.textContent=d.short;b.style.setProperty('--model',d.color);b.setAttribute('aria-label',`Spring naar kaart ${i+1}: ${d.name}`);b.setAttribute('aria-controls',`card-${i}`);});}
 function setActive(i){const maps=$('maps'),card=$(`card-${i}`);maps.scrollTo({left:card.offsetLeft-maps.offsetLeft,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}
-const MAP_URL='map.html?v=20261128-gedeelde-kaart';
+const MAP_URL='map.html?v=20261128-modelradar';
 let sharedMap;
 // weerlab.nl levert map.html met max-age=0 en zonder validator: vier iframes zouden
 // het elk opnieuw downloaden (4 × 72 KB). Haal het één keer op en geef alle kaarten
@@ -363,6 +365,7 @@ function renderLegend(){
      scale('Neerslagintensiteit · mm/u',rainIntensityColors,['0,05','0,2','0,5','1','2','5','≥10'])+precipTypeLegend;
    break;
  case 'ptypeMap':html=precipTypeLegend;break;
+ case 'radar':html=scale('dBZ · ondergrens per kleur',radarColors,radarTicks);break;
  case 'vis':html=scale('Zicht · m / km',['#764f91','#ab779e','#ddb18c','#f2d58c','#c5dbb5','#94c7c7','#b5d9e8','#e7f1f7'],['0 m','200 m','500 m','1 km','2 km','5 km','10 km','≥20 km']);break;
  case 'rate':html=scale('Neerslagintensiteit · mm/u',['#eef2f5','#d4eefe','#a5e1f7','#6bcbf4','#32afe9','#258acb','#3269b7','#7851b2','#ca46a1'],['0','0,1','0,5','1','2','5','10','20','≥50']);break;
  case 'td2m':case 'windchill':case 't2m':case 't850':case 't500':html=scale('Temperatuur · °C',['#57258d','#397ad5','#99cefa','#d0edff','#c3ecae','#76c585','#50ad72','#d8dd71','#ffde64','#f2a443','#e5653b'],['−20','−5','0','5','10','15','20','25','30']);break;
@@ -380,7 +383,7 @@ function renderLegend(){
  case 'sun':html=scale('Zonduur · minuten per uur',['#697889','#a2a7a7','#c1b995','#ddc58a','#f3d17e','#ffdd70','#ffeb61'],['0','10','20','30','40','50','60']);break;
  }
  $('legend-content').classList.remove('native-summary');
- if(!['weather','ptypeMap','sun','sunTotal','clouds','cloudRgb','cloudHigh','cloudMiddle','cloudLow','cloudBase','frz'].includes(layer)&&actualLegends.has(layer)){
+ if(!['weather','ptypeMap','radar','sun','sunTotal','clouds','cloudRgb','cloudHigh','cloudMiddle','cloudLow','cloudBase','frz'].includes(layer)&&actualLegends.has(layer)){
    const holder=document.createElement('div');holder.innerHTML=actualLegends.get(layer);
    const bar=holder.querySelector('.scale'),ticks=holder.querySelector('.scale-ticks');
    if(bar&&ticks)html=`<div class="scale-group"><div class="scale-name">${layers[layer]} · ${units[layer]}</div>${bar.outerHTML}${ticks.outerHTML}</div>`;
@@ -433,7 +436,11 @@ $('settings').onclick=()=>$('options-dialog').showModal();['provinces','arrows',
 $('fullscreen').onclick=async()=>{if(parent!==window){parent.postMessage({type:'weerlab-fullscreen-toggle'},location.origin);return;}try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{showToast('Gebruik de beeldvullende modus van je browser.');}};
 const demoInfo='<p>Zonuren telt de zonduur in Nederlandse tijd op tot het gekozen uur. Op een dag met beperkte dekking begint de som op het eerste tijdstip dat alle gekozen runs bestrijken. Een deel van een meeruursvak wordt naar tijdsduur meegerekend op basis van het gemiddelde van dat vak.</p><p>Wolkenbasis wordt getoond in meters en voeten boven de grond. ICON-D2 toont ceiling bij meer dan 50% laagbedekking; UKV de basis vanaf 2,5 oktas. De eigen bronrun staat boven de kaart. Diagnosecodes en de bovengrenswaarde 20.000 m worden zonder hoogte weergegeven. Gearceerd betekent geen bruikbare diagnose; mist is daarbij niet uitgesloten. ICON-EU gebruikt de ceiling van DWD. AROME en GFS leveren hier geen wolkenbasis.</p><p>Wolkenlagen (RGB) mengt lage bewolking in rood, middelbare in groen en hoge in blauw. Helder is zwart. Volledige bedekking in alle drie de lagen is wit.</p><p>Bewolking H/M/L gebruikt de afzonderlijke bronvelden: hoog in blauw, midden in geel en laag in rood. De drie percentages staan als H/M/L op vaste locaties. Kies Hoge, Middelbare of Lage bewolking om één laag los te bekijken. Deze kaarten gebruiken de nieuwste wolkenrun; de run staat boven iedere kaart. ECMWF-tussenuren zijn geïnterpoleerd.</p><p>Extra modellen: AROME HD 1.3 (Météo-France, Licence Ouverte 2.0) en UKMO UKV 2 km (British Crown copyright, Met Office, CC BY-SA 4.0). Bronvelden worden naar hetzelfde kaartrooster als de overige modellen vertaald. UKV gebruikt schermtemperatuur op 1,5 meter. AROME levert geen zichtveld aan; ook andere ontbrekende bronlagen krijgen een melding.</p><p>GFS gebruikt NOAA-data op 0,25°. ICON-EU gebruikt DWD-data op het Europese rooster van circa 7 km. Voor ICON-EU worden velden met drie-uurlijkse stappen na +78 uur per uur geïnterpoleerd. De neerslag uit een drie-uursvak wordt daarbij gelijk over de uren verdeeld.</p><p>De compacte bediening geeft de kaarten meer ruimte. Bij significant weer staan temperatuur en neerslag als getallen op vaste locaties; bij andere kaartlagen zie je de waarde van die laag. De uurknoppen onder de slider werken zoals in het oude vierluik.</p><p>Dit vierluik gebruikt de <b>oorspronkelijke kaartweergave van Modelkaarten Benelux</b>: dezelfde geografische ondergrond, kleuren, windpijlen en modelberekeningen. Plaatsnamen zijn weggelaten.</p><p>Dit vierluik haalt bij openen de nieuwste modelruns op en controleert elke 90 seconden opnieuw zolang de pagina zichtbaar is. Kies Gelijke tijden voor de gezamenlijke geldige uren, of Volledig bereik · HARMONIE voor alle beschikbare uren van de gekozen modellen. Buiten het bereik van een model blijft die kaart leeg; er wordt geen ander tijdstip getoond. Bij een tijdelijke storing blijven reeds geladen kaarten staan en wordt de fout vermeld. ECMWF-velden tussen bronstappen worden volgens de bestaande kaartcode geïnterpoleerd.</p><p>Alle kaarten volgen dezelfde lokale tijd. De modelruns en verwachtingstermijnen kunnen verschillen. De vier kaarten staan altijd naast elkaar. Op een smal scherm schuif je horizontaal of gebruik je de modelknoppen om naar een kaart te springen. De kaarten blijven daarbij groot en leesbaar.</p><p>Sleep om te verschuiven, gebruik + en − om te zoomen, of tik op een plek voor lokale waarden.</p>';
 $('help').onclick=$('snapshot-info').onclick=()=>showInfo('Jouw live vierluik',demoInfo);$('close-info').onclick=()=>$('info-dialog').close();
-$('legend-info').onclick=()=>showInfo(layers[presented?.selections[0].layer||state.layer],'<p>Dezelfde kleur betekent op alle vier de kaarten dezelfde waarde. Bij significant weer toont grijs de bewolking; de neerslagkleur geeft het type aan en de tint de intensiteit. De volledige type- en kleurschaal staat hieronder.</p><div id="native-legend"></div><p>Windstoten hebben de bronperiode van het model. Neerslagsommen beginnen bij de eigen modelstart. Zonduur wordt altijd getoond in minuten per uur (0–60). Bij een bronperiode van 3 of 6 uur staat er een uurgemiddelde; de bron geeft dan geen exacte verdeling per uur. Vergelijk deze sommen en maxima daarom met hun tijdvak in gedachten.</p>');
+$('legend-info').onclick=()=>{
+ const layer=presented?.selections[0].layer||state.layer;
+ if(layer==='radar')return showInfo(layers.radar,'<p>'+radarExplanation+'</p>');
+ return showInfo(layers[layer],'<p>Dezelfde kleur betekent op alle vier de kaarten dezelfde waarde. Bij significant weer toont grijs de bewolking; de neerslagkleur geeft het type aan en de tint de intensiteit. De volledige type- en kleurschaal staat hieronder.</p><div id="native-legend"></div><p>Windstoten hebben de bronperiode van het model. Neerslagsommen beginnen bij de eigen modelstart. Zonduur wordt altijd getoond in minuten per uur (0–60). Bij een bronperiode van 3 of 6 uur staat er een uurgemiddelde; de bron geeft dan geen exacte verdeling per uur. Vergelijk deze sommen en maxima daarom met hun tijdvak in gedachten.</p>');
+};
 // Neem de legenda en bronuitleg van de eerste kaart over.
 $('legend-info').addEventListener('click',()=>{
   try {

@@ -10,11 +10,11 @@ const nativeUrl=file=>new URL(file,'https://harmonie-data.weerlab.nl/').href;
 const wholeFiles=createFrameCache(32*1024**2,1,entry=>entry.buffer.byteLength,async ({url,info,meta},signal,priority)=>{
  const response=await fetch(url,{cache:'no-store',signal:AbortSignal.any([signal,AbortSignal.timeout(12000)]),priority});
  if(!response.ok||cleanEtag(response.headers.get('ETag'))!==cleanEtag(info.etag)){
-  await response.body?.cancel();throw Error('Wolkenrun is gewijzigd');
+  await response.body?.cancel();throw Error('Modelrun is gewijzigd');
  }
  const buffer=await response.arrayBuffer(),header=nativeHeader(buffer.slice(0,16),info,meta);
  const size=header.nLat*header.nLon*header.nComp*header.bytes;
- if(buffer.byteLength!==16+size*header.nSteps)throw Error('Wolkenbestand onvolledig');
+ if(buffer.byteLength!==16+size*header.nSteps)throw Error('Modelbestand onvolledig');
  return {buffer,header,size};
 });
 const cleanEtag=value=>value?.replace(/^W\//,'');
@@ -32,9 +32,9 @@ async function byteRange(url,begin,end,etag,signal,priority){
 }
 async function field(name,step,run,target,magnitude,signal,priority){
  const source=run.native,info=source.meta.parameters[name];if(!info)return null;
- // Mutable cloud products may be stored with Content-Encoding: gzip.
+ // Mutable products may be stored with Content-Encoding: gzip.
  // Their byte ranges refer to the compressed stream.
- if(source.cloudWhole){
+ if(source.wholeFile){
   const url=nativeUrl(info.file)+'?v='+encodeURIComponent(source.version)+'&etag='+encodeURIComponent(info.etag);
   const {buffer,header,size}=await wholeFiles(url,{url,info,meta:source.meta},signal,priority);
   const begin=16+step.nativeIndex*size;
@@ -64,10 +64,11 @@ function wetBulb(t,dew){
  return t*Math.atan(.151977*Math.sqrt(rh+8.313659))+Math.atan(t+rh)-Math.atan(rh-1.676331)+.00391838*rh**1.5*Math.atan(.023101*rh)-4.686035;
 }
 export async function loadNativeFrame(step,run,target,signal,priority){
- const names=run.native.cloudOnly?[run.native.cloudParameter||'bewolking']:['temp','dauwpunt','wind','windstoten','bewolking','neerslag','cumul','druk','zicht','cloud_total','sneeuwhoogte'];
+ const names=run.native.singleField?[run.native.singleField]:['temp','dauwpunt','wind','windstoten','bewolking','neerslag','cumul','druk','zicht','cloud_total','sneeuwhoogte'];
  const values=await Promise.all(names.map(name=>field(name,step,run,target,name==='windstoten',signal,priority))),raw=Object.fromEntries(names.map((name,i)=>[name,values[i]]));
  const f={nativeSource:true,regional:true,gustPeriod:step.gustPeriod};
  for(const [source,dest] of [['temp','t2m'],['dauwpunt','td2m'],['neerslag','rain'],['cumul','ptot'],['zicht','vis'],['cloud_total','tcc'],['sneeuwhoogte','sdep']])if(raw[source])f[dest]=raw[source][0];
+ if(raw.radar){f.radar=raw.radar[0];f.radarKind=run.native.meta.parameters.radar.radarKind;}
  if(raw.wolkenbasis){const info=run.native.meta.parameters.wolkenbasis,data=cloudBaseData(raw.wolkenbasis[0],info);f.cloudBase=data.values;f.cloudBaseStatus=data.status;f.cloudBaseKind=info.kind;}
  if(raw.wind){[f.u,f.v]=raw.wind;f.ws=Float32Array.from(f.u,(u,i)=>Math.hypot(u,f.v[i])*3.6);}
  if(raw.windstoten)f.gust=Float32Array.from(raw.windstoten[0],v=>v*3.6);

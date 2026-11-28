@@ -223,6 +223,7 @@
 <script type="module">
 import {precipitationKind,precipitationLegend,precipitationColors as pColors,
   precipitationIntensity as intensity,precipitationShades as pShades} from './precipitation-type.js?v=20261127-blauwe-regen';
+import {radarLevels,radarColors,radarTicks,radarSources,radarExplanation,estimateReflectivity} from './radar-reflectivity.js';
 import {createFrameCache,preloadPolicy} from './frame-cache.js?v=20261127-kaartbuffer';
 import {elevationLabels,freezingLevels,freezingColors} from './height-levels.js';
 import {visibilityMinima} from './visibility-labels.js?v=20261122-bereik';
@@ -254,7 +255,7 @@ const LIMITS = {west:grid.lon0, east:grid.lon0+grid.dx*(grid.w-1), north:grid.la
 const HOME = {lat:51.58, lon:5.08, zoom:1};
 const state = {...HOME, layer:'weather', unit:'kmh', idx:0, run:runs[0], frame:null, selected:null, playing:false};
 const comparison = {active:false, run:null, step:null, frame:null, loading:false, failed:false};
-const titles = {cloudBase:'Wolkenbasis',clouds:'Bewolking hoog/midden/laag',cloudRgb:'Wolkenlagen (RGB)',cloudHigh:'Hoge bewolking',cloudMiddle:'Middelbare bewolking',cloudLow:'Lage bewolking',vis:'Zicht',rate:'Neerslagintensiteit',weather:'Significant weer', t2m:'Temperatuur op 2 m', ws:'Wind op 10 m', gust:'Windstoten op 10 m',
+const titles = {cloudBase:'Wolkenbasis',clouds:'Bewolking hoog/midden/laag',cloudRgb:'Wolkenlagen (RGB)',cloudHigh:'Hoge bewolking',cloudMiddle:'Middelbare bewolking',cloudLow:'Lage bewolking',vis:'Zicht',rate:'Neerslagintensiteit',radar:'Radarreflectiviteit',weather:'Significant weer', t2m:'Temperatuur op 2 m', ws:'Wind op 10 m', gust:'Windstoten op 10 m',
   ptot:'Neerslagsom', sun:'Zonduur', t850:'Temperatuur op 850 hPa', t500:'Temperatuur op 500 hPa',
   sdep:'Sneeuwhoogte (cm)', frz:'0 °C-niveau',sunTotal:'Zonuren · dagsom', ptypeMap:'Neerslagtype',td2m:'Dauwpunttemperatuur op 2 m',windchill:'Gevoelstemperatuur · JAG/TI'};
 const temperatureLayers = ['t2m','td2m','windchill','t850','t500'];
@@ -397,6 +398,7 @@ function visibilityText(meters){return !Number.isFinite(meters)||meters<0?'—':
 const visibilityLevels=[0,200,500,1000,2000,5000,10000,20000];
 const visibilityColors=['#764f91','#ab779e','#ddb18c','#f2d58c','#c5dbb5','#94c7c7','#b5d9e8','#e7f1f7'];
 const visibilityRGB=visibilityColors.map(css);
+const radarRGB = radarColors.map(css);
 const totalRGB = totalColors.map(css), sunnyRGB = sunnyColors.map(css), snowRGB = snowColors.map(css);
 const freezingRGB=freezingColors.map(css);
 
@@ -470,7 +472,7 @@ async function interpolateFrame(step,run,signal,priority){
 
 async function decodeFrame(step,run,signal,priority){
   const sourceGrid = run.sourceGrid||models[run.modelKey].grid;
-  if(run.native){const {loadNativeFrame}=await import('./native-loader.js?v=20261127-kaartbuffer');return addWindchill(await loadNativeFrame(step,run,sourceGrid,signal,priority));}
+  if(run.native){const {loadNativeFrame}=await import('./native-loader.js?v=20261128-modelradar');return addWindchill(await loadNativeFrame(step,run,sourceGrid,signal,priority));}
   const payload=await stepData(step,run,signal,priority);
   let compressed=payload;
   if(typeof payload==='string'){
@@ -615,6 +617,11 @@ function paintRaster(ctx,fields){
         ? cloudRgbColor(h,m,l)
         : cloudColor(layer==='clouds'||layer==='cloudHigh'?h:0,layer==='clouds'||layer==='cloudMiddle'?m:0,layer==='clouds'||layer==='cloudLow'?l:0);
       if(!color)continue;alpha=255;
+    }else if(layer==='radar'){
+      const value=scalar[k];
+      if(!Number.isFinite(value)||value<radarLevels[0])continue;
+      color=radarRGB[radarLevels.findLastIndex(level=>value>=level)];
+      alpha=235;
     }else if(layer==='ptypeMap'){
       const p=fields.precipKind[k];
       if(!p)continue;
@@ -762,8 +769,8 @@ function cityLabels(ctx,fields){
     if(spoken.length>=budget)break;
     const [x,y]=xy(p.lon,p.lat),[i,j]=gridPoint(p.lon,p.lat);
     if(x<32||x>width-32||y<48||y>height-24||i<0||j<0||i>grid.w-1||j>grid.h-1)continue;
-    const value=visibility&&Number.isFinite(p.value)?p.value:composite?bilinear(fields.t2m,i,j):state.layer==='rate'?fields.rate[index(i,j)]:layerValue(fields,state.layer,i,j);
-    if(!Number.isFinite(value))continue;
+    const value=visibility&&Number.isFinite(p.value)?p.value:composite?bilinear(fields.t2m,i,j):['rate','radar'].includes(state.layer)?fields[state.layer]?.[index(i,j)]:layerValue(fields,state.layer,i,j);
+    if(!Number.isFinite(value)||(state.layer==='radar'&&value<radarLevels[0]))continue;
     const text=composite||temperatureLayers.includes(state.layer)?num(value,1)+'°':
       state.layer==='ws'?String(beaufort(value)):
       state.layer==='vis'?visibilityText(value):
@@ -864,7 +871,7 @@ function updateLegend(){
   const scaleHours=sunScaleHours(), regional=state.run.regional, ownSunHours=sunHours(step);
   const {types,description} = precipitationLegend(state.run.modelKey,step,regional);
   $('legend-eyebrow').textContent=weather?'COMPOSIET':isWind?'OP 10 METER':
-    ({ptot:'SINDS DE MODELSTART',sun:'ZONNEDUUR',sunTotal:'ZONUREN',sdep:'SNEEUWDEK',frz:'BOVEN ZEENIVEAU',t850:'850 HPA',t500:'500 HPA',
+    ({radar:'MODELVERWACHTING',ptot:'SINDS DE MODELSTART',sun:'ZONNEDUUR',sunTotal:'ZONUREN',sdep:'SNEEUWDEK',frz:'BOVEN ZEENIVEAU',t850:'850 HPA',t500:'500 HPA',
       cloudRgb:'HOOG · MIDDEN · LAAG',ptypeMap:'SOORT NEERSLAG',windchill:'WINDCHILL · JAG/TI'})[state.layer]||'OP 2 METER';
   $('units').hidden=true;$('direction-row').hidden=!(weather||isWind);
   $('pressure-row').hidden=!weather;$('fog-row').hidden=!weather;
@@ -897,6 +904,9 @@ function updateLegend(){
   }else if(state.layer==='rate'){
     legendScale(totalColors,['0','0,05','0,1','0,2','0,5','1','2','5','10','15','20','30','50','75','≥100']);
     note('Neerslagintensiteit in mm/u. Op ECMWF-tussenuren volgt dit veld de dichtstbijzijnde bronstap.');
+  }else if(state.layer==='radar'){
+    legendScale(radarColors,radarTicks);
+    note(radarExplanation);
   }else if(state.layer==='ptot'){
     const scale=labelNode('div','','class-legend');
     totals.forEach((t,i)=>scale.append(legendRow(t===0?'0–0,1':t===200?'≥200':num(t,t<1?1:0)+'–'+num(totals[i+1],totals[i+1]<1?1:0),totalColors[i])));
@@ -1022,6 +1032,11 @@ function valuesAt(lon,lat,f=state.frame){
   if(state.layer==='cloudBase'){const labels=heightLabels(f.cloudBase?.[i],f.cloudBaseKind==='ceiling');return labels?['Wolkenbasis: '+labels.join(' · ')+' boven de grond',f.cloudBaseKind==='ceiling'?'Ceiling bij meer dan 50% laagbedekking':f.cloudBaseKind==='ukv_cbh'?'Basis vanaf 2,5 oktas':''].filter(Boolean):['Geen wolkenbasis gediagnosticeerd · mist niet uitgesloten.'];}
   if(state.layer==='vis')return [Number.isFinite(v)?'Zicht: '+visibilityText(v):'Geen zichtwaarde beschikbaar'];
   if(state.layer==='rate')return ['Neerslagintensiteit: '+num(f.rate[i],1)+' mm/u'];
+  if(state.layer==='radar'){
+    const value=f.radar?.[i];
+    if(x<0||y<0||x>grid.w-1||y>grid.h-1||!Number.isFinite(value))return ['Geen radarreflectiviteit beschikbaar'];
+    return ['Radarreflectiviteit: '+(value<radarLevels[0]?'<'+radarLevels[0]:num(value))+' dBZ',radarSources[f.radarKind]];
+  }
   if(state.layer==='ptypeMap'){
     const pk=f.precipKind[i];
     return pk?[precip[pk]+(f.regional?' · schatting':'')]:
@@ -1730,8 +1745,13 @@ function selectedRun(feed){
 
 const sunshineKey=(selection,run,step)=>JSON.stringify([run.modelKey,run.id,run.version,step.valid,selection.sunStart]);
 
-function selectedFields(selection,run,index,signal,priority){
+async function selectedFields(selection,run,index,signal,priority){
   const step=run.steps[index];
+  if(selection.layer==='radar'){
+    const fields=await load(step,run,signal,priority);
+    if(fields.radar||!fields.rain)return fields;
+    return {...fields,radar:estimateReflectivity(fields.rain),radarKind:'estimated'};
+  }
   if(selection.layer!=='sunTotal')return load(step,run,signal,priority);
   const key=sunshineKey(selection,run,step);
   return sunshineTotals(key,{step,run,sunStart:selection.sunStart},signal,priority);
@@ -1835,7 +1855,7 @@ window.presentVierluikMap=prepared=>{
   canvas.dataset.valueCount=backCanvas.dataset.valueCount;
   canvas.setAttribute('aria-label',missing?'Geen modelgegevens voor dit tijdstip':backCanvas.getAttribute('aria-label'));
   return {ready:!!fields,missing,failed,legend:$('legend').innerHTML,period:run.steps[index]?.gustPeriod,
-    sunSourceHours:fields?.sun?(fields.sunSourceHours||sunHours(run.steps[index])):0,cloudBaseKind:fields?.cloudBaseKind};
+    sunSourceHours:fields?.sun?(fields.sunSourceHours||sunHours(run.steps[index])):0,cloudBaseKind:fields?.cloudBaseKind,radarKind:fields?.radarKind};
 };
 let presentedLegend;
 

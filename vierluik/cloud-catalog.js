@@ -17,7 +17,12 @@ const CLOUD_BASE_FILES={
  arome:/^arome-native\/\d{10}\/arome_native_data_wolkenbasis\.bin$/,
  ukv:/^ukv-native\/\d{10}\/ukv_native_data_wolkenbasis\.bin$/
 };
-function cloudFileAllowed(key,file){return !!(CLOUD_SOURCES[key]?.file.test(file)||CLOUD_BASE_FILES[key]?.test(file));}
+const RADAR_FILES={
+ harmonie:/^harmonie_data_radar\.bin$/,
+ harmonie46:/^harmonie46_data_(?:radar|regenrate)\.bin$/,
+ icond2:/^icond2_data_radar\.bin$/
+};
+export const hasRadarSource=key=>Object.hasOwn(RADAR_FILES,key);
 export function cloudTime(value){
  if(typeof value!=='string')throw Error('Wolkentijd ontbreekt');
  if(/(Z|[+-]\d\d:\d\d)$/.test(value)){const t=Date.parse(value);if(!Number.isFinite(t))throw Error('Ongeldige wolkentijd');return t;}
@@ -28,15 +33,27 @@ export function cloudTime(value){
  for(let i=0;i<3;i++){const p=Object.fromEntries(fmt.formatToParts(new Date(utc)).map(p=>[p.type,p.value]));const local=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const correction=desired-local;if(!correction)return utc;utc+=correction;}
  throw Error('Lokale wolkentijd bestaat niet');
 }
-export async function cloudCatalog(key,field='bewolking',signal){
- const config=CLOUD_SOURCES[key],base=field==='wolkenbasis';if(!config||!['bewolking','wolkenbasis'].includes(field))throw Error('Onbekend wolkenmodel of veld');
+export function cloudCatalog(key,field='bewolking',signal){
+ if(!['bewolking','wolkenbasis'].includes(field))throw Error('Onbekend wolkenveld');
+ return singleFieldCatalog(key,field,signal);
+}
+export function radarCatalog(key,signal){
+ return singleFieldCatalog(key,'radar',signal);
+}
+async function singleFieldCatalog(key,field,signal){
+ const config=CLOUD_SOURCES[key],base=field==='wolkenbasis',radar=field==='radar';
+ const filePattern=radar?RADAR_FILES[key]:base?CLOUD_BASE_FILES[key]:config?.file;
+ if(!config||(radar&&!filePattern))throw Error('Onbekende modelbron');
  const read=async()=>{const r=await fetch('https://harmonie-data.weerlab.nl/'+config.meta,{headers:{Accept:'application/json'},cache:'no-store',signal});if(!r.ok)throw Error('Wolkenindex niet beschikbaar');return r.json();};
  const meta=await read(),parentRun=Date.parse(meta.run_utc),g=meta.grid,info=meta.parameters?.[field];
  const run=base&&info?.source_run_utc?Date.parse(info.source_run_utc):parentRun;
  if(!Number.isFinite(run)||!Number.isFinite(parentRun)||!g||g.n_lat<2||g.n_lon<2||g.n_lat*g.n_lon>1000000||!Array.isArray(meta.tijden)||!meta.tijden.length||meta.tijden.length>400)throw Error('Ongeldige wolkenbron');
  const age=Date.now()-parentRun;
  if(config.liveRegional&&(age< -3600000||age>24*3600000))throw Error('Modelrun is verouderd');
- if((!info&&!base)||(info&&(info.components!==(base?1:3)||!(base?CLOUD_BASE_FILES[key]?.test(info.file):config.file.test(info.file)))))throw Error('Ongeldig wolkenbestand');
+ if((!info&&!base)||(info&&(info.components!==(base||radar?1:3)||!filePattern?.test(info.file))))throw Error('Ongeldig modelbestand');
+ const radarKind=!radar?undefined:key==='icond2'&&/\bdbz_cmax\b/i.test(info.label)?'column':
+   info.source_method==='instantaneous_rain_marshall_palmer_v1'?'instant':undefined;
+ if(radar&&!radarKind)throw Error('Onbekende radarbron');
  const id=new Date(run).toISOString().replace(/[-:T]/g,'').slice(0,10),parentId=new Date(parentRun).toISOString().replace(/[-:T]/g,'').slice(0,10);
  if(info?.file.includes('/')&&!info.file.includes('/'+parentId+'/'))throw Error('Wolkenbestand hoort bij andere run');
  let etag;
@@ -46,12 +63,12 @@ export async function cloudCatalog(key,field='bewolking',signal){
   etag=header.headers.get('ETag')?.replace(/^W\//,'');if(!etag)throw Error('Wolkenbron mist versie');
   const after=await read();if(JSON.stringify(after)!==JSON.stringify(meta))throw Error('Wolkenrun wijzigt tijdens het ophalen');
  }
- const parameter=info?{file:info.file,components:info.components,grid:info.grid,etag,kind:info.kind,label:info.label,clearSky:info.clear_sky_value,source:info.source,sourceHours:info.source_interval_hours}:null;
+ const parameter=info?{file:info.file,components:info.components,grid:info.grid,scale:info.scale,power:info.power,etag,radarKind,kind:info.kind,label:info.label,clearSky:info.clear_sky_value,source:info.source,sourceHours:info.source_interval_hours}:null;
  const version=JSON.stringify({id,field,updated:meta.bijgewerkt,etag,times:meta.tijden,parameter});
  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(version));
  const hash=[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('').slice(0,16);
  let prior=-Infinity;
- const allSteps=meta.tijden.map((valid,index)=>{const t=cloudTime(valid),lead=(t-run)/3600000;if(!Number.isInteger(lead)||lead<0||t<=prior)throw Error('Wolkenuren lopen niet op');prior=t;return {lead,valid:new Date(t).toISOString(),nativeIndex:index,keys:[base?'cloudBase':'clouds'],asset:key+'-'+id+'-'+hash+index.toString(16).padStart(4,'0')+'.json'};});
+ const allSteps=meta.tijden.map((valid,index)=>{const t=cloudTime(valid),lead=(t-run)/3600000;if(!Number.isInteger(lead)||lead<0||t<=prior)throw Error('Wolkenuren lopen niet op');prior=t;return {lead,valid:new Date(t).toISOString(),nativeIndex:index,keys:[radar?'radar':base?'cloudBase':'clouds'],asset:key+'-'+id+'-'+hash+index.toString(16).padStart(4,'0')+'.json'};});
  const end=Date.parse(info?.valid_until),steps=Number.isFinite(end)?allSteps.filter(s=>Date.parse(s.valid)<=end):allSteps;
- return {schema:1,key,updated:field+'-'+hash,grid:{lon0:1.7,lat0:54.3,dx:.025,dy:-.025,w:269,h:221},runs:[{id,time:new Date(run).toISOString(),enc:{},regional:true,steps,native:{key,version:hash,cloudOnly:true,cloudParameter:field,cloudWhole:!!info&&!info.file.includes('/'),meta:{grid:g,parameters:parameter?{[field]:parameter}:{},times:allSteps.map(s=>s.valid),source:meta.source,attribution:meta.attribution}}}]};
+ return {schema:1,key,updated:field+'-'+hash,grid:{lon0:1.7,lat0:54.3,dx:.025,dy:-.025,w:269,h:221},runs:[{id,time:new Date(run).toISOString(),enc:{},regional:true,steps,native:{key,version:hash,singleField:field,wholeFile:!!info&&!info.file.includes('/'),meta:{grid:g,parameters:parameter?{[field]:parameter}:{},times:allSteps.map(s=>s.valid),source:meta.source,attribution:meta.attribution}}}]};
 }
