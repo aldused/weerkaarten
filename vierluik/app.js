@@ -4,7 +4,7 @@ import {elevationLabels,freezingLevels,freezingColors} from './height-levels.js'
 import {readCatalog} from './data-source.js?v=20261125-gfs-iconeu';
 import {cloudBaseLevels,cloudBaseColors,heightLabels} from './cloud-base.js?v=20261122-nulgradenniveau-voet';
 import {cloudColor,cloudRgbLegend} from './clouds.js?v=20261123-wolkenlagen-rgb';
-import {HOUR,dayKey,validateFeed,comparisonTimes,hasForecastTime,closestIndex} from './forecast-core.js?v=20261122-bereik';
+import {HOUR,dayKey,validateFeed,comparisonTimes,hasForecastTime,closestIndex} from './forecast-core.js?v=20261128-uurbestanden';
 import {precipitationColors,precipitationShades} from './precipitation-type.js?v=20261127-blauwe-regen';
 'use strict';
 const $ = id => document.getElementById(id);
@@ -53,12 +53,13 @@ const details=()=>({values:$('show-values').checked,province:$('provinces').chec
 const actualLegends = new Map();
 let lastLegend;
 const policy=()=>preloadPolicy(navigator.connection,navigator.deviceMemory,matchMedia('(max-width: 700px)').matches);
-const readAsset=createFrameCache((policy().limited?8:24)*1024**2,24,
- payload=>Object.values(payload).reduce((bytes,frame)=>bytes+2*frame.length,0),
+const readAsset=createFrameCache((policy().limited?8:24)*1024**2,200,
+ payload=>payload instanceof Uint8Array?payload.byteLength:Object.values(payload).reduce((bytes,frame)=>bytes+2*frame.length,0),
  async (url,signal,priority)=>{
    const response=await fetch(url,{signal:AbortSignal.any([signal,AbortSignal.timeout(12000)]),priority});
    if(!response.ok)throw Error('Live modelbestand niet beschikbaar');
-   return response.json();
+   // Losse uurbestanden (.bin) zijn gzip-bytes; de zesuursblokken JSON met base64.
+   return url.endsWith('.bin')?new Uint8Array(await response.arrayBuffer()):response.json();
  });
 window.readVierluikAsset=(url,signal,priority)=>readAsset(url,url,signal,priority);
 window.hasVierluikAsset=readAsset.has;
@@ -215,7 +216,7 @@ function updatePresentedCard(index,selection,result){
 function updateMobileTabs(){document.querySelectorAll('.mobile-models button').forEach((b,i)=>{const d=definitions[presented.selections[i].model];b.textContent=d.short;b.style.setProperty('--model',d.color);b.setAttribute('aria-label',`Spring naar kaart ${i+1}: ${d.name}`);b.setAttribute('aria-controls',`card-${i}`);});}
 function setActive(i){const maps=$('maps'),card=$(`card-${i}`);maps.scrollTo({left:card.offsetLeft-maps.offsetLeft,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}
 function buildCards(){
- $('maps').innerHTML=cards.map((c,i)=>`<article class="map-card" id="card-${i}" style="--model:${c.color}" aria-label="Modelkaart ${i+1}"><header class="card-header"><span class="model-mark" aria-hidden="true">${c.short}</span><div class="model-picker"><label class="sr" for="model-${i}">Model voor kaart ${i+1}</label><select class="model-select" id="model-${i}">${Object.entries(definitions).map(([key,d])=>`<option value="${key}" ${key===c.model?'selected':''} ${state.catalogs[key]?'':'disabled'}>${d.name}</option>`).join('')}</select><div class="model-meta"><span class="resolution">${c.resolution}</span><span class="run-label"></span></div></div><button class="icon-button card-expand" aria-label="${c.name} vergroten" title="Deze kaart vergroten">${icon('maximize')}</button></header><div class="map-window"><iframe id="frame-${i}" title="${c.name}: ${layers[state.layer]}" src="map.html?v=20261127-blauwe-regen&id=${i}&model=${c.model}#model=${c.model}&kaart=weather" loading="eager"></iframe><div class="map-label"><span class="map-label-text">Significant weer</span><span class="layer-unit"></span></div></div><div class="card-bottom"><span class="card-time loading">Kaart laden…</span><span class="lead-time"></span></div></article>`).join('');
+ $('maps').innerHTML=cards.map((c,i)=>`<article class="map-card" id="card-${i}" style="--model:${c.color}" aria-label="Modelkaart ${i+1}"><header class="card-header"><span class="model-mark" aria-hidden="true">${c.short}</span><div class="model-picker"><label class="sr" for="model-${i}">Model voor kaart ${i+1}</label><select class="model-select" id="model-${i}">${Object.entries(definitions).map(([key,d])=>`<option value="${key}" ${key===c.model?'selected':''} ${state.catalogs[key]?'':'disabled'}>${d.name}</option>`).join('')}</select><div class="model-meta"><span class="resolution">${c.resolution}</span><span class="run-label"></span></div></div><button class="icon-button card-expand" aria-label="${c.name} vergroten" title="Deze kaart vergroten">${icon('maximize')}</button></header><div class="map-window"><iframe id="frame-${i}" title="${c.name}: ${layers[state.layer]}" src="map.html?v=20261128-uurbestanden&id=${i}&model=${c.model}#model=${c.model}&kaart=weather" loading="eager"></iframe><div class="map-label"><span class="map-label-text">Significant weer</span><span class="layer-unit"></span></div></div><div class="card-bottom"><span class="card-time loading">Kaart laden…</span><span class="lead-time"></span></div></article>`).join('');
  document.querySelector('.mobile-models').innerHTML=cards.map((c,i)=>`<button data-card="${i}">${c.short}</button>`).join('');
  cards.forEach((c,i)=>{
    const frame=$(`frame-${i}`);

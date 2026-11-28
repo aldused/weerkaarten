@@ -5,6 +5,9 @@ export function validateFeed(feed,key){
  if(feed?.schema!==1||feed.key!==key||!g||!['w','h','lon0','lat0','dx','dy'].every(k=>Number.isFinite(g[k]))||g.w<2||g.h<2||g.w*g.h>400000||g.dx<=0||g.dy>=0||!Array.isArray(feed.runs)||!feed.runs.length)throw Error('Ongeldige modelindex: '+key);
  const run=[...feed.runs].sort((a,b)=>b.id.localeCompare(a.id))[0];
  if(!/^\d{10}$/.test(run.id)||!Number.isFinite(Date.parse(run.time))||!run.enc||!Array.isArray(run.steps)||!run.steps.length)throw Error('Ongeldige modelrun: '+key);
+ const single=new RegExp('^'+key+'-'+run.id+'-\\d{3}-[a-f0-9]{20}\\.bin$');
+ // Een los uurbestand is optioneel; bij een afwijkende naam valt de kaart terug op het zesuursblok.
+ run.steps=run.steps.map(s=>s.bin===undefined||single.test(s.bin)?s:(({bin,...rest})=>rest)(s));
  for(const [i,s] of run.steps.entries())if(!Number.isInteger(s.lead)||!Number.isFinite(Date.parse(s.valid))||!Array.isArray(s.keys)||!new RegExp('^'+key+'-'+run.id+'-[a-f0-9]{20}\\.json$').test(s.asset)||(i&&Date.parse(s.valid)<=Date.parse(run.steps[i-1].valid)))throw Error('Ongeldige tijdstap: '+key);
  return {...feed,runs:[run]};
 }

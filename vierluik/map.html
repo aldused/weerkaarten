@@ -316,10 +316,14 @@ async function liveJson(url,signal,priority){
     clearTimeout(timer);
   }
 }
-const stepAssetUrl=(step,run)=>liveBase+run.modelKey+'/assets/'+step.asset;
+// In het vierluik heeft elk uur een eigen gzip-bestand (.bin): één kaart kost dan
+// één uur aan data in plaats van het hele zesuursblok.
+const singleHour=(step,run)=>!!(step.bin&&run.live&&parent!==window&&parent.readVierluikAsset);
+const stepAssetUrl=(step,run)=>liveBase+run.modelKey+'/assets/'+(singleHour(step,run)?step.bin:step.asset);
 async function stepData(step,run,signal,priority){
   if(step.data)return step.data;
   const name=run.live?stepAssetUrl(step,run):step.asset;
+  if(singleHour(step,run))return parent.readVierluikAsset(name,signal,priority);
   if(run.live&&parent!==window&&parent.readVierluikAsset){
     const payload=await parent.readVierluikAsset(name,signal,priority);
     if(!payload?.[step.lead])throw Error('Modelstap ontbreekt');
@@ -468,8 +472,11 @@ async function decodeFrame(step,run,signal,priority){
   const sourceGrid = run.sourceGrid||models[run.modelKey].grid;
   if(run.native){const {loadNativeFrame}=await import('./native-loader.js?v=20261127-kaartbuffer');return addWindchill(await loadNativeFrame(step,run,sourceGrid,signal,priority));}
   const payload=await stepData(step,run,signal,priority);
-  const binary=atob(payload),compressed=new Uint8Array(binary.length);
-  for(let i=0;i<binary.length;i++)compressed[i]=binary.charCodeAt(i);
+  let compressed=payload;
+  if(typeof payload==='string'){
+    const binary=atob(payload);compressed=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)compressed[i]=binary.charCodeAt(i);
+  }
   const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'));
   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
   signal?.throwIfAborted();
@@ -1786,6 +1793,11 @@ window.preloadVierluikAssets=async (selection,times,signal)=>{
   const run=selectedRun(selection.feed);
   if(run.native||selection.layer==='sunTotal')return;
   const steps=times.map(time=>run.steps[run.byTime.get(time)]).filter(Boolean);
+  if(steps.some(step=>singleHour(step,run))){
+    // Losse uren op volgorde: het eerstvolgende uur mag niet wachten op latere uren.
+    for(const step of steps){if(signal.aborted)return;await preloadAsset(step,run,signal).catch(()=>{});}
+    return;
+  }
   await Promise.allSettled(steps.map(step=>preloadAsset(step,run,signal)));
 };
 

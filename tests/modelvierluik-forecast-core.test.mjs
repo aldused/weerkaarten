@@ -42,3 +42,12 @@ test('Volledig bereik vult gaten niet op en negeert niet-gekozen modellen',async
  assert.equal(hasForecastTime(c.ecmwf,begin+3*HOUR),false);
  assert.deepEqual(comparisonTimes({},[],'all',begin),[]);
 });
+
+test('Los uurbestand wordt alleen met geldige naam gebruikt, anders valt de stap terug op het zesuursblok',()=>{
+ const f=feed('harmonie',[1,2]);
+ f.runs[0].steps[0].bin='harmonie-2026112112-001-'+'b'.repeat(20)+'.bin';
+ f.runs[0].steps[1].bin='../harmonie-2026112112-002-'+'b'.repeat(20)+'.bin';
+ const steps=validateFeed(f,'harmonie').runs[0].steps;
+ assert.equal(steps[0].bin,'harmonie-2026112112-001-'+'b'.repeat(20)+'.bin');
+ assert.equal('bin' in steps[1],false);assert.match(steps[1].asset,/\.json$/);
+});
